@@ -1,0 +1,13 @@
+# Phase 0 Docker Compose skeleton.
+#
+# Kafka, Spark, Hadoop/HDFS, Cassandra, the replay producer, and Streamlit will
+# be added incrementally in later phases with pinned, compatible container
+# versions. No services are defined or started at this stage.
+#
+# The external DATASET_PATH will be mounted read-only only by components that
+# need source access. Persistent service state will use Docker-managed volumes
+# and will not be written into the Git repository.
+
+name: realtime-ecommerce-analytics
+
+services: {}
