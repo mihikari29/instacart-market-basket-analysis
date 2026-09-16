@@ -2,23 +2,50 @@
 
 Replay of the **Instacart Market Basket** dataset as a live real-time feed: cleaned
 parquet facts + synthesized absolute timestamps → Kafka → Spark Streaming, with a
-batch layer for ALS recommendation and trending. The spec is `project data require.md`.
+batch layer for ALS recommendation and trending.
 
 ## Repo layout
 
 ```
-src/clean.py      raw CSVs      → data/clean/*.parquet   (cleaned facts + dims)
+src/clean.py      data/raw/*.csv → data/clean/*.parquet (cleaned facts + dims)
 src/config.py     SyntheticConfig + scenario presets
-src/generate.py   clean parquet → data/synthesized/<scenario>/events.parquet + manifest.json
-data/*.csv                        original Kaggle files (archive — never read by modules)
-data/clean/*.parquet              batch source of truth (facts + dims)
+src/generate.py   data/clean/ → data/synthesized/<scenario>/events.parquet + manifest.json
+data/raw/*.csv                   original Kaggle files (archive — only read by clean.py)
+data/clean/*.parquet             batch source of truth (facts + dims)
 data/synthesized/scatter_{1w,1m,3m}   three demo feeds, pick ONE
 ```
 
-| file | used by |
+## Dataset (originals → cleaned)
+
+| file | rows |
 |---|---|
-| `data/clean/orders.parquet`, `order_products__*.parquet`, `products/aisles/departments.parquet` | Module 2 (batch/ML) |
-| `data/synthesized/scatter_*/events.parquet` | Module 1 producer → Kafka (Module 3) |
+| `orders` | 3,421,083 (206,209 users) |
+| `order_products__prior` | 32,434,489 |
+| `order_products__train` | 1,384,617 |
+| `products` | 49,688 |
+| `aisles` / `departments` | 134 / 21 |
+
+Stream = prior + train = **3,346,083 orders · 33,819,106 events**.
+
+## What to use, and for which module
+
+| file | reads | feeds |
+|---|---|---|
+| `data/clean/orders.parquet`, `order_products__*.parquet`, `products/aisles/departments.parquet` | batch/ML | Module 2 (trending, ALS), Module 4 |
+| `data/synthesized/scatter_*/events.parquet` + `manifest.json` | producer | Module 1 → Kafka (Module 3) |
+| `data/raw/*.csv` | only `clean.py` | archive — never read by modules |
+
+## Why parquet (and not CSV)
+
+It doesn't *have* to be parquet — CSV would work. Parquet wins because:
+
+- **~70–80% smaller on disk** (dictionary + compression over repeated strings/ints),
+  which matters at 700 MB raw / 34 M rows.
+- **Columnar reads**: consumers load only the columns they need.
+- **Native in Spark/pyarrow** with dtype preserved (`int8/int16/int32/string`) — CSV
+  re-infers dtypes on every load and is 2–3× the I/O.
+- Format choice is orthogonal to Kafka: the producer serializes each row to **JSON**
+  regardless; parquet is just the on-disk storage.
 
 ## Run
 
@@ -30,14 +57,30 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
 python src/generate.py --list-scenarios
 ```
 
+## Cleaning (validated)
+
+- Narrow dtypes at load (`int8–int32`, `string`).
+- 206,209 first-order NaN gaps → 0.
+- 369,323 cap-30 gaps recovered to [30,36] (Strategy B) → DOW mismatches remain 0.
+- 16 product names with `\xa0` normalized.
+- `test` eval_set (75,000 orders) excluded from the stream.
+
 ## SyntheticConfig
 
-- **Absolute-time axis**: `scatter_window_weeks` (1/4/13/26/52) spreads users' first
-  orders; span and crowding: 1w→372 d @ 4.72× · 1m→393 d @ 2.80× · **3m (default)→456 d @ 2.81×**.
+- **Absolute-time axis**: `scatter_window_weeks` (1/4/13/26/52) spreads users' first orders.
 - **Session axis**: `delta` seconds between item-adds — `exponential` (Poisson arrivals,
-  mean 30 s, clip [5,120]) or `uniform [15,50]`; `minute_mode` `uniform` (U(0,59)) or `hash` (RNG-free).
+  mean 30 s, clip [5,120]; median session ≈ 3.5 min, matches ContentSquare mobile)
+  or `uniform [15,50]`; `minute_mode` `uniform` (U(0,59)) or `hash` (RNG-free).
 - **Presets**: `default`, `mobile-fast` (20 s), `desktop-browse` (40 s), `uniform`, `deterministic`.
 - **Invariant**: per-user monotonicity always enforced → **0 violations** across all 33.8 M events.
+
+## Scenario feeds (realized)
+
+| folder | scatter | span | peak/mean daily | crowding |
+|---|---|---|---|---|
+| `scatter_1w` | 1 week | 372 d | 428,965 / 90,912 | 4.72× |
+| `scatter_1m` | 1 month | 393 d | 241,413 / 86,054 | 2.80× |
+| `scatter_3m` (default) | 3 months | 456 d | 208,674 / 74,165 | 2.81× |
 
 ## Event schema (one row = one product event)
 
@@ -47,11 +90,22 @@ python src/generate.py --list-scenarios
 The per-item gaps (exp/uniform deltas) are folded into `event_time_epoch_ms` —
 recover by `diff()` within `order_id`.
 
-## Cleaning / notes
+## Data relationships (join keys)
 
-- Cleaning: 206,209 first-order NaN gaps → 0 · 369,323 cap-30 gaps recovered to
-  [30,36] (Strategy B) → 0 day-of-week mismatches · 16 names `\xa0` normalized ·
-  75,000 `test` orders excluded from the stream.
-- Dataset: 206,209 users · 3,346,083 stream orders · 33,819,106 events
-  (prior 32,434,489 + train 1,384,617) · 49,688 products · 134 aisles · 21 departments.
-- Next: Kafka producer (replay pacing + `--inject late|burst|dup|skew|poison`), HDFS layout.
+```
+orders.order_id ──→ order_products__prior/train.order_id   (1:N)
+order_products.product_id ──→ products.product_id          (N:1)
+products.aisle_id ──→ aisles.aisle_id                      (N:1)
+products.department_id ──→ departments.department_id        (N:1)
+```
+
+`events.parquet` is **denormalized**: it already carries `order_id/user_id/product_id/
+aisle_id/department_id/order_hour_of_day/order_dow`, so the streaming path needs no
+runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for names.
+
+## Next steps
+
+1. Module 1 producer: read a chosen `scatter_*/events.parquet`, stream as JSON to
+   Kafka keyed by `user_id`, replay pacing + `--inject late|burst|dup|skew|poison`.
+2. HDFS layout: `/raw`, `/dim`, `/events/date=*`.
+3. Module 3 streaming: `withWatermark("event_time_epoch_ms", ...)`, windowed trending.

@@ -49,7 +49,7 @@ RAW_DTYPES = {
 def load_raw(data_dir: Path) -> dict[str, pd.DataFrame]:
     dfs: dict[str, pd.DataFrame] = {}
     for name, dtypes in RAW_DTYPES.items():
-        path = data_dir / f"{name}.csv"
+        path = data_dir / "raw" / f"{name}.csv"
         if not path.exists():
             print(f"[skip] missing {path.name}")
             continue
