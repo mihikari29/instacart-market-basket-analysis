@@ -103,6 +103,15 @@ products.department_id ──→ departments.department_id        (N:1)
 aisle_id/department_id/order_hour_of_day/order_dow`, so the streaming path needs no
 runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for names.
 
+## Lambda modules (spec §7 — verify against assignment)
+
+| # | module | reads | status |
+|---|---|---|---|
+| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `clean/*`, `synthesized/scatter_*/events.parquet` | cleaning+generation done, producer next |
+| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet` | pending |
+| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic (`event_time_epoch_ms` watermark) | pending |
+| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | pending |
+
 ## Next steps
 
 1. Module 1 producer: read a chosen `scatter_*/events.parquet`, stream as JSON to
