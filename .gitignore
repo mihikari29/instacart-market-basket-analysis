@@ -1,0 +1,6 @@
+# data artifacts (large; regenerate with src/clean.py + src/generate.py)
+/data/
+
+# python
+__pycache__/
+*.py[cod]
