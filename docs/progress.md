@@ -19,7 +19,7 @@ data/raw/*.csv
 | Kiểm tra | Kết quả |
 |---|---|
 | first-order NaN gaps → 0 | 206,209 |
-| cap-30 recovered [30,36] (Strategy B) | 369,323 |
+| cap-30 recovered [30,36] | 369,323 |
 | DOW mismatches sau recovery | 0 |
 | Tên sản phẩm chứa `\xa0` → cleaned | 16 |
 | test orders (eval_set=test) loại khỏi stream | 75,000 |
@@ -32,7 +32,7 @@ data/raw/*.csv
 |---|---|---|
 | `seed` | 42 | deterministic |
 | `scatter_window_weeks` | 1 / 4 / **13** (default) / 26 / 52 | anchor week uniform trong cửa sổ |
-| `minute_mode` | `uniform` \| `hash` | uniform: U(0,59); hash: `(order_id·10⁶+1)%60` |
+| `time_mode` | `uniform` \| `hash` | uniform: U(0,59); hash: `(order_id·10⁶+1)%60` |
 | `delta` | `exponential(mean=30, clip=[5,120])` \| `uniform([15,50])` | giây giữa các lần add-to-cart |
 | `limit_users` | null (all) | |
 | `batch_users` | 20000 | chunk size cho write, cũng ảnh hưởng RNG anchor |

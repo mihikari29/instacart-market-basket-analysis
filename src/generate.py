@@ -41,7 +41,7 @@ def load_clean(clean_dir: Path):
     )
 
 
-def order_minutes(rng, order_ids: pd.Series, mode: str) -> tuple["np.ndarray", "np.ndarray"]:
+def order_time_parts(rng, order_ids: pd.Series, mode: str) -> tuple["np.ndarray", "np.ndarray"]:
     if mode == "hash":
         minute = (order_ids * 10**6 + 1) % 60
         return minute.to_numpy(), np.zeros(len(order_ids), dtype="int64")
@@ -64,7 +64,7 @@ def prepare_orders(orders: pd.DataFrame, conf: SyntheticConfig, rng) -> pd.DataF
         stream["user_id"].map(anchor_days)
         + stream.groupby("user_id")["days_since_prior_order"].cumsum().astype("int64")
     )
-    minute, second = order_minutes(rng, stream["order_id"], conf.minute_mode)
+    minute, second = order_time_parts(rng, stream["order_id"], conf.time_mode)
     stream["base_ms"] = (
         BASE_EPOCH_MS
         + stream["day_offset"] * DAY_MS
@@ -213,7 +213,7 @@ def main() -> int:
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--scenario", default="default")
     ap.add_argument("--scatter-weeks", type=int, default=None, choices=(1, 4, 13, 26, 52))
-    ap.add_argument("--minute-mode", choices=("uniform", "hash"), default=None)
+    ap.add_argument("--time-mode", choices=("uniform", "hash"), default=None)
     ap.add_argument("--limit-users", type=int, default=None)
     ap.add_argument("--batch-users", type=int, default=20000,
                     help="finalize+write in chunks of this many users to bound peak memory")
@@ -230,7 +230,7 @@ def main() -> int:
         args.scenario,
         seed=args.seed,
         scatter_window_weeks=args.scatter_weeks,
-        minute_mode=args.minute_mode,
+        time_mode=args.time_mode,
         limit_users=args.limit_users,
     )
 

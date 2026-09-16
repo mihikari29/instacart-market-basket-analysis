@@ -70,7 +70,7 @@ python src/generate.py --list-scenarios
 - **Absolute-time axis**: `scatter_window_weeks` (1/4/13/26/52) spreads users' first orders.
 - **Session axis**: `delta` seconds between item-adds — `exponential` (Poisson arrivals,
   mean 30 s, clip [5,120]; median session ≈ 3.5 min, matches ContentSquare mobile)
-  or `uniform [15,50]`; `minute_mode` `uniform` (U(0,59)) or `hash` (RNG-free).
+  or `uniform [15,50]`; `time_mode` `uniform` (U(0,59)) or `hash` (RNG-free).
 - **Presets**: `default`, `mobile-fast` (20 s), `desktop-browse` (40 s), `uniform`, `deterministic`.
 - **Invariant**: per-user monotonicity always enforced → **0 violations** across all 33.8 M events.
 

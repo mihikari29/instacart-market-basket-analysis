@@ -10,7 +10,7 @@ from dataclasses import dataclass, fields
 import numpy as np
 
 SCATTER_WINDOW_WEEKS = (1, 4, 13, 26, 52)
-MINUTE_MODES = ("uniform", "hash")
+TIME_MODES = ("uniform", "hash")
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,7 @@ class DeltaSampler:
 class SyntheticConfig:
     seed: int = 42
     scatter_window_weeks: int = 13
-    minute_mode: str = "uniform"
+    time_mode: str = "uniform"
     delta: DeltaSampler = DeltaSampler.exponential(30.0, 5.0, 120.0)
     limit_users: int | None = None
 
@@ -68,7 +68,7 @@ class SyntheticConfig:
         *,
         seed: int | None = None,
         scatter_window_weeks: int | None = None,
-        minute_mode: str | None = None,
+        time_mode: str | None = None,
         limit_users: int | None = None,
     ) -> "SyntheticConfig":
         if scenario not in SCENARIOS:
@@ -78,8 +78,8 @@ class SyntheticConfig:
             kwargs["seed"] = seed
         if scatter_window_weeks is not None:
             kwargs["scatter_window_weeks"] = scatter_window_weeks
-        if minute_mode is not None:
-            kwargs["minute_mode"] = minute_mode
+        if time_mode is not None:
+            kwargs["time_mode"] = time_mode
         if limit_users is not None:
             kwargs["limit_users"] = limit_users
         conf = cls(**kwargs)
@@ -92,8 +92,8 @@ class SyntheticConfig:
                 f"scatter_window_weeks must be one of {SCATTER_WINDOW_WEEKS}, "
                 f"got {self.scatter_window_weeks}"
             )
-        if self.minute_mode not in MINUTE_MODES:
-            raise ValueError(f"minute_mode must be one of {MINUTE_MODES}")
+        if self.time_mode not in TIME_MODES:
+            raise ValueError(f"time_mode must be one of {TIME_MODES}")
         if self.limit_users is not None and self.limit_users <= 0:
             raise ValueError(f"limit_users must be positive, got {self.limit_users}")
         self.delta.validate()
@@ -107,23 +107,23 @@ class SyntheticConfig:
 SCENARIOS: dict[str, dict] = {
     "default": dict(
         delta=DeltaSampler.exponential(30.0, 5.0, 120.0),
-        minute_mode="uniform",
+        time_mode="uniform",
     ),
     "mobile-fast": dict(
         delta=DeltaSampler.exponential(20.0, 3.0, 90.0),
-        minute_mode="uniform",
+        time_mode="uniform",
     ),
     "desktop-browse": dict(
         delta=DeltaSampler.exponential(40.0, 10.0, 240.0),
-        minute_mode="uniform",
+        time_mode="uniform",
     ),
     "uniform": dict(
         delta=DeltaSampler.uniform(15.0, 50.0),
-        minute_mode="uniform",
+        time_mode="uniform",
     ),
     "deterministic": dict(
         delta=DeltaSampler.exponential(30.0, 5.0, 120.0),
-        minute_mode="hash",
+        time_mode="hash",
     ),
 }
 
@@ -136,5 +136,5 @@ def preset_summary() -> str:
             params = f"Exp(mean={d.mean_s}s, clip=[{d.lo_s}, {d.hi_s}]s)"
         else:
             params = f"U([{d.lo_s}, {d.hi_s}]s)"
-        lines.append(f"  {name:<16s} {d.kind:<12s} {params:<42s} minute={cfg['minute_mode']}")
+        lines.append(f"  {name:<16s} {d.kind:<12s} {params:<42s} time={cfg['time_mode']}")
     return "\n".join(lines)
