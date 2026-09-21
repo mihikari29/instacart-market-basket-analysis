@@ -110,15 +110,15 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
 
 ## 7. Definition of Done (§42) — Module 1
 
-- [x] đọc 6 file
+- [x] đọc 6 file raw CSV
 - [x] explicit schema hoạt động
-- [x] validation chạy
+- [x] validation chạy (0 NaN gap, 0 DOW mismatch, 0 nbsp error)
 - [x] timestamp deterministic (seed 42, reproducible)
-- [x] weekday consistency (DOW mismatches = 0)
+- [x] weekday consistency đạt yêu cầu (DOW mismatches = 0)
 - [x] timestamp monotonic theo user (violations = 0)
-- [ ] Parquet ghi HDFS (chưa — cần HDFS environment)
-- [ ] Kafka producer replay được (chưa)
-- [x] event schema được freeze (xem §4 ở trên)
+- [x] Parquet ghi HDFS theo chuẩn Proposal §10 (raw, curated, dimensions, interactions 456 ngày, features, models)
+- [x] Kafka producer replay được (hỗ trợ pacing, partition theo `user_id`, stamp `ingestion_time_epoch_ms`, fault injections `late/dup/burst/poison`)
+- [x] event schema được freeze (13 trường theo Proposal §9.4 / §11.6)
 
 ---
 
@@ -133,8 +133,15 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
 
 ---
 
-## 9. Còn lại (Module 1 chưa xong)
+## 9. Kết quả kiểm thử Module 1
 
-1. **HDFS staging** — ghi raw/curated/interactions lên `/instacart/` (§10 trong Proposal).
-2. **Kafka producer** — đọc `events.parquet`, replay theo `event_time_epoch_ms`, key `user_id`, stamp `ingestion_time_epoch_ms`, hỗ trợ `--replay-speed` và `--inject late|burst|dup|skew|poison`.
-3. **Freeze event schema** — xác nhận lại schema sau khi producer chạy xong trên HDFS environment.
+### 9.1. HDFS Staging (`src/stage_hdfs.py`)
+- Đã tải 6 CSV gốc lên `/instacart/raw/{orders,order_products_prior,order_products_train,products,aisles,departments}/`.
+- Đã tải Parquet chuẩn hóa lên `/instacart/curated/` và `/instacart/curated/dimensions/`.
+- Đã phân vùng 33,819,106 dòng sự kiện thành **456 partition ngày** (`synthetic_year=.../synthetic_month=.../synthetic_day=...`) trên `/instacart/curated/interactions/`.
+- Đã tạo sẵn thư mục `/instacart/features/{user_features,als_interactions}` và `/instacart/models/als`.
+
+### 9.2. Kafka Producer (`src/producer.py`)
+- Đã kiểm thử thành công trên cả 3 feed (`scatter_1w`, `scatter_1m`, `scatter_3m`).
+- Tốc độ phát đạt ~5,000 – 6,000 events/giây ở local mode.
+- Đã kiểm thử fault injection (`late:0.05,dup:0.02,burst:200,poison:1`) sẵn sàng phục vụ kiểm thử Module 3.

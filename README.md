@@ -107,14 +107,25 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 
 | # | module | reads | status |
 |---|---|---|---|
-| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `clean/*`, `synthesized/scatter_*/events.parquet` | cleaning+generation done, producer next |
-| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet` | pending |
-| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic (`event_time_epoch_ms` watermark) | pending |
-| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | pending |
+| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | **Done** (Validated, HDFS Staged, Producer Verified) |
+| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Next |
+| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Next |
+| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
-## Next steps
+## Running Infrastructure & Module 1
 
-1. Module 1 producer: read a chosen `scatter_*/events.parquet`, stream as JSON to
-   Kafka keyed by `user_id`, replay pacing + `--inject late|burst|dup|skew|poison`.
-2. HDFS layout: `/raw`, `/dim`, `/events/date=*`.
-3. Module 3 streaming: `withWatermark("event_time_epoch_ms", ...)`, windowed trending.
+```bash
+# 1. Start Kafka & HDFS containers (uses standard public images)
+docker compose up -d
+
+# 2. Stage historical datasets onto HDFS
+python src/stage_hdfs.py
+
+# 3. Stream / replay events into Kafka
+python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
+```
+
+## Next steps (Module 2 & Module 3)
+
+1. **Module 2 (Batch Layer)**: Spark batch metrics on `/instacart/curated/`, join benchmarks (Broadcast vs Sort-Merge), and partition pruning experiment.
+2. **Module 3 (Speed Layer)**: Spark Structured Streaming consuming `instacart-purchase-events`, watermark trên `event_time_epoch_ms`, và tính realtime trending window.
