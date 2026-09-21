@@ -145,3 +145,15 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
 - Đã kiểm thử thành công trên cả 3 feed (`scatter_1w`, `scatter_1m`, `scatter_3m`).
 - Tốc độ phát đạt ~5,000 – 6,000 events/giây ở local mode.
 - Đã kiểm thử fault injection (`late:0.05,dup:0.02,burst:200,poison:1`) sẵn sàng phục vụ kiểm thử Module 3.
+
+---
+
+## 10. Hướng dẫn bàn giao cho thành viên nhóm (Team Onboarding)
+
+1. **Khởi động dịch vụ:** `docker compose up -d` (Docker tự pull official public images từ Docker Hub: Kafka 3.7, Hadoop NameNode & DataNode 3.2.1 — **không cần publish image riêng**).
+2. **Khởi tạo HDFS:** `python src/stage_hdfs.py` (tải raw/curated/interactions lên Data Lake).
+3. **Phát stream:** `python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0` (hoặc cấu hình pacing tùy chọn cho Module 3).
+4. **Kết nối hạ tầng:**
+   - Kafka: `localhost:9092`
+   - HDFS WebHDFS: `http://localhost:9870`
+   - HDFS IPC: `hdfs://localhost:8020`

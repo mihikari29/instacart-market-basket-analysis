@@ -112,18 +112,36 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 | 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Next |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
-## Running Infrastructure & Module 1
+## Team Onboarding & Environment Setup
 
-```bash
-# 1. Start Kafka & HDFS containers (uses standard public images)
-docker compose up -d
+Đồng đội khi nhận repository có thể chạy ngay toàn bộ môi trường mà **không cần cài đặt thủ công Java, Hadoop hay Kafka**:
 
-# 2. Stage historical datasets onto HDFS
-python src/stage_hdfs.py
+1. **Khởi động dịch vụ hạ tầng:**
+   ```bash
+   docker compose up -d
+   ```
+   *(Sử dụng trực tiếp các official images có sẵn trên Docker Hub: `apache/kafka:3.7.0`, `bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8`, `bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8` — **không cần publish image riêng**).*
 
-# 3. Stream / replay events into Kafka
-python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
-```
+2. **Dựng HDFS Data Lake (cho Module 2 & 4):**
+   ```bash
+   python src/stage_hdfs.py
+   ```
+   *(Kiểm tra cây thư mục HDFS: `python src/stage_hdfs.py --tree-only`)*.
+
+3. **Phát dữ liệu lên Kafka (cho Module 3 Streaming):**
+   ```bash
+   # Phát thử 50k events nhanh
+   python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
+
+   # Hoặc phát mô phỏng có lỗi trễ để test watermark
+   python src/producer.py --feed data/synthesized/scatter_3m --limit-events 20000 --replay-speed 50000 --inject "late:0.05,dup:0.02"
+   ```
+
+4. **Các cổng dịch vụ đã ánh xạ sẵn:**
+   - **Kafka Broker:** `localhost:9092` (Topic: `instacart-purchase-events`)
+   - **HDFS NameNode WebHDFS:** `http://localhost:9870`
+   - **HDFS IPC (Spark defaultFS):** `hdfs://localhost:8020` (hoặc `hdfs://namenode:8020` trong container)
+   - **HDFS DataNode WebHDFS:** `http://localhost:9864`
 
 ## Next steps (Module 2 & Module 3)
 
