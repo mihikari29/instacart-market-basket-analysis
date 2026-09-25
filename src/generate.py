@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -141,6 +140,7 @@ def finalize(ev: pd.DataFrame) -> pd.DataFrame:
     out["event_id"] = ev["order_id"].astype(str) + "_" + ev["add_to_cart_order"].astype(str)
     out["order_id"] = ev["order_id"].astype("int64")
     out["user_id"] = ev["user_id"].astype("int64")
+    out["order_number"] = ev["order_number"].astype("int16")
     out["product_id"] = ev["product_id"].astype("int64")
     out["add_to_cart_order"] = ev["add_to_cart_order"].astype("int16")
     out["reordered"] = ev["reordered"].astype("bool")
@@ -264,6 +264,7 @@ def main() -> int:
     daily_counts = pd.Series(writer.daily, dtype="int64").sort_index()
     stats = {
         "config": conf.to_dict(),
+        "batch_users": args.batch_users,
         "output": str(writer.path),
         "events": writer.events,
         "users": len(user_ids),

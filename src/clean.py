@@ -20,7 +20,6 @@ import argparse
 import sys
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 RAW_DTYPES = {
@@ -67,10 +66,9 @@ def clean_orders(orders: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     df["dspo_raw"] = df["days_since_prior_order"]
     df["days_since_prior_order"] = df["days_since_prior_order"].fillna(0.0)
 
-    capped = (df["dspo_raw"] == 30) & df["dspo_raw"].notna()
-    stats["cap30_rows"] = int(capped.sum())
-
     df = df.sort_values(["user_id", "order_number"], kind="mergesort").reset_index(drop=True)
+    capped = df["dspo_raw"].eq(30)
+    stats["cap30_rows"] = int(capped.sum())
     prev_dow = df.groupby("user_id", sort=False)["order_dow"].shift(1)
     df["prev_dow"] = prev_dow.astype("float64")
 
