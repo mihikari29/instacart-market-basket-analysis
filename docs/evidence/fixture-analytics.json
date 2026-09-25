@@ -1,0 +1,237 @@
+{
+  "counts": {
+    "aisles": 3,
+    "departments": 2,
+    "interactions": 36,
+    "orders": 16,
+    "prior": 24,
+    "products": 6,
+    "train": 12,
+    "users": 4
+  },
+  "department_hour_pivot": [
+    {
+      "0": 0,
+      "1": 0,
+      "10": 4,
+      "11": 2,
+      "12": 4,
+      "13": 0,
+      "14": 0,
+      "15": 0,
+      "16": 0,
+      "17": 0,
+      "18": 0,
+      "19": 0,
+      "2": 0,
+      "20": 0,
+      "21": 0,
+      "22": 0,
+      "23": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 2,
+      "department_id": 1
+    },
+    {
+      "0": 0,
+      "1": 0,
+      "10": 2,
+      "11": 4,
+      "12": 2,
+      "13": 0,
+      "14": 0,
+      "15": 0,
+      "16": 0,
+      "17": 0,
+      "18": 0,
+      "19": 0,
+      "2": 0,
+      "20": 0,
+      "21": 0,
+      "22": 0,
+      "23": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 4,
+      "department_id": 2
+    }
+  ],
+  "departments": [
+    {
+      "department": "Department 1",
+      "department_id": 1,
+      "purchase_count": 12,
+      "reorder_rate": 0.5,
+      "unique_users": 4
+    },
+    {
+      "department": "Department 2",
+      "department_id": 2,
+      "purchase_count": 12,
+      "reorder_rate": 0.5,
+      "unique_users": 4
+    }
+  ],
+  "minimum_reorder_support": 1,
+  "orders_by_dow": [
+    {
+      "count": 4,
+      "order_dow": 1
+    },
+    {
+      "count": 4,
+      "order_dow": 2
+    },
+    {
+      "count": 4,
+      "order_dow": 3
+    },
+    {
+      "count": 4,
+      "order_dow": 4
+    }
+  ],
+  "orders_by_hour": [
+    {
+      "count": 4,
+      "order_hour_of_day": 9
+    },
+    {
+      "count": 4,
+      "order_hour_of_day": 10
+    },
+    {
+      "count": 4,
+      "order_hour_of_day": 11
+    },
+    {
+      "count": 4,
+      "order_hour_of_day": 12
+    }
+  ],
+  "orders_per_user": {
+    "max": 4,
+    "mean": 4.0,
+    "min": 4,
+    "quantiles": [
+      4,
+      4,
+      4
+    ]
+  },
+  "purchase_behavior": {
+    "average_basket_size": 3.0,
+    "purchases": 24,
+    "reorder_rate": 0.5
+  },
+  "scope": "purchase metrics and features: prior only; order distributions: all orders",
+  "top_purchased": [
+    {
+      "product_id": 5,
+      "product_name": "Product 5",
+      "purchase_count": 6,
+      "reorder_count": 3,
+      "reorder_rate": 0.5,
+      "unique_users": 3
+    },
+    {
+      "product_id": 6,
+      "product_name": "Product 6",
+      "purchase_count": 6,
+      "reorder_count": 3,
+      "reorder_rate": 0.5,
+      "unique_users": 3
+    },
+    {
+      "product_id": 1,
+      "product_name": "Product 1",
+      "purchase_count": 4,
+      "reorder_count": 2,
+      "reorder_rate": 0.5,
+      "unique_users": 2
+    },
+    {
+      "product_id": 4,
+      "product_name": "Product 4",
+      "purchase_count": 4,
+      "reorder_count": 2,
+      "reorder_rate": 0.5,
+      "unique_users": 2
+    },
+    {
+      "product_id": 2,
+      "product_name": "Product 2",
+      "purchase_count": 2,
+      "reorder_count": 1,
+      "reorder_rate": 0.5,
+      "unique_users": 1
+    },
+    {
+      "product_id": 3,
+      "product_name": "Product 3",
+      "purchase_count": 2,
+      "reorder_count": 1,
+      "reorder_rate": 0.5,
+      "unique_users": 1
+    }
+  ],
+  "top_reordered": [
+    {
+      "product_id": 5,
+      "product_name": "Product 5",
+      "purchase_count": 6,
+      "reorder_count": 3,
+      "reorder_rate": 0.5,
+      "unique_users": 3
+    },
+    {
+      "product_id": 6,
+      "product_name": "Product 6",
+      "purchase_count": 6,
+      "reorder_count": 3,
+      "reorder_rate": 0.5,
+      "unique_users": 3
+    },
+    {
+      "product_id": 1,
+      "product_name": "Product 1",
+      "purchase_count": 4,
+      "reorder_count": 2,
+      "reorder_rate": 0.5,
+      "unique_users": 2
+    },
+    {
+      "product_id": 4,
+      "product_name": "Product 4",
+      "purchase_count": 4,
+      "reorder_count": 2,
+      "reorder_rate": 0.5,
+      "unique_users": 2
+    },
+    {
+      "product_id": 2,
+      "product_name": "Product 2",
+      "purchase_count": 2,
+      "reorder_count": 1,
+      "reorder_rate": 0.5,
+      "unique_users": 1
+    },
+    {
+      "product_id": 3,
+      "product_name": "Product 3",
+      "purchase_count": 2,
+      "reorder_count": 1,
+      "reorder_rate": 0.5,
+      "unique_users": 1
+    }
+  ]
+}

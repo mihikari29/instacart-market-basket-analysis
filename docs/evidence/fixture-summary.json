@@ -1,0 +1,1183 @@
+{
+  "analytics": {
+    "mongo_published": true,
+    "summary": "analytics.json",
+    "user_features": "file:///<repository>/data/fixture/features/user_features"
+  },
+  "cache_benchmark": {
+    "cached_reuse": {
+      "median_seconds": 0.12188100000003033,
+      "runs_seconds": [
+        0.12188100000003033,
+        0.13699219999944034,
+        0.11849340000026132
+      ],
+      "trials": [
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/cached_reuse/0",
+          "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7215]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3277L, sum#3278L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7201]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7209]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.12188100000003033,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 41,
+            "failed_task_attempts": 0,
+            "input_bytes": 1604,
+            "input_records": 2,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 8
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/cached_reuse/1",
+          "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7355]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3407L, sum#3408L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7341]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7349]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.13699219999944034,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 55,
+            "failed_task_attempts": 0,
+            "input_bytes": 1604,
+            "input_records": 2,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 8
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/cached_reuse/2",
+          "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7769]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3597L, sum#3598L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7755]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7763]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.11849340000026132,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 25,
+            "failed_task_attempts": 0,
+            "input_bytes": 1604,
+            "input_records": 2,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 8
+          }
+        }
+      ]
+    },
+    "materializations": [
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/materialize/0",
+        "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3268L, reorder_count#3270L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7215]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3277L, sum#3278L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7201]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7209]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.39455809999981284,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 185,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      },
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/materialize/1",
+        "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3398L, reorder_count#3400L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7355]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3407L, sum#3408L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7341]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7349]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.3996893000003183,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 186,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      },
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/materialize/2",
+        "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3588L, reorder_count#3590L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7769]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3597L, sum#3598L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7755]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7763]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.5091140000004089,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 267,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      }
+    ],
+    "outputs_equal": true,
+    "scope": "persist reused department aggregate; build cost reported separately",
+    "uncached": {
+      "median_seconds": 0.4251858000006905,
+      "runs_seconds": [
+        0.3663573000003453,
+        0.6362916000007317,
+        0.4251858000006905
+      ],
+      "trials": [
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/uncached/0",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3238L, reorder_count#3240L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7078]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3247L, sum#3248L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7064]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7072]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.3663573000003453,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 171,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/uncached/1",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3528L, reorder_count#3530L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7495]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3537L, sum#3538L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7481]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7489]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.6362916000007317,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 267,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "cache/uncached/2",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3558L, reorder_count#3560L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=7632]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3567L, sum#3568L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7618]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=7626]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.4251858000006905,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 145,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        }
+      ]
+    },
+    "warmups": [
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/materialize/-1",
+        "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=6801]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3087L, sum#3088L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6787]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6795]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.9777270000004137,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 646,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      },
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/cached_reuse/-1",
+        "physical_plan": "InMemoryTableScan [department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L]\n   +- InMemoryRelation [department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3078L, reorder_count#3080L])\n            +- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=6801]\n               +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3087L, sum#3088L])\n                  +- *(3) Project [department_id#33L, reordered#17, department#43]\n                     +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n                        :- *(3) Project [reordered#17, department_id#33L]\n                        :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#15L)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6787]\n                        :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6795]\n                           +- *(2) Filter isnotnull(department_id#42L)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.30788919999940845,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 87,
+          "failed_task_attempts": 0,
+          "input_bytes": 1604,
+          "input_records": 2,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 0,
+          "shuffle_write_bytes": 0,
+          "skipped_stages": 1,
+          "stages": 1,
+          "tasks": 8
+        }
+      },
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "cache/uncached/-1",
+        "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#3208L, reorder_count#3210L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=6941]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#3217L, sum#3218L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6927]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6935]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.38480989999970916,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 130,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      }
+    ]
+  },
+  "environment": {
+    "commit": "bb6cbdd1d96f9a9d5b74f0eb43877f48ccbc2ce9",
+    "config": {
+      "master": "local[2]",
+      "repetitions": 3,
+      "root": "file:///<repository>/data/fixture",
+      "shuffle_partitions": 8,
+      "warmups": 1
+    },
+    "dirty": true,
+    "java": "17.0.20.1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.13.2",
+    "source_code_sha256": "8e99c114731b3b608afe85b74978616233c7411813e05cafb32a8094cb7d6d33",
+    "spark": "3.5.5",
+    "spark_conf": {
+      "spark.cores.max": "2",
+      "spark.executor.cores": "2",
+      "spark.executor.extraJavaOptions": "-Djava.net.preferIPv6Addresses=false -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false",
+      "spark.executor.id": "driver",
+      "spark.executor.memory": "1g",
+      "spark.master": "local[2]",
+      "spark.sql.adaptive.enabled": "false",
+      "spark.sql.ansi.enabled": "true",
+      "spark.sql.autoBroadcastJoinThreshold": "-1",
+      "spark.sql.debug.maxToStringFields": "200",
+      "spark.sql.maxMetadataStringLength": "10000",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "8"
+    },
+    "timestamp_utc": "2026-09-25T15:45:36.679637+00:00"
+  },
+  "evidence_scope": "Deterministic local fixture; NOT full Instacart or HDFS",
+  "join_benchmark": {
+    "aqe": false,
+    "broadcast_hash": {
+      "median_seconds": 0.4213340000005701,
+      "runs_seconds": [
+        0.4749689000000217,
+        0.4213340000005701,
+        0.4092790000004243
+      ],
+      "trials": [
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/broadcast_hash/0",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2512L, reorder_count#2514L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=5547]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2521L, sum#2522L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5533]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5541]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.4749689000000217,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 165,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/broadcast_hash/1",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2542L, reorder_count#2544L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=5684]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2551L, sum#2552L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5670]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5678]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.4213340000005701,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 145,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/broadcast_hash/2",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2630L, reorder_count#2632L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=6161]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2639L, sum#2640L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6147]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=6155]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.4092790000004243,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 163,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 180,
+            "shuffle_write_bytes": 180,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 11
+          }
+        }
+      ]
+    },
+    "cache_policy": "clear Spark cache before every arm; OS/HDFS caches are not flushed",
+    "operators_verified": true,
+    "outputs_equal": true,
+    "sort_merge": {
+      "median_seconds": 0.9910507000004145,
+      "runs_seconds": [
+        0.9910507000004145,
+        1.1849597000000358,
+        0.691521400000056
+      ],
+      "trials": [
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/sort_merge/0",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2483L, reorder_count#2485L])\n+- *(9) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2492L, sum#2493L])\n   +- *(9) Project [department_id#33L, reordered#17, department#43]\n      +- *(9) SortMergeJoin [department_id#33L], [department_id#42L], Inner\n         :- *(6) Sort [department_id#33L ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#33L, 8), ENSURE_REQUIREMENTS, [plan_id=5388]\n         :     +- *(5) Project [reordered#17, department_id#33L]\n         :        +- *(5) SortMergeJoin [product_id#15L], [product_id#30L], Inner\n         :           :- *(2) Sort [product_id#15L ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#15L, 8), ENSURE_REQUIREMENTS, [plan_id=5371]\n         :           :     +- *(1) Filter isnotnull(product_id#15L)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n         :           +- *(4) Sort [product_id#30L ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#30L, 8), ENSURE_REQUIREMENTS, [plan_id=5380]\n         :                 +- *(3) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n         +- *(8) Sort [department_id#42L ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#42L, 8), ENSURE_REQUIREMENTS, [plan_id=5397]\n               +- *(7) Filter isnotnull(department_id#42L)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.9910507000004145,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 998,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 1278,
+            "shuffle_write_bytes": 1278,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 19
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/sort_merge/1",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2572L, reorder_count#2574L])\n+- *(9) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2581L, sum#2582L])\n   +- *(9) Project [department_id#33L, reordered#17, department#43]\n      +- *(9) SortMergeJoin [department_id#33L], [department_id#42L], Inner\n         :- *(6) Sort [department_id#33L ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#33L, 8), ENSURE_REQUIREMENTS, [plan_id=5832]\n         :     +- *(5) Project [reordered#17, department_id#33L]\n         :        +- *(5) SortMergeJoin [product_id#15L], [product_id#30L], Inner\n         :           :- *(2) Sort [product_id#15L ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#15L, 8), ENSURE_REQUIREMENTS, [plan_id=5815]\n         :           :     +- *(1) Filter isnotnull(product_id#15L)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n         :           +- *(4) Sort [product_id#30L ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#30L, 8), ENSURE_REQUIREMENTS, [plan_id=5824]\n         :                 +- *(3) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n         +- *(8) Sort [department_id#42L ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#42L, 8), ENSURE_REQUIREMENTS, [plan_id=5841]\n               +- *(7) Filter isnotnull(department_id#42L)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 1.1849597000000358,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 742,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 1278,
+            "shuffle_write_bytes": 1278,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 19
+          }
+        },
+        {
+          "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+          "job_group": "joins/sort_merge/2",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2601L, reorder_count#2603L])\n+- *(9) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2610L, sum#2611L])\n   +- *(9) Project [department_id#33L, reordered#17, department#43]\n      +- *(9) SortMergeJoin [department_id#33L], [department_id#42L], Inner\n         :- *(6) Sort [department_id#33L ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#33L, 8), ENSURE_REQUIREMENTS, [plan_id=6002]\n         :     +- *(5) Project [reordered#17, department_id#33L]\n         :        +- *(5) SortMergeJoin [product_id#15L], [product_id#30L], Inner\n         :           :- *(2) Sort [product_id#15L ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#15L, 8), ENSURE_REQUIREMENTS, [plan_id=5985]\n         :           :     +- *(1) Filter isnotnull(product_id#15L)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n         :           +- *(4) Sort [product_id#30L ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#30L, 8), ENSURE_REQUIREMENTS, [plan_id=5994]\n         :                 +- *(3) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n         +- *(8) Sort [department_id#42L ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#42L, 8), ENSURE_REQUIREMENTS, [plan_id=6011]\n               +- *(7) Filter isnotnull(department_id#42L)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+          "result": [
+            {
+              "department": "Department 1",
+              "department_id": 1,
+              "purchase_count": 12,
+              "reorder_count": 6
+            },
+            {
+              "department": "Department 2",
+              "department_id": 2,
+              "purchase_count": 12,
+              "reorder_count": 6
+            }
+          ],
+          "seconds": 0.691521400000056,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 587,
+            "failed_task_attempts": 0,
+            "input_bytes": 6296,
+            "input_records": 32,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 1278,
+            "shuffle_write_bytes": 1278,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 19
+          }
+        }
+      ]
+    },
+    "warmups": [
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "joins/broadcast_hash/-1",
+        "physical_plan": "*(4) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2424L, reorder_count#2426L])\n+- Exchange hashpartitioning(department_id#33L, department#43, 8), ENSURE_REQUIREMENTS, [plan_id=5070]\n   +- *(3) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2433L, sum#2434L])\n      +- *(3) Project [department_id#33L, reordered#17, department#43]\n         +- *(3) BroadcastHashJoin [department_id#33L], [department_id#42L], Inner, BuildRight, false\n            :- *(3) Project [reordered#17, department_id#33L]\n            :  +- *(3) BroadcastHashJoin [product_id#15L], [product_id#30L], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#15L)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5056]\n            :        +- *(1) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [plan_id=5064]\n               +- *(2) Filter isnotnull(department_id#42L)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 0.8470697999991899,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 304,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 180,
+          "shuffle_write_bytes": 180,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 11
+        }
+      },
+      {
+        "checksum": "a03fc7ce63d18837ca535d24647a72a8a3b86ec1845120700f3a6e7bf7b89877",
+        "job_group": "joins/sort_merge/-1",
+        "physical_plan": "*(9) HashAggregate(keys=[department_id#33L, department#43], functions=[count(1), sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, purchase_count#2454L, reorder_count#2456L])\n+- *(9) HashAggregate(keys=[department_id#33L, department#43], functions=[partial_count(1), partial_sum(cast(reordered#17 as bigint))], output=[department_id#33L, department#43, count#2463L, sum#2464L])\n   +- *(9) Project [department_id#33L, reordered#17, department#43]\n      +- *(9) SortMergeJoin [department_id#33L], [department_id#42L], Inner\n         :- *(6) Sort [department_id#33L ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#33L, 8), ENSURE_REQUIREMENTS, [plan_id=5218]\n         :     +- *(5) Project [reordered#17, department_id#33L]\n         :        +- *(5) SortMergeJoin [product_id#15L], [product_id#30L], Inner\n         :           :- *(2) Sort [product_id#15L ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#15L, 8), ENSURE_REQUIREMENTS, [plan_id=5201]\n         :           :     +- *(1) Filter isnotnull(product_id#15L)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#15L,reordered#17] Batched: true, DataFilters: [isnotnull(product_id#15L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:bigint,reordered:boolean>\n         :           +- *(4) Sort [product_id#30L ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#30L, 8), ENSURE_REQUIREMENTS, [plan_id=5210]\n         :                 +- *(3) Filter (isnotnull(product_id#30L) AND isnotnull(department_id#33L))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#30L,department_id#33L] Batched: true, DataFilters: [isnotnull(product_id#30L), isnotnull(department_id#33L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:bigint,department_id:bigint>\n         +- *(8) Sort [department_id#42L ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#42L, 8), ENSURE_REQUIREMENTS, [plan_id=5227]\n               +- *(7) Filter isnotnull(department_id#42L)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#42L,department#43] Batched: true, DataFilters: [isnotnull(department_id#42L)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:bigint,department:string>\n",
+        "result": [
+          {
+            "department": "Department 1",
+            "department_id": 1,
+            "purchase_count": 12,
+            "reorder_count": 6
+          },
+          {
+            "department": "Department 2",
+            "department_id": 2,
+            "purchase_count": 12,
+            "reorder_count": 6
+          }
+        ],
+        "seconds": 1.4174002999998265,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 1376,
+          "failed_task_attempts": 0,
+          "input_bytes": 6296,
+          "input_records": 32,
+          "referenced_stages": 5,
+          "shuffle_read_bytes": 1278,
+          "shuffle_write_bytes": 1278,
+          "skipped_stages": 0,
+          "stages": 5,
+          "tasks": 19
+        }
+      }
+    ]
+  },
+  "partition_pruning": {
+    "date_filter": {
+      "median_seconds": 0.2789859999993496,
+      "runs_seconds": [
+        0.24020529999961582,
+        0.2947362000004432,
+        0.2789859999993496
+      ],
+      "trials": [
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/date_filter/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2797L, reorders#2799L, product_id_sum#2801L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6416]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2824L, sum#2825L, sum#2826L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) Filter ((isnotnull(synthetic_date#58) AND (synthetic_date#58 >= 2024-01-01)) AND (synthetic_date#58 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#47L,reordered#49,synthetic_date#58,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [isnotnull(synthetic_date#58), (synthetic_date#58 >= 2024-01-01), (synthetic_date#58 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.24020529999961582,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 114,
+            "failed_task_attempts": 0,
+            "input_bytes": 23071,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 125,
+            "shuffle_write_bytes": 125,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/date_filter/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2863L, reorders#2865L, product_id_sum#2867L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6496]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2890L, sum#2891L, sum#2892L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) Filter ((isnotnull(synthetic_date#58) AND (synthetic_date#58 >= 2024-01-01)) AND (synthetic_date#58 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#47L,reordered#49,synthetic_date#58,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [isnotnull(synthetic_date#58), (synthetic_date#58 >= 2024-01-01), (synthetic_date#58 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.2947362000004432,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 195,
+            "failed_task_attempts": 0,
+            "input_bytes": 23071,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 125,
+            "shuffle_write_bytes": 125,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/date_filter/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#3028L, reorders#3030L, product_id_sum#3032L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6687]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#3055L, sum#3056L, sum#3057L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) Filter ((isnotnull(synthetic_date#58) AND (synthetic_date#58 >= 2024-01-01)) AND (synthetic_date#58 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#47L,reordered#49,synthetic_date#58,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [isnotnull(synthetic_date#58), (synthetic_date#58 >= 2024-01-01), (synthetic_date#58 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.2789859999993496,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 158,
+            "failed_task_attempts": 0,
+            "input_bytes": 23071,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 125,
+            "shuffle_write_bytes": 125,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        }
+      ]
+    },
+    "equivalent_filters_equal": true,
+    "full_scan": {
+      "median_seconds": 0.21793439999964903,
+      "runs_seconds": [
+        0.1739201000000321,
+        0.21793439999964903,
+        0.2285647999997309
+      ],
+      "trials": [
+        {
+          "checksum": "6367cf48e5bd81f3a60a97d149472e33931a504d308f6ab13277c8b26b65f239",
+          "job_group": "partitions/full_scan/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2764L, reorders#2766L, product_id_sum#2768L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6375]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2791L, sum#2792L, sum#2793L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 36,
+              "product_id_sum": 144,
+              "reorders": 24
+            }
+          ],
+          "seconds": 0.1739201000000321,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 94,
+            "failed_task_attempts": 0,
+            "input_bytes": 21321,
+            "input_records": 36,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 130,
+            "shuffle_write_bytes": 130,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "6367cf48e5bd81f3a60a97d149472e33931a504d308f6ab13277c8b26b65f239",
+          "job_group": "partitions/full_scan/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2929L, reorders#2931L, product_id_sum#2933L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6572]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2956L, sum#2957L, sum#2958L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 36,
+              "product_id_sum": 144,
+              "reorders": 24
+            }
+          ],
+          "seconds": 0.21793439999964903,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 105,
+            "failed_task_attempts": 0,
+            "input_bytes": 21321,
+            "input_records": 36,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 130,
+            "shuffle_write_bytes": 130,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "6367cf48e5bd81f3a60a97d149472e33931a504d308f6ab13277c8b26b65f239",
+          "job_group": "partitions/full_scan/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2995L, reorders#2997L, product_id_sum#2999L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6646]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#3022L, sum#3023L, sum#3024L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 36,
+              "product_id_sum": 144,
+              "reorders": 24
+            }
+          ],
+          "seconds": 0.2285647999997309,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 85,
+            "failed_task_attempts": 0,
+            "input_bytes": 21321,
+            "input_records": 36,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 130,
+            "shuffle_write_bytes": 130,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        }
+      ]
+    },
+    "interpretation": "Full scan has a different scope; only date_filter and partition_filter are equivalent.",
+    "partition_filter": {
+      "median_seconds": 0.22467309999956342,
+      "runs_seconds": [
+        0.35481110000000626,
+        0.22467309999956342,
+        0.14907119999952556
+      ],
+      "trials": [
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/partition_filter/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2830L, reorders#2832L, product_id_sum#2834L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6455]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2857L, sum#2858L, sum#2859L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#59), isnotnull(synthetic_month#60), (synthetic_year#59 = 2024), (synthetic_month#60 = 1), (((((((synthetic_day#61 = 1) OR (synthetic_day#61 = 2)) OR (synthetic_day#61 = 3)) OR (synthetic_day#61 = 4)) OR (synthetic_day#61 = 5)) OR (synthetic_day#61 = 6)) OR (synthetic_day#61 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.35481110000000626,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 234,
+            "failed_task_attempts": 0,
+            "input_bytes": 14214,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 129,
+            "shuffle_write_bytes": 129,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/partition_filter/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2896L, reorders#2898L, product_id_sum#2900L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6535]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2923L, sum#2924L, sum#2925L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#59), isnotnull(synthetic_month#60), (synthetic_year#59 = 2024), (synthetic_month#60 = 1), (((((((synthetic_day#61 = 1) OR (synthetic_day#61 = 2)) OR (synthetic_day#61 = 3)) OR (synthetic_day#61 = 4)) OR (synthetic_day#61 = 5)) OR (synthetic_day#61 = 6)) OR (synthetic_day#61 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.22467309999956342,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 111,
+            "failed_task_attempts": 0,
+            "input_bytes": 14214,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 129,
+            "shuffle_write_bytes": 129,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+          "job_group": "partitions/partition_filter/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2962L, reorders#2964L, product_id_sum#2966L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6609]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2989L, sum#2990L, sum#2991L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#59), isnotnull(synthetic_month#60), (synthetic_year#59 = 2024), (synthetic_month#60 = 1), (((((((synthetic_day#61 = 1) OR (synthetic_day#61 = 2)) OR (synthetic_day#61 = 3)) OR (synthetic_day#61 = 4)) OR (synthetic_day#61 = 5)) OR (synthetic_day#61 = 6)) OR (synthetic_day#61 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 24,
+              "product_id_sum": 96,
+              "reorders": 12
+            }
+          ],
+          "seconds": 0.14907119999952556,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 76,
+            "failed_task_attempts": 0,
+            "input_bytes": 14214,
+            "input_records": 24,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 129,
+            "shuffle_write_bytes": 129,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        }
+      ]
+    },
+    "partition_filters_verified": true,
+    "warmups": [
+      {
+        "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+        "job_group": "partitions/partition_filter/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2665L, reorders#2667L, product_id_sum#2669L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6258]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2692L, sum#2693L, sum#2694L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#59), isnotnull(synthetic_month#60), (synthetic_year#59 = 2024), (synthetic_month#60 = 1), (((((((synthetic_day#61 = 1) OR (synthetic_day#61 = 2)) OR (synthetic_day#61 = 3)) OR (synthetic_day#61 = 4)) OR (synthetic_day#61 = 5)) OR (synthetic_day#61 = 6)) OR (synthetic_day#61 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+        "result": [
+          {
+            "events": 24,
+            "product_id_sum": 96,
+            "reorders": 12
+          }
+        ],
+        "seconds": 0.3281767000007676,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 213,
+          "failed_task_attempts": 0,
+          "input_bytes": 14214,
+          "input_records": 24,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 129,
+          "shuffle_write_bytes": 129,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 3
+        }
+      },
+      {
+        "checksum": "6367cf48e5bd81f3a60a97d149472e33931a504d308f6ab13277c8b26b65f239",
+        "job_group": "partitions/full_scan/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2698L, reorders#2700L, product_id_sum#2702L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6295]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2725L, sum#2726L, sum#2727L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#47L,reordered#49,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+        "result": [
+          {
+            "events": 36,
+            "product_id_sum": 144,
+            "reorders": 24
+          }
+        ],
+        "seconds": 0.22642809999979363,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 116,
+          "failed_task_attempts": 0,
+          "input_bytes": 21321,
+          "input_records": 36,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 130,
+          "shuffle_write_bytes": 130,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 3
+        }
+      },
+      {
+        "checksum": "915d859a3cf04ca27ecfe2347820cb415909972afdf41fbc8583360da0554290",
+        "job_group": "partitions/date_filter/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#49 as bigint)), sum(product_id#47L)], output=[events#2731L, reorders#2733L, product_id_sum#2735L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6336]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#49 as bigint)), partial_sum(product_id#47L)], output=[count#2758L, sum#2759L, sum#2760L])\n      +- *(1) Project [product_id#47L, reordered#49]\n         +- *(1) Filter ((isnotnull(synthetic_date#58) AND (synthetic_date#58 >= 2024-01-01)) AND (synthetic_date#58 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#47L,reordered#49,synthetic_date#58,synthetic_year#59,synthetic_month#60,synthetic_day#61] Batched: true, DataFilters: [isnotnull(synthetic_date#58), (synthetic_date#58 >= 2024-01-01), (synthetic_date#58 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/<repository>/data/fixture/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+        "result": [
+          {
+            "events": 24,
+            "product_id_sum": 96,
+            "reorders": 12
+          }
+        ],
+        "seconds": 0.30614429999968706,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 181,
+          "failed_task_attempts": 0,
+          "input_bytes": 23071,
+          "input_records": 24,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 125,
+          "shuffle_write_bytes": 125,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 3
+        }
+      }
+    ],
+    "window": [
+      "2024-01-01",
+      "2024-01-07"
+    ]
+  },
+  "path_normalization": "Absolute repository paths replaced with <repository>; numeric measurements unchanged",
+  "run_id": "20260925T154536_9ad62d33",
+  "status": "passed",
+  "validation": {
+    "counts": {
+      "aisles": 3,
+      "departments": 2,
+      "interactions": 36,
+      "orders": 16,
+      "prior": 24,
+      "products": 6,
+      "train": 12,
+      "users": 4
+    },
+    "fact_event_multisets_equal": true,
+    "partition_integrity": true,
+    "source_local_spark_equal": true,
+    "source_receipt": {
+      "feed_manifest": {
+        "config": {
+          "limit_users": null
+        },
+        "events": 36,
+        "fixture": true
+      },
+      "files": 3,
+      "local_rows": 36,
+      "partitions": 3,
+      "source_columns": [
+        "order_id",
+        "product_id",
+        "add_to_cart_order",
+        "reordered",
+        "event_id",
+        "user_id",
+        "aisle_id",
+        "department_id",
+        "order_dow",
+        "order_hour_of_day",
+        "event_time_epoch_ms",
+        "event_time_iso",
+        "synthetic_date"
+      ],
+      "source_rows": 36,
+      "source_sha256": "760cab8cce998017e35d880b3705f1d5503f2e8aa6dcd784d8257fd1da061184",
+      "version": 1
+    },
+    "source_tables": {
+      "aisles": {
+        "rows": 3,
+        "sha256": "ea359bd03495704e46913ed1e533d703665796483bc7b04b60d75155b10b5094"
+      },
+      "departments": {
+        "rows": 2,
+        "sha256": "59b3d845a52ba4db7527f43d70ecffe285d218777607f7307c3800f0ded02510"
+      },
+      "order_products_prior": {
+        "rows": 24,
+        "sha256": "b5afa9c3482adbd68868c7c94c8bb6b2c8dcf8b08fb671eef8d2f33d6cb9abcd"
+      },
+      "order_products_train": {
+        "rows": 12,
+        "sha256": "6d27e49efcc2f3b9a1d8e64a4a7edca0f1d4d2afeff3eca587c1782db6aa730b"
+      },
+      "orders": {
+        "rows": 16,
+        "sha256": "3a083e06a25918664b778a5a2c715e5a02e60cf7dfd8d9a66ebb9396e7d48389"
+      },
+      "products": {
+        "rows": 6,
+        "sha256": "aa7cf9cd294572a564ba3fec4bf06f85c936a6202eb53c8abf31a49ce33fea40"
+      }
+    }
+  }
+}

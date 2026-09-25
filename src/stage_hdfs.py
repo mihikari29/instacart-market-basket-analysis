@@ -12,22 +12,26 @@ Usage:
   python src/stage_hdfs.py                                     # scatter_3m interactions
   python src/stage_hdfs.py --feed data/synthesized/scatter_1w  # other feed
 """
+
 from __future__ import annotations
 
 import argparse
+import json
+import uuid
 import posixpath
 import re
 import shutil
 import tempfile
 from pathlib import Path
 
-import pandas as pd
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import requests
 from hdfs import InsecureClient
+
+try:
+    from .partition_events import partition_events, file_sha256
+except ImportError:
+    from partition_events import partition_events, file_sha256
 
 HDFS_START = "http://localhost:9870"
 HDFS_USER = "root"
@@ -66,8 +70,6 @@ def webhdfs_upload(hpath: str, local: Path, webhdfs_url: str = HDFS_START, user:
     which only resolves inside Docker, so we rewrite its host to localhost."""
     url = f"{webhdfs_url}/webhdfs/v1{hpath}?op=CREATE&overwrite=true&user.name={user}"
     r = requests.put(url, allow_redirects=False, timeout=30)
-    if r.status_code == 201:
-        return  # single-hop create (edge case)
     if r.status_code not in (301, 302, 307):
         raise RuntimeError(f"CREATE {hpath}: HTTP {r.status_code} {r.text[:200]}")
     loc = r.headers["Location"]
@@ -97,65 +99,48 @@ def stage_curated(client: InsecureClient, webhdfs_url: str, user: str) -> None:
     for table, fname in DIMS:
         upload_file(client, f"{BASE}/curated/dimensions/{table}/{fname}", CLEAN / fname, webhdfs_url, user)
 
+    sources = {}
+    for table, fname in CURATED + DIMS:
+        path = CLEAN / fname
+        sources[table] = {"rows": pq.ParquetFile(path).metadata.num_rows, "sha256": file_sha256(path)}
+    with tempfile.TemporaryDirectory(prefix="hdfs_sources_") as temporary:
+        manifest = Path(temporary) / "_sources.json"
+        manifest.write_text(json.dumps(sources, indent=2), encoding="utf-8")
+        upload_file(client, f"{BASE}/curated/_sources.json", manifest, webhdfs_url, user)
+
 
 def stage_interactions(client: InsecureClient, feed: Path, webhdfs_url: str, user: str) -> None:
-    ev_path = feed / "events.parquet"
-    print(f"[interactions] partitioning {ev_path.name} by synthetic date", flush=True)
-    t0 = pd.Timestamp.now()
-    pf = pq.ParquetFile(ev_path)
+    target = f"{BASE}/curated/interactions"
+    pending = f"{target}.__staging_{uuid.uuid4().hex}"
     tmp = Path(tempfile.mkdtemp(prefix="hdfs_interactions_"))
     try:
-        for i in range(pf.num_row_groups):
-            rg = pf.read_row_group(i)
-            dates = rg["synthetic_date"]
-            year = pc.cast(pc.utf8_slice_codeunits(dates, 0, 4), pa.int16())
-            month = pc.cast(pc.utf8_slice_codeunits(dates, 5, 7), pa.int8())
-            day = pc.cast(pc.utf8_slice_codeunits(dates, 8, 10), pa.int8())
-            rg = rg.append_column("synthetic_year", year).append_column("synthetic_month", month).append_column("synthetic_day", day)
-            ds.write_dataset(
-                rg,
-                base_dir=str(tmp),
-                format="parquet",
-                partitioning=["synthetic_year", "synthetic_month", "synthetic_day"],
-                partitioning_flavor="hive",
-                existing_data_behavior="overwrite_or_ignore",
-            )
-            del rg
-            if (i + 1) % 10 == 0 or (i + 1) == pf.num_row_groups:
-                print(f"  partitioned row group {i + 1}/{pf.num_row_groups}", flush=True)
-
-        parts = sorted(p.relative_to(tmp).as_posix() for p in tmp.rglob("*.parquet"))
-        print(f"  partitioned -> {len(parts):,} files in {(pd.Timestamp.now() - t0).total_seconds():.1f}s", flush=True)
-
-        for idx, rel in enumerate(parts, 1):
-            hpath = f"{BASE}/curated/interactions/{rel}"
-            ensure_dirs(client, posixpath.dirname(hpath))
-            webhdfs_upload(hpath, tmp / rel, webhdfs_url, user)
-            if idx % 50 == 0 or idx == len(parts):
-                print(f"  [up  ] {idx}/{len(parts)} partitions uploaded...", flush=True)
-        print(f"  [done] {len(parts)} partition files -> {BASE}/curated/interactions/", flush=True)
+        receipt = partition_events(feed / "events.parquet", tmp)
+        print(f"[interactions] validated {receipt['local_rows']:,} rows in {receipt['files']} files")
+        for path in sorted(tmp.rglob("*.parquet")) + [tmp / "_handoff.json"]:
+            upload_file(client, f"{pending}/{path.relative_to(tmp).as_posix()}", path, webhdfs_url, user)
+        # Upload completes before replacing only this subtree. Do not run concurrent stagers.
+        # A failed rename leaves the pending copy available for recovery.
+        client.delete(target, recursive=True)
+        client.rename(pending, target)
+        print(f"[done] {target}: source/local rows = {receipt['source_rows']}")
     finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(tmp)
 
 
 def stage_places(client: InsecureClient) -> None:
-    for path in (f"{BASE}/features/user_features", f"{BASE}/features/als_interactions",
-                 f"{BASE}/models/als"):
+    for path in (f"{BASE}/features/user_features", f"{BASE}/features/als_interactions", f"{BASE}/models/als"):
         ensure_dirs(client, path)
     print("[place] features/{user_features,als_interactions}, models/als created", flush=True)
 
 
 def tree(client: InsecureClient, path: str, depth: int = 0) -> None:
-    try:
-        status = client.status(path, strict=False)
-        if not status or status["type"] == "FILE":
-            return
-        for name in client.list(path):
-            full = f"{path}/{name}"
-            print("  " * depth + f"- {name}", flush=True)
-            tree(client, full, depth + 1)
-    except Exception:
-        pass
+    status = client.status(path, strict=False)
+    if not status or status["type"] == "FILE":
+        return
+    for name in client.list(path):
+        full = f"{path}/{name}"
+        print("  " * depth + f"- {name}", flush=True)
+        tree(client, full, depth + 1)
 
 
 def main() -> int:

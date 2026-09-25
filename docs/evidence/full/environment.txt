@@ -1,0 +1,41 @@
+Linux runnervmtr4k5 6.17.0-1022-azure #22-Ubuntu SMP Mon Jul 27 17:24:03 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+               total        used        free      shared  buff/cache   available
+Mem:            15Gi       1.2Gi        11Gi        43Mi       2.9Gi        14Gi
+Swap:          3.0Gi          0B       3.0Gi
+Filesystem       Size  Used Avail Use% Mounted on
+/dev/root        145G   59G   86G  41% /
+tmpfs            7.9G   84K  7.9G   1% /dev/shm
+tmpfs            3.2G 1012K  3.2G   1% /run
+tmpfs            5.0M     0  5.0M   0% /run/lock
+efivarfs         128M   32K  128M   1% /sys/firmware/efi/efivars
+/dev/nvme0n1p16  881M   64M  756M   8% /boot
+/dev/nvme0n1p15  105M  6.2M   99M   6% /boot/efi
+tmpfs            1.6G   12K  1.6G   1% /run/user/1001
+Client: Docker Engine - Community
+ Version:           28.0.4
+ API version:       1.48
+ Go version:        go1.23.7
+ Git commit:        b8034c0
+ Built:             Tue Mar 25 15:07:16 2025
+ OS/Arch:           linux/amd64
+ Context:           default
+
+Server: Docker Engine - Community
+ Engine:
+  Version:          28.0.4
+  API version:      1.48 (minimum version 1.24)
+  Go version:       go1.23.7
+  Git commit:       6430e49
+  Built:            Tue Mar 25 15:07:16 2025
+  OS/Arch:          linux/amd64
+  Experimental:     false
+ containerd:
+  Version:          v2.3.5
+  GitCommit:        1294c24a7da8e5a793ed378161673abe94118892
+ runc:
+  Version:          1.5.1
+  GitCommit:        v1.5.1-0-g8f2685a4
+ docker-init:
+  Version:          0.19.0
+  GitCommit:        de40ad0
+Docker Compose version v2.38.2

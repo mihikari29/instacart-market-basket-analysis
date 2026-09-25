@@ -1,0 +1,6 @@
+2026-09-25T16:51:39.6131520Z 15 passed in 16.94s
+2026-09-25T16:52:49.0300401Z [interactions] validated 33,819,106 rows in 456 files
+2026-09-25T16:59:34.6698504Z [HANDOFF VALIDATION] {'orders': 3421083, 'prior': 32434489, 'train': 1384617, 'products': 49688, 'aisles': 134, 'departments': 21, 'interactions': 33819106, 'users': 206209}
+2026-09-25T17:04:03.4804863Z Mongo batch_product_metrics: 49677 documents
+2026-09-25T17:04:03.4844705Z Mongo department_metrics: 21 documents
+2026-09-25T17:04:03.4849890Z FULL DATA + STANDALONE SPARK + HDFS + MONGODB: PASS

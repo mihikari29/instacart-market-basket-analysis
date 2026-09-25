@@ -1,0 +1,32 @@
+{
+  "url": "https://www.kaggle.com/api/v1/datasets/download/psparks/instacart-market-basket-analysis?datasetVersionNumber=1",
+  "mirror": "psparks/instacart-market-basket-analysis",
+  "version": 1,
+  "archive_sha256": "c347cd7fa301c068ed391c7c77620f0e26e18f65d04cb907b6389c670db03038",
+  "files": {
+    "orders.csv": {
+      "rows": 3421083,
+      "sha256": "92a60ced67ac33bd82271f66ff9675374f69482d17a0e1442ba42caa8b3bff89"
+    },
+    "order_products__prior.csv": {
+      "rows": 32434489,
+      "sha256": "27b59dc9cf0d485f55e64e0bc9c5d6fb077ae167f8dfeab9246a03b5b0186359"
+    },
+    "order_products__train.csv": {
+      "rows": 1384617,
+      "sha256": "d27c4034883051c85e37c2cb0379fecbbeccad932970e171461aa99f18f75aea"
+    },
+    "products.csv": {
+      "rows": 49688,
+      "sha256": "abc61fdd748003d280ae49cc5d71b65380805ab1ca55dba96fd9a49295ea78b9"
+    },
+    "aisles.csv": {
+      "rows": 134,
+      "sha256": "2c5f4677761907d3a3ca01edd2d2abe67c147cc60e4905e68736d5f9f3046067"
+    },
+    "departments.csv": {
+      "rows": 21,
+      "sha256": "e6829cea3da95ec22eeb4e0294094a68b929f3bcfda48fdd7d1e33403110fc43"
+    }
+  }
+}

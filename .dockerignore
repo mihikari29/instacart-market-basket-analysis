@@ -1,0 +1,4 @@
+*
+!Dockerfile.spark
+!requirements.txt
+!requirements-dev.txt

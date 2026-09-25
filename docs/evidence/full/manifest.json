@@ -1,0 +1,27 @@
+{
+  "config": {
+    "seed": 42,
+    "scatter_window_weeks": 13,
+    "time_mode": "uniform",
+    "delta": {
+      "kind": "exponential",
+      "mean_s": 30.0,
+      "lo_s": 5.0,
+      "hi_s": 120.0
+    },
+    "limit_users": null
+  },
+  "batch_users": 2000,
+  "output": "data/synthesized/scatter_3m/events.parquet",
+  "events": 33819106,
+  "users": 206209,
+  "orders": 3346083,
+  "span": [
+    "2024-01-01",
+    "2025-03-31"
+  ],
+  "days": 456,
+  "peak_daily": 212714,
+  "mean_daily": 74164.7,
+  "monotonic_violations": 0
+}

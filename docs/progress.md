@@ -157,3 +157,44 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
    - Kafka: `localhost:9092`
    - HDFS WebHDFS: `http://localhost:9870`
    - HDFS IPC: `hdfs://localhost:8020`
+
+
+## Module 2 handoff audit (2026-09-25)
+
+The earlier §9.1 staging statement records uploads, not verified Spark row counts.
+A regression reproduction confirmed that the original per-row-group dataset
+writer overwrote files for overlapping dates. Those prior full HDFS counts must
+be revalidated after regenerating/restaging with the corrected writer. Module 2
+now requires source receipts and exact fact/event checks. The generator also
+restores the documented order_number column and records batch_users. The cap-30
+mask now follows sorted rows correctly. See [Module 2](module2.md) and its evidence
+for executed fixture checks and the remaining Docker/full-data gates.
+
+
+## Full Module 2 revalidation (2026-09-26, Asia/Saigon)
+
+The remaining gates above are now closed. Public source acquisition, corrected
+cleaning/generation, Docker build, 15 tests, HDFS staging and all Module 2
+analytics/experiments passed on GitHub Actions. Exact source/local/HDFS counts
+are 33,819,106 with 456 daily partitions and 456 files. Real execution also
+exposed and fixed NumPy 2 narrow-integer timestamp multiplication overflow.
+MongoDB verification found 49,677 product and 21 department documents.
+See [durable full evidence](evidence/full/README.md) for code SHA, source
+receipts, physical plans, repeated measurements and runtime limitations.
+
+## Trạng thái bàn giao GitHub (2026-09-26)
+
+- [x] Hoàn thành Module 2 và kiểm chứng đầy đủ: 15 tests đạt; 33.819.106
+  sự kiện nguồn/local/HDFS khớp nhau; 456 phân vùng ngày.
+- [x] Push code và bằng chứng lên nhánh
+  [module2-spark-batch-layer](https://github.com/mihikari29/instacart-market-basket-analysis/tree/module2-spark-batch-layer).
+- [x] Tạo [Pull request #1](https://github.com/mihikari29/instacart-market-basket-analysis/pull/1)
+  để đưa thay đổi vào `main`.
+- [ ] Merge pull request vào `main`: chưa thực hiện tại thời điểm cập nhật.
+- [ ] Module 3 streaming và Module 4 ML: công việc tiếp theo, ngoài phạm vi Module 2.
+
+Trang repository mặc định hiển thị `main`. Muốn xem code mới trước khi merge,
+chọn nhánh `module2-spark-batch-layer` hoặc mở liên kết nhánh ở trên.
+Commit mã nguồn đã chạy đầy đủ: `bf8aeda076cda72cc6e59a8e79154ab9235c68a3`;
+các cập nhật tài liệu sau đó không thay đổi mã đã kiểm chứng.
+[Workflow thành công](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/36162730659).

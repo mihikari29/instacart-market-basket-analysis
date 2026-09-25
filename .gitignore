@@ -4,3 +4,17 @@
 # python
 __pycache__/
 *.py[cod]
+# local environments and generated Spark artifacts
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+/results/module2/
+/spark-warehouse/
+/metastore_db/
+derby.log
+/work/
+*.log
