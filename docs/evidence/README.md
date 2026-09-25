@@ -1,5 +1,8 @@
 # Observed fixture results
 
+This is the historical local fixture report. The later [full-data report](full/README.md)
+closes the Docker/HDFS and full-data gates below; code has also been pushed to GitHub.
+
 Run: 20260925T154536_9ad62d33. Status: passed.
 
 Windows local[2], Spark 3.5.5, Java 17.0.20.1, Python 3.13.2.
@@ -36,7 +39,7 @@ in-memory task input and must not be labelled disk bytes. None of these timings
 establishes a full-scale speedup. Exact physical operators and output equivalence
 were asserted before results were accepted.
 
-## Execution gates
+## Execution gates at the time of this fixture run
 
 - Full local CLI all: PASS, including analytics, Parquet features, MongoDB, joins, pruning, caching and event logs.
 - Full automated test suite: PASS, 14 tests in 104.25 seconds (11 unit/regression + 3 Spark integration).
@@ -57,6 +60,6 @@ or event logs are committed.
 ## Self-review
 
 Correctness, Spark operators, repeated experiments, task metrics and fixture
-reproducibility have executable evidence. The Docker and full-data gates remain
-open. Storage snapshots have documented publication windows and are intended for
+reproducibility have executable evidence. The Docker and full-data gates were still
+open at this fixture run and are now closed by the linked full-data execution. Storage snapshots have documented publication windows and are intended for
 single-writer course runs. No 10/10 or full-completion claim is made.

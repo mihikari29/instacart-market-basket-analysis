@@ -1,0 +1,1199 @@
+{
+  "counts": {
+    "aisles": 134,
+    "departments": 21,
+    "interactions": 33819106,
+    "orders": 3421083,
+    "prior": 32434489,
+    "products": 49688,
+    "train": 1384617,
+    "users": 206209
+  },
+  "department_hour_pivot": [
+    {
+      "0": 15650,
+      "1": 8950,
+      "10": 169889,
+      "11": 177325,
+      "12": 177911,
+      "13": 183490,
+      "14": 186122,
+      "15": 189300,
+      "16": 185375,
+      "17": 161407,
+      "18": 131427,
+      "19": 101550,
+      "2": 5440,
+      "20": 74253,
+      "21": 54898,
+      "22": 42965,
+      "23": 27762,
+      "3": 4080,
+      "4": 4145,
+      "5": 6474,
+      "6": 19317,
+      "7": 56794,
+      "8": 105067,
+      "9": 146841,
+      "department_id": 1
+    },
+    {
+      "0": 247,
+      "1": 139,
+      "10": 2972,
+      "11": 2977,
+      "12": 2945,
+      "13": 2977,
+      "14": 3036,
+      "15": 3025,
+      "16": 2823,
+      "17": 2548,
+      "18": 1987,
+      "19": 1517,
+      "2": 119,
+      "20": 1105,
+      "21": 857,
+      "22": 662,
+      "23": 425,
+      "3": 70,
+      "4": 63,
+      "5": 102,
+      "6": 324,
+      "7": 910,
+      "8": 1818,
+      "9": 2643,
+      "department_id": 2
+    },
+    {
+      "0": 7326,
+      "1": 3754,
+      "10": 98657,
+      "11": 98480,
+      "12": 95438,
+      "13": 96779,
+      "14": 98147,
+      "15": 98313,
+      "16": 94036,
+      "17": 77377,
+      "18": 59747,
+      "19": 45191,
+      "2": 2405,
+      "20": 34143,
+      "21": 27219,
+      "22": 21217,
+      "23": 13452,
+      "3": 1831,
+      "4": 1920,
+      "5": 3102,
+      "6": 10807,
+      "7": 34157,
+      "8": 63970,
+      "9": 89319,
+      "department_id": 3
+    },
+    {
+      "0": 68393,
+      "1": 35050,
+      "10": 800246,
+      "11": 796168,
+      "12": 768606,
+      "13": 778947,
+      "14": 786408,
+      "15": 776735,
+      "16": 735083,
+      "17": 594432,
+      "18": 462060,
+      "19": 355431,
+      "2": 20016,
+      "20": 287986,
+      "21": 247674,
+      "22": 202342,
+      "23": 126476,
+      "3": 14357,
+      "4": 15341,
+      "5": 26896,
+      "6": 87204,
+      "7": 268657,
+      "8": 510782,
+      "9": 714001,
+      "department_id": 4
+    },
+    {
+      "0": 501,
+      "1": 318,
+      "10": 13394,
+      "11": 13800,
+      "12": 13294,
+      "13": 14094,
+      "14": 15093,
+      "15": 15140,
+      "16": 14286,
+      "17": 12098,
+      "18": 8816,
+      "19": 5846,
+      "2": 255,
+      "20": 3358,
+      "21": 1984,
+      "22": 1407,
+      "23": 899,
+      "3": 193,
+      "4": 198,
+      "5": 268,
+      "6": 695,
+      "7": 2119,
+      "8": 5269,
+      "9": 10371,
+      "department_id": 5
+    },
+    {
+      "0": 1885,
+      "1": 1029,
+      "10": 22596,
+      "11": 23101,
+      "12": 22791,
+      "13": 22979,
+      "14": 23172,
+      "15": 23215,
+      "16": 21909,
+      "17": 17636,
+      "18": 13352,
+      "19": 10098,
+      "2": 596,
+      "20": 7875,
+      "21": 6474,
+      "22": 5545,
+      "23": 3581,
+      "3": 503,
+      "4": 468,
+      "5": 701,
+      "6": 2226,
+      "7": 6419,
+      "8": 12590,
+      "9": 18512,
+      "department_id": 6
+    },
+    {
+      "0": 17575,
+      "1": 10031,
+      "10": 245171,
+      "11": 234295,
+      "12": 214501,
+      "13": 219608,
+      "14": 221766,
+      "15": 219027,
+      "16": 209872,
+      "17": 174856,
+      "18": 138296,
+      "19": 105707,
+      "2": 6201,
+      "20": 75802,
+      "21": 55868,
+      "22": 43422,
+      "23": 29924,
+      "3": 4707,
+      "4": 4795,
+      "5": 7453,
+      "6": 22998,
+      "7": 68875,
+      "8": 140271,
+      "9": 219108,
+      "department_id": 7
+    },
+    {
+      "0": 683,
+      "1": 424,
+      "10": 7581,
+      "11": 7879,
+      "12": 7985,
+      "13": 7935,
+      "14": 7903,
+      "15": 7902,
+      "16": 8180,
+      "17": 7395,
+      "18": 6228,
+      "19": 4741,
+      "2": 261,
+      "20": 3006,
+      "21": 1996,
+      "22": 1435,
+      "23": 990,
+      "3": 256,
+      "4": 275,
+      "5": 316,
+      "6": 981,
+      "7": 2477,
+      "8": 4519,
+      "9": 6376,
+      "department_id": 8
+    },
+    {
+      "0": 5892,
+      "1": 3073,
+      "10": 69190,
+      "11": 72273,
+      "12": 71622,
+      "13": 73440,
+      "14": 74081,
+      "15": 73996,
+      "16": 70274,
+      "17": 58039,
+      "18": 44859,
+      "19": 33998,
+      "2": 1815,
+      "20": 26037,
+      "21": 21744,
+      "22": 17749,
+      "23": 10789,
+      "3": 1315,
+      "4": 1446,
+      "5": 2169,
+      "6": 7559,
+      "7": 23147,
+      "8": 42996,
+      "9": 59124,
+      "department_id": 9
+    },
+    {
+      "0": 238,
+      "1": 117,
+      "10": 3086,
+      "11": 2918,
+      "12": 2707,
+      "13": 2831,
+      "14": 2767,
+      "15": 2861,
+      "16": 2567,
+      "17": 2127,
+      "18": 1640,
+      "19": 1323,
+      "2": 66,
+      "20": 1155,
+      "21": 959,
+      "22": 734,
+      "23": 503,
+      "3": 49,
+      "4": 47,
+      "5": 78,
+      "6": 326,
+      "7": 908,
+      "8": 1820,
+      "9": 2746,
+      "department_id": 10
+    },
+    {
+      "0": 3272,
+      "1": 1957,
+      "10": 37085,
+      "11": 36694,
+      "12": 36000,
+      "13": 36154,
+      "14": 35959,
+      "15": 35597,
+      "16": 34155,
+      "17": 30128,
+      "18": 25311,
+      "19": 20219,
+      "2": 1184,
+      "20": 14546,
+      "21": 10445,
+      "22": 8418,
+      "23": 5325,
+      "3": 897,
+      "4": 1022,
+      "5": 1479,
+      "6": 4158,
+      "7": 12250,
+      "8": 22993,
+      "9": 31875,
+      "department_id": 11
+    },
+    {
+      "0": 4726,
+      "1": 2414,
+      "10": 57062,
+      "11": 60281,
+      "12": 58926,
+      "13": 59446,
+      "14": 60419,
+      "15": 60512,
+      "16": 57013,
+      "17": 46589,
+      "18": 36480,
+      "19": 26587,
+      "2": 1537,
+      "20": 20847,
+      "21": 17078,
+      "22": 13468,
+      "23": 8723,
+      "3": 1111,
+      "4": 1175,
+      "5": 1863,
+      "6": 6213,
+      "7": 19381,
+      "8": 36957,
+      "9": 50123,
+      "department_id": 12
+    },
+    {
+      "0": 13626,
+      "1": 7303,
+      "10": 158300,
+      "11": 161417,
+      "12": 156944,
+      "13": 158659,
+      "14": 158713,
+      "15": 155360,
+      "16": 144597,
+      "17": 120615,
+      "18": 93969,
+      "19": 72051,
+      "2": 4418,
+      "20": 56406,
+      "21": 46959,
+      "22": 37676,
+      "23": 24220,
+      "3": 3244,
+      "4": 3273,
+      "5": 4992,
+      "6": 15975,
+      "7": 48042,
+      "8": 93910,
+      "9": 134908,
+      "department_id": 13
+    },
+    {
+      "0": 4368,
+      "1": 2379,
+      "10": 62989,
+      "11": 59172,
+      "12": 54660,
+      "13": 55356,
+      "14": 56758,
+      "15": 56017,
+      "16": 54223,
+      "17": 44330,
+      "18": 35339,
+      "19": 27941,
+      "2": 1412,
+      "20": 21739,
+      "21": 17632,
+      "22": 13565,
+      "23": 8714,
+      "3": 1072,
+      "4": 1112,
+      "5": 1893,
+      "6": 6830,
+      "7": 21811,
+      "8": 41342,
+      "9": 58915,
+      "department_id": 14
+    },
+    {
+      "0": 7183,
+      "1": 3919,
+      "10": 90046,
+      "11": 93032,
+      "12": 91381,
+      "13": 92509,
+      "14": 91458,
+      "15": 89733,
+      "16": 83931,
+      "17": 67841,
+      "18": 51461,
+      "19": 39686,
+      "2": 2417,
+      "20": 31072,
+      "21": 26613,
+      "22": 21599,
+      "23": 13258,
+      "3": 1714,
+      "4": 1830,
+      "5": 2860,
+      "6": 8948,
+      "7": 26852,
+      "8": 53004,
+      "9": 75711,
+      "department_id": 15
+    },
+    {
+      "0": 34775,
+      "1": 17786,
+      "10": 470549,
+      "11": 453142,
+      "12": 426895,
+      "13": 434851,
+      "14": 442690,
+      "15": 437459,
+      "16": 417760,
+      "17": 340709,
+      "18": 268711,
+      "19": 207466,
+      "2": 10702,
+      "20": 163960,
+      "21": 134689,
+      "22": 105997,
+      "23": 66330,
+      "3": 8079,
+      "4": 8181,
+      "5": 14399,
+      "6": 51579,
+      "7": 159849,
+      "8": 307420,
+      "9": 430038,
+      "department_id": 16
+    },
+    {
+      "0": 4967,
+      "1": 2886,
+      "10": 64054,
+      "11": 63906,
+      "12": 61059,
+      "13": 60770,
+      "14": 59699,
+      "15": 57745,
+      "16": 54703,
+      "17": 46981,
+      "18": 38492,
+      "19": 30515,
+      "2": 1888,
+      "20": 22562,
+      "21": 17057,
+      "22": 13465,
+      "23": 8619,
+      "3": 1436,
+      "4": 1617,
+      "5": 2285,
+      "6": 6901,
+      "7": 20871,
+      "8": 39590,
+      "9": 56598,
+      "department_id": 17
+    },
+    {
+      "0": 2400,
+      "1": 1113,
+      "10": 34390,
+      "11": 31896,
+      "12": 30800,
+      "13": 33413,
+      "14": 34317,
+      "15": 32892,
+      "16": 30083,
+      "17": 23252,
+      "18": 18617,
+      "19": 16072,
+      "2": 630,
+      "20": 16016,
+      "21": 14858,
+      "22": 10558,
+      "23": 5428,
+      "3": 465,
+      "4": 567,
+      "5": 1106,
+      "6": 4903,
+      "7": 16807,
+      "8": 28763,
+      "9": 34456,
+      "department_id": 18
+    },
+    {
+      "0": 17776,
+      "1": 9154,
+      "10": 262966,
+      "11": 254676,
+      "12": 234650,
+      "13": 237056,
+      "14": 239761,
+      "15": 236310,
+      "16": 226112,
+      "17": 185400,
+      "18": 142140,
+      "19": 109343,
+      "2": 5642,
+      "20": 82504,
+      "21": 65102,
+      "22": 51204,
+      "23": 33388,
+      "3": 4192,
+      "4": 3993,
+      "5": 6639,
+      "6": 23249,
+      "7": 72451,
+      "8": 150490,
+      "9": 233352,
+      "department_id": 19
+    },
+    {
+      "0": 6920,
+      "1": 3671,
+      "10": 88319,
+      "11": 89341,
+      "12": 86166,
+      "13": 86392,
+      "14": 87574,
+      "15": 87705,
+      "16": 85267,
+      "17": 71185,
+      "18": 55301,
+      "19": 41302,
+      "2": 2257,
+      "20": 30597,
+      "21": 24509,
+      "22": 19900,
+      "23": 12904,
+      "3": 1617,
+      "4": 1665,
+      "5": 2790,
+      "6": 8986,
+      "7": 27251,
+      "8": 52979,
+      "9": 76651,
+      "department_id": 20
+    },
+    {
+      "0": 545,
+      "1": 319,
+      "10": 5884,
+      "11": 5809,
+      "12": 5566,
+      "13": 5606,
+      "14": 5705,
+      "15": 5689,
+      "16": 5209,
+      "17": 4520,
+      "18": 3690,
+      "19": 2817,
+      "2": 173,
+      "20": 2069,
+      "21": 1755,
+      "22": 1406,
+      "23": 910,
+      "3": 133,
+      "4": 150,
+      "5": 197,
+      "6": 616,
+      "7": 1909,
+      "8": 3423,
+      "9": 5045,
+      "department_id": 21
+    }
+  ],
+  "departments": [
+    {
+      "department": "frozen",
+      "department_id": 1,
+      "purchase_count": 2236432,
+      "reorder_rate": 0.5418854675661947,
+      "unique_users": 163233
+    },
+    {
+      "department": "other",
+      "department_id": 2,
+      "purchase_count": 36291,
+      "reorder_rate": 0.4079799399300102,
+      "unique_users": 17875
+    },
+    {
+      "department": "bakery",
+      "department_id": 3,
+      "purchase_count": 1176787,
+      "reorder_rate": 0.6281408615152955,
+      "unique_users": 140612
+    },
+    {
+      "department": "produce",
+      "department_id": 4,
+      "purchase_count": 9479291,
+      "reorder_rate": 0.6499125303780631,
+      "unique_users": 193237
+    },
+    {
+      "department": "alcohol",
+      "department_id": 5,
+      "purchase_count": 153696,
+      "reorder_rate": 0.5699237455756818,
+      "unique_users": 15798
+    },
+    {
+      "department": "international",
+      "department_id": 6,
+      "purchase_count": 269253,
+      "reorder_rate": 0.36922894081031593,
+      "unique_users": 76583
+    },
+    {
+      "department": "beverages",
+      "department_id": 7,
+      "purchase_count": 2690129,
+      "reorder_rate": 0.6534601128793452,
+      "unique_users": 172795
+    },
+    {
+      "department": "pets",
+      "department_id": 8,
+      "purchase_count": 97724,
+      "reorder_rate": 0.6012852523433343,
+      "unique_users": 14986
+    },
+    {
+      "department": "dry goods pasta",
+      "department_id": 9,
+      "purchase_count": 866627,
+      "reorder_rate": 0.4610761030985649,
+      "unique_users": 124820
+    },
+    {
+      "department": "bulk",
+      "department_id": 10,
+      "purchase_count": 34573,
+      "reorder_rate": 0.577039886616724,
+      "unique_users": 12484
+    },
+    {
+      "department": "personal care",
+      "department_id": 11,
+      "purchase_count": 447123,
+      "reorder_rate": 0.32112863798104774,
+      "unique_users": 93969
+    },
+    {
+      "department": "meat seafood",
+      "department_id": 12,
+      "purchase_count": 708931,
+      "reorder_rate": 0.5676744281178281,
+      "unique_users": 113891
+    },
+    {
+      "department": "pantry",
+      "department_id": 13,
+      "purchase_count": 1875577,
+      "reorder_rate": 0.3467205025440171,
+      "unique_users": 172755
+    },
+    {
+      "department": "breakfast",
+      "department_id": 14,
+      "purchase_count": 709569,
+      "reorder_rate": 0.5609221936133061,
+      "unique_users": 114169
+    },
+    {
+      "department": "canned goods",
+      "department_id": 15,
+      "purchase_count": 1068058,
+      "reorder_rate": 0.4574049349379903,
+      "unique_users": 133733
+    },
+    {
+      "department": "dairy eggs",
+      "department_id": 16,
+      "purchase_count": 5414016,
+      "reorder_rate": 0.6699686517365298,
+      "unique_users": 190565
+    },
+    {
+      "department": "household",
+      "department_id": 17,
+      "purchase_count": 738666,
+      "reorder_rate": 0.40217770954666926,
+      "unique_users": 111608
+    },
+    {
+      "department": "babies",
+      "department_id": 18,
+      "purchase_count": 423802,
+      "reorder_rate": 0.5789708401564881,
+      "unique_users": 33730
+    },
+    {
+      "department": "snacks",
+      "department_id": 19,
+      "purchase_count": 2887550,
+      "reorder_rate": 0.5741798410417136,
+      "unique_users": 174219
+    },
+    {
+      "department": "deli",
+      "department_id": 20,
+      "purchase_count": 1051249,
+      "reorder_rate": 0.6077190085317561,
+      "unique_users": 133865
+    },
+    {
+      "department": "missing",
+      "department_id": 21,
+      "purchase_count": 69145,
+      "reorder_rate": 0.3958493021910478,
+      "unique_users": 27862
+    }
+  ],
+  "minimum_reorder_support": 100,
+  "orders_by_dow": [
+    {
+      "count": 600905,
+      "order_dow": 0
+    },
+    {
+      "count": 587478,
+      "order_dow": 1
+    },
+    {
+      "count": 467260,
+      "order_dow": 2
+    },
+    {
+      "count": 436972,
+      "order_dow": 3
+    },
+    {
+      "count": 426339,
+      "order_dow": 4
+    },
+    {
+      "count": 453368,
+      "order_dow": 5
+    },
+    {
+      "count": 448761,
+      "order_dow": 6
+    }
+  ],
+  "orders_by_hour": [
+    {
+      "count": 22758,
+      "order_hour_of_day": 0
+    },
+    {
+      "count": 12398,
+      "order_hour_of_day": 1
+    },
+    {
+      "count": 7539,
+      "order_hour_of_day": 2
+    },
+    {
+      "count": 5474,
+      "order_hour_of_day": 3
+    },
+    {
+      "count": 5527,
+      "order_hour_of_day": 4
+    },
+    {
+      "count": 9569,
+      "order_hour_of_day": 5
+    },
+    {
+      "count": 30529,
+      "order_hour_of_day": 6
+    },
+    {
+      "count": 91868,
+      "order_hour_of_day": 7
+    },
+    {
+      "count": 178201,
+      "order_hour_of_day": 8
+    },
+    {
+      "count": 257812,
+      "order_hour_of_day": 9
+    },
+    {
+      "count": 288418,
+      "order_hour_of_day": 10
+    },
+    {
+      "count": 284728,
+      "order_hour_of_day": 11
+    },
+    {
+      "count": 272841,
+      "order_hour_of_day": 12
+    },
+    {
+      "count": 277999,
+      "order_hour_of_day": 13
+    },
+    {
+      "count": 283042,
+      "order_hour_of_day": 14
+    },
+    {
+      "count": 283639,
+      "order_hour_of_day": 15
+    },
+    {
+      "count": 272553,
+      "order_hour_of_day": 16
+    },
+    {
+      "count": 228795,
+      "order_hour_of_day": 17
+    },
+    {
+      "count": 182912,
+      "order_hour_of_day": 18
+    },
+    {
+      "count": 140569,
+      "order_hour_of_day": 19
+    },
+    {
+      "count": 104292,
+      "order_hour_of_day": 20
+    },
+    {
+      "count": 78109,
+      "order_hour_of_day": 21
+    },
+    {
+      "count": 61468,
+      "order_hour_of_day": 22
+    },
+    {
+      "count": 40043,
+      "order_hour_of_day": 23
+    }
+  ],
+  "orders_per_user": {
+    "max": 100,
+    "mean": 16.590367054784224,
+    "min": 4,
+    "quantiles": [
+      10,
+      38,
+      88
+    ]
+  },
+  "purchase_behavior": {
+    "average_basket_size": 10.088883421247614,
+    "purchases": 32434489,
+    "reorder_rate": 0.5896974667922161
+  },
+  "scope": "purchase metrics and features: prior only; order distributions: all orders",
+  "top_purchased": [
+    {
+      "product_id": 24852,
+      "product_name": "Banana",
+      "purchase_count": 472565,
+      "reorder_count": 398609,
+      "reorder_rate": 0.8435008940569022,
+      "unique_users": 73956
+    },
+    {
+      "product_id": 13176,
+      "product_name": "Bag of Organic Bananas",
+      "purchase_count": 379450,
+      "reorder_count": 315913,
+      "reorder_rate": 0.832555013835815,
+      "unique_users": 63537
+    },
+    {
+      "product_id": 21137,
+      "product_name": "Organic Strawberries",
+      "purchase_count": 264683,
+      "reorder_count": 205845,
+      "reorder_rate": 0.7777038948477991,
+      "unique_users": 58838
+    },
+    {
+      "product_id": 21903,
+      "product_name": "Organic Baby Spinach",
+      "purchase_count": 241921,
+      "reorder_count": 186884,
+      "reorder_rate": 0.7725001136734719,
+      "unique_users": 55037
+    },
+    {
+      "product_id": 47209,
+      "product_name": "Organic Hass Avocado",
+      "purchase_count": 213584,
+      "reorder_count": 170131,
+      "reorder_rate": 0.7965531125927036,
+      "unique_users": 43453
+    },
+    {
+      "product_id": 47766,
+      "product_name": "Organic Avocado",
+      "purchase_count": 176815,
+      "reorder_count": 134044,
+      "reorder_rate": 0.7581031021123773,
+      "unique_users": 42771
+    },
+    {
+      "product_id": 47626,
+      "product_name": "Large Lemon",
+      "purchase_count": 152657,
+      "reorder_count": 106255,
+      "reorder_rate": 0.6960375220265038,
+      "unique_users": 46402
+    },
+    {
+      "product_id": 16797,
+      "product_name": "Strawberries",
+      "purchase_count": 142951,
+      "reorder_count": 99802,
+      "reorder_rate": 0.6981553119600422,
+      "unique_users": 43149
+    },
+    {
+      "product_id": 26209,
+      "product_name": "Limes",
+      "purchase_count": 140627,
+      "reorder_count": 95768,
+      "reorder_rate": 0.6810072034531064,
+      "unique_users": 44859
+    },
+    {
+      "product_id": 27845,
+      "product_name": "Organic Whole Milk",
+      "purchase_count": 137905,
+      "reorder_count": 114510,
+      "reorder_rate": 0.8303542293607918,
+      "unique_users": 23395
+    },
+    {
+      "product_id": 27966,
+      "product_name": "Organic Raspberries",
+      "purchase_count": 137057,
+      "reorder_count": 105409,
+      "reorder_rate": 0.7690887732841081,
+      "unique_users": 31648
+    },
+    {
+      "product_id": 22935,
+      "product_name": "Organic Yellow Onion",
+      "purchase_count": 113426,
+      "reorder_count": 79072,
+      "reorder_rate": 0.6971241161638425,
+      "unique_users": 34354
+    },
+    {
+      "product_id": 24964,
+      "product_name": "Organic Garlic",
+      "purchase_count": 109778,
+      "reorder_count": 74663,
+      "reorder_rate": 0.6801271657344823,
+      "unique_users": 35115
+    },
+    {
+      "product_id": 45007,
+      "product_name": "Organic Zucchini",
+      "purchase_count": 104823,
+      "reorder_count": 72165,
+      "reorder_rate": 0.6884462379439626,
+      "unique_users": 32658
+    },
+    {
+      "product_id": 39275,
+      "product_name": "Organic Blueberries",
+      "purchase_count": 100060,
+      "reorder_count": 62922,
+      "reorder_rate": 0.6288426943833699,
+      "unique_users": 37138
+    },
+    {
+      "product_id": 49683,
+      "product_name": "Cucumber Kirby",
+      "purchase_count": 97315,
+      "reorder_count": 67313,
+      "reorder_rate": 0.6917022041822946,
+      "unique_users": 30002
+    },
+    {
+      "product_id": 28204,
+      "product_name": "Organic Fuji Apple",
+      "purchase_count": 89632,
+      "reorder_count": 63811,
+      "reorder_rate": 0.7119220813995002,
+      "unique_users": 25821
+    },
+    {
+      "product_id": 5876,
+      "product_name": "Organic Lemon",
+      "purchase_count": 87746,
+      "reorder_count": 60536,
+      "reorder_rate": 0.689900394319969,
+      "unique_users": 27210
+    },
+    {
+      "product_id": 8277,
+      "product_name": "Apple Honeycrisp Organic",
+      "purchase_count": 85020,
+      "reorder_count": 62510,
+      "reorder_rate": 0.7352387673488591,
+      "unique_users": 22510
+    },
+    {
+      "product_id": 40706,
+      "product_name": "Organic Grape Tomatoes",
+      "purchase_count": 84255,
+      "reorder_count": 55230,
+      "reorder_rate": 0.6555100587502225,
+      "unique_users": 29025
+    }
+  ],
+  "top_reordered": [
+    {
+      "product_id": 27740,
+      "product_name": "Chocolate Love Bar",
+      "purchase_count": 101,
+      "reorder_count": 93,
+      "reorder_rate": 0.9207920792079208,
+      "unique_users": 8
+    },
+    {
+      "product_id": 35604,
+      "product_name": "Maca Buttercups",
+      "purchase_count": 100,
+      "reorder_count": 90,
+      "reorder_rate": 0.9,
+      "unique_users": 10
+    },
+    {
+      "product_id": 38251,
+      "product_name": "Benchbreak Chardonnay",
+      "purchase_count": 111,
+      "reorder_count": 99,
+      "reorder_rate": 0.8918918918918919,
+      "unique_users": 12
+    },
+    {
+      "product_id": 10236,
+      "product_name": "Fragrance Free Clay with Natural Odor Eliminator Cat Litter",
+      "purchase_count": 129,
+      "reorder_count": 113,
+      "reorder_rate": 0.875968992248062,
+      "unique_users": 16
+    },
+    {
+      "product_id": 20598,
+      "product_name": "Thousand Island Salad Snax",
+      "purchase_count": 112,
+      "reorder_count": 98,
+      "reorder_rate": 0.875,
+      "unique_users": 14
+    },
+    {
+      "product_id": 35496,
+      "product_name": "Real2 Alkalized Water 500 ml",
+      "purchase_count": 451,
+      "reorder_count": 389,
+      "reorder_rate": 0.8625277161862528,
+      "unique_users": 62
+    },
+    {
+      "product_id": 9292,
+      "product_name": "Half And Half Ultra Pasteurized",
+      "purchase_count": 2921,
+      "reorder_count": 2517,
+      "reorder_rate": 0.8616912016432728,
+      "unique_users": 404
+    },
+    {
+      "product_id": 45504,
+      "product_name": "Whole Organic Omega 3 Milk",
+      "purchase_count": 9108,
+      "reorder_count": 7835,
+      "reorder_rate": 0.8602327624066755,
+      "unique_users": 1273
+    },
+    {
+      "product_id": 43394,
+      "product_name": "Organic Lactose Free Whole Milk",
+      "purchase_count": 8477,
+      "reorder_count": 7282,
+      "reorder_rate": 0.8590303173292438,
+      "unique_users": 1195
+    },
+    {
+      "product_id": 5514,
+      "product_name": "Organic Homogenized Whole Milk",
+      "purchase_count": 3970,
+      "reorder_count": 3405,
+      "reorder_rate": 0.8576826196473551,
+      "unique_users": 565
+    },
+    {
+      "product_id": 47231,
+      "product_name": "Ultra-Purified Water",
+      "purchase_count": 1489,
+      "reorder_count": 1277,
+      "reorder_rate": 0.857622565480188,
+      "unique_users": 212
+    },
+    {
+      "product_id": 45035,
+      "product_name": "Coffee Flavor Yogurt",
+      "purchase_count": 112,
+      "reorder_count": 96,
+      "reorder_rate": 0.8571428571428571,
+      "unique_users": 16
+    },
+    {
+      "product_id": 17469,
+      "product_name": "Lo-Carb Energy Drink",
+      "purchase_count": 467,
+      "reorder_count": 400,
+      "reorder_rate": 0.8565310492505354,
+      "unique_users": 67
+    },
+    {
+      "product_id": 29447,
+      "product_name": "Milk, Organic, Vitamin D",
+      "purchase_count": 20198,
+      "reorder_count": 17256,
+      "reorder_rate": 0.8543420140607981,
+      "unique_users": 2942
+    },
+    {
+      "product_id": 38689,
+      "product_name": "Organic Reduced Fat Milk",
+      "purchase_count": 35663,
+      "reorder_count": 30338,
+      "reorder_rate": 0.8506855844993411,
+      "unique_users": 5325
+    },
+    {
+      "product_id": 34197,
+      "product_name": "Goat Milk",
+      "purchase_count": 5185,
+      "reorder_count": 4407,
+      "reorder_rate": 0.8499517839922854,
+      "unique_users": 778
+    },
+    {
+      "product_id": 10031,
+      "product_name": "Homestyle Orange Juice",
+      "purchase_count": 311,
+      "reorder_count": 264,
+      "reorder_rate": 0.8488745980707395,
+      "unique_users": 47
+    },
+    {
+      "product_id": 33673,
+      "product_name": "Raw Whole Milk",
+      "purchase_count": 237,
+      "reorder_count": 201,
+      "reorder_rate": 0.8481012658227848,
+      "unique_users": 36
+    },
+    {
+      "product_id": 47765,
+      "product_name": "Alimentum Infant Formula",
+      "purchase_count": 111,
+      "reorder_count": 94,
+      "reorder_rate": 0.8468468468468469,
+      "unique_users": 17
+    },
+    {
+      "product_id": 24852,
+      "product_name": "Banana",
+      "purchase_count": 472565,
+      "reorder_count": 398609,
+      "reorder_rate": 0.8435008940569022,
+      "unique_users": 73956
+    }
+  ]
+}

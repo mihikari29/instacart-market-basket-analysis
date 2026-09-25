@@ -1,0 +1,3482 @@
+{
+  "analytics": {
+    "mongo_published": true,
+    "summary": "analytics.json",
+    "user_features": "hdfs://namenode:8020/instacart/features/user_features"
+  },
+  "cache_benchmark": {
+    "cached_reuse": {
+      "median_seconds": 0.08527914699993744,
+      "runs_seconds": [
+        0.08527914699993744,
+        0.09352424300004714,
+        0.07118726400017295
+      ],
+      "trials": [
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/cached_reuse/0",
+          "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2311L, reorder_count#2313L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2311L, reorder_count#2313L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2311L, reorder_count#2313L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7215]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2320L, sum#2321L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7201]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7209]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 0.08527914699993744,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 1,
+            "failed_task_attempts": 0,
+            "input_bytes": 10316,
+            "input_records": 14,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 32
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/cached_reuse/1",
+          "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2441L, reorder_count#2443L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2441L, reorder_count#2443L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2441L, reorder_count#2443L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7355]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2450L, sum#2451L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7341]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7349]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 0.09352424300004714,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 16,
+            "failed_task_attempts": 0,
+            "input_bytes": 10316,
+            "input_records": 14,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 32
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/cached_reuse/2",
+          "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2631L, reorder_count#2633L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2631L, reorder_count#2633L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2631L, reorder_count#2633L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7769]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2640L, sum#2641L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7755]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7763]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 0.07118726400017295,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 8,
+            "failed_task_attempts": 0,
+            "input_bytes": 10316,
+            "input_records": 14,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 0,
+            "shuffle_write_bytes": 0,
+            "skipped_stages": 1,
+            "stages": 1,
+            "tasks": 32
+          }
+        }
+      ]
+    },
+    "materializations": [
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/materialize/0",
+        "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2311L, reorder_count#2313L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2311L, reorder_count#2313L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2311L, reorder_count#2313L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7215]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2320L, sum#2321L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7201]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7209]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 1.7219609039998431,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3093,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      },
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/materialize/1",
+        "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2441L, reorder_count#2443L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2441L, reorder_count#2443L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2441L, reorder_count#2443L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7355]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2450L, sum#2451L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7341]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7349]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 1.8447291590000532,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3359,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      },
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/materialize/2",
+        "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2631L, reorder_count#2633L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2631L, reorder_count#2633L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2631L, reorder_count#2633L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7769]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2640L, sum#2641L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7755]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7763]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 1.8333575579999888,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3371,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      }
+    ],
+    "outputs_equal": true,
+    "scope": "persist reused department aggregate; build cost reported separately",
+    "uncached": {
+      "median_seconds": 1.8588710789999823,
+      "runs_seconds": [
+        1.7684349239998483,
+        1.9243949300000622,
+        1.8588710789999823
+      ],
+      "trials": [
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/uncached/0",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2281L, reorder_count#2283L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7078]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2290L, sum#2291L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7064]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7072]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 1.7684349239998483,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3149,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/uncached/1",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2571L, reorder_count#2573L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7495]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2580L, sum#2581L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7481]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7489]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 1.9243949300000622,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3532,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "cache/uncached/2",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2601L, reorder_count#2603L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=7632]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2610L, sum#2611L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=7618]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=7626]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 1.8588710789999823,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3321,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        }
+      ]
+    },
+    "warmups": [
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/materialize/-1",
+        "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2121L, reorder_count#2123L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2121L, reorder_count#2123L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2121L, reorder_count#2123L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=6801]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2130L, sum#2131L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6787]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=6795]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 1.98278273599999,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3394,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      },
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/cached_reuse/-1",
+        "physical_plan": "InMemoryTableScan [department_id#37, department#47, purchase_count#2121L, reorder_count#2123L]\n   +- InMemoryRelation [department_id#37, department#47, purchase_count#2121L, reorder_count#2123L], StorageLevel(disk, memory, 1 replicas)\n         +- *(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2121L, reorder_count#2123L])\n            +- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=6801]\n               +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2130L, sum#2131L])\n                  +- *(3) Project [department_id#37, reordered#21, department#47]\n                     +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n                        :- *(3) Project [reordered#21, department_id#37]\n                        :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n                        :     :- *(3) Filter isnotnull(product_id#19)\n                        :     :  +- *(3) ColumnarToRow\n                        :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n                        :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6787]\n                        :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n                        :           +- *(1) ColumnarToRow\n                        :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n                        +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=6795]\n                           +- *(2) Filter isnotnull(department_id#46)\n                              +- *(2) ColumnarToRow\n                                 +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 0.10243577300002471,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 16,
+          "failed_task_attempts": 0,
+          "input_bytes": 10316,
+          "input_records": 14,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 0,
+          "shuffle_write_bytes": 0,
+          "skipped_stages": 1,
+          "stages": 1,
+          "tasks": 32
+        }
+      },
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "cache/uncached/-1",
+        "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#2251L, reorder_count#2253L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=6941]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#2260L, sum#2261L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6927]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=6935]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 1.8028145480000148,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3253,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      }
+    ]
+  },
+  "environment": {
+    "commit": "bf8aeda076cda72cc6e59a8e79154ab9235c68a3",
+    "config": {
+      "master": "spark://spark-master:7077",
+      "repetitions": 3,
+      "root": "hdfs://namenode:8020/instacart",
+      "shuffle_partitions": 32,
+      "warmups": 1
+    },
+    "dirty": null,
+    "java": "17.0.14",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "source_code_sha256": "d3e76ca21b4bf76cbd9c20e0c8c75f7f431fbb95ce750eb7c7ac6fdf09e21e38",
+    "spark": "3.5.5",
+    "spark_conf": {
+      "spark.cores.max": "2",
+      "spark.executor.cores": "2",
+      "spark.executor.extraJavaOptions": "-Djava.net.preferIPv6Addresses=false -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false",
+      "spark.executor.id": "driver",
+      "spark.executor.memory": "1g",
+      "spark.master": "spark://spark-master:7077",
+      "spark.sql.adaptive.enabled": "false",
+      "spark.sql.ansi.enabled": "true",
+      "spark.sql.autoBroadcastJoinThreshold": "-1",
+      "spark.sql.debug.maxToStringFields": "200",
+      "spark.sql.maxMetadataStringLength": "10000",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "32"
+    },
+    "timestamp_utc": "2026-09-25T16:56:01.067092+00:00"
+  },
+  "join_benchmark": {
+    "aqe": false,
+    "broadcast_hash": {
+      "median_seconds": 2.08350815599988,
+      "runs_seconds": [
+        2.08350815599988,
+        2.099746085000106,
+        2.07130196900016
+      ],
+      "trials": [
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/broadcast_hash/0",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1542L, reorder_count#1544L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=5547]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1551L, sum#1552L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=5533]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=5541]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 2.08350815599988,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3719,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/broadcast_hash/1",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1572L, reorder_count#1574L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=5684]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1581L, sum#1582L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=5670]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=5678]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 2.099746085000106,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3883,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/broadcast_hash/2",
+          "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1660L, reorder_count#1662L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=6161]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1669L, sum#1670L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=6147]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=6155]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 2.07130196900016,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 3689,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 4,
+            "shuffle_read_bytes": 2946,
+            "shuffle_write_bytes": 2946,
+            "skipped_stages": 0,
+            "stages": 4,
+            "tasks": 36
+          }
+        }
+      ]
+    },
+    "cache_policy": "clear Spark cache before every arm; OS/HDFS caches are not flushed",
+    "operators_verified": true,
+    "outputs_equal": true,
+    "sort_merge": {
+      "median_seconds": 14.602316064999968,
+      "runs_seconds": [
+        15.405653906999987,
+        14.228848711999944,
+        14.602316064999968
+      ],
+      "trials": [
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/sort_merge/0",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1513L, reorder_count#1515L])\n+- *(9) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1522L, sum#1523L])\n   +- *(9) Project [department_id#37, reordered#21, department#47]\n      +- *(9) SortMergeJoin [department_id#37], [department_id#46], Inner\n         :- *(6) Sort [department_id#37 ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#37, 32), ENSURE_REQUIREMENTS, [plan_id=5388]\n         :     +- *(5) Project [reordered#21, department_id#37]\n         :        +- *(5) SortMergeJoin [product_id#19], [product_id#34], Inner\n         :           :- *(2) Sort [product_id#19 ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#19, 32), ENSURE_REQUIREMENTS, [plan_id=5371]\n         :           :     +- *(1) Filter isnotnull(product_id#19)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n         :           +- *(4) Sort [product_id#34 ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#34, 32), ENSURE_REQUIREMENTS, [plan_id=5380]\n         :                 +- *(3) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n         +- *(8) Sort [department_id#46 ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#46, 32), ENSURE_REQUIREMENTS, [plan_id=5397]\n               +- *(7) Filter isnotnull(department_id#46)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 15.405653906999987,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 27734,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 289395061,
+            "shuffle_write_bytes": 289395061,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 68
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/sort_merge/1",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1602L, reorder_count#1604L])\n+- *(9) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1611L, sum#1612L])\n   +- *(9) Project [department_id#37, reordered#21, department#47]\n      +- *(9) SortMergeJoin [department_id#37], [department_id#46], Inner\n         :- *(6) Sort [department_id#37 ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#37, 32), ENSURE_REQUIREMENTS, [plan_id=5832]\n         :     +- *(5) Project [reordered#21, department_id#37]\n         :        +- *(5) SortMergeJoin [product_id#19], [product_id#34], Inner\n         :           :- *(2) Sort [product_id#19 ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#19, 32), ENSURE_REQUIREMENTS, [plan_id=5815]\n         :           :     +- *(1) Filter isnotnull(product_id#19)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n         :           +- *(4) Sort [product_id#34 ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#34, 32), ENSURE_REQUIREMENTS, [plan_id=5824]\n         :                 +- *(3) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n         +- *(8) Sort [department_id#46 ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#46, 32), ENSURE_REQUIREMENTS, [plan_id=5841]\n               +- *(7) Filter isnotnull(department_id#46)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 14.228848711999944,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 25530,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 289395061,
+            "shuffle_write_bytes": 289395061,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 68
+          }
+        },
+        {
+          "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+          "job_group": "joins/sort_merge/2",
+          "physical_plan": "*(9) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1631L, reorder_count#1633L])\n+- *(9) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1640L, sum#1641L])\n   +- *(9) Project [department_id#37, reordered#21, department#47]\n      +- *(9) SortMergeJoin [department_id#37], [department_id#46], Inner\n         :- *(6) Sort [department_id#37 ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#37, 32), ENSURE_REQUIREMENTS, [plan_id=6002]\n         :     +- *(5) Project [reordered#21, department_id#37]\n         :        +- *(5) SortMergeJoin [product_id#19], [product_id#34], Inner\n         :           :- *(2) Sort [product_id#19 ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#19, 32), ENSURE_REQUIREMENTS, [plan_id=5985]\n         :           :     +- *(1) Filter isnotnull(product_id#19)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n         :           +- *(4) Sort [product_id#34 ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#34, 32), ENSURE_REQUIREMENTS, [plan_id=5994]\n         :                 +- *(3) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n         +- *(8) Sort [department_id#46 ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#46, 32), ENSURE_REQUIREMENTS, [plan_id=6011]\n               +- *(7) Filter isnotnull(department_id#46)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+          "result": [
+            {
+              "department": "alcohol",
+              "department_id": 5,
+              "purchase_count": 153696,
+              "reorder_count": 87595
+            },
+            {
+              "department": "babies",
+              "department_id": 18,
+              "purchase_count": 423802,
+              "reorder_count": 245369
+            },
+            {
+              "department": "bakery",
+              "department_id": 3,
+              "purchase_count": 1176787,
+              "reorder_count": 739188
+            },
+            {
+              "department": "beverages",
+              "department_id": 7,
+              "purchase_count": 2690129,
+              "reorder_count": 1757892
+            },
+            {
+              "department": "breakfast",
+              "department_id": 14,
+              "purchase_count": 709569,
+              "reorder_count": 398013
+            },
+            {
+              "department": "bulk",
+              "department_id": 10,
+              "purchase_count": 34573,
+              "reorder_count": 19950
+            },
+            {
+              "department": "canned goods",
+              "department_id": 15,
+              "purchase_count": 1068058,
+              "reorder_count": 488535
+            },
+            {
+              "department": "dairy eggs",
+              "department_id": 16,
+              "purchase_count": 5414016,
+              "reorder_count": 3627221
+            },
+            {
+              "department": "deli",
+              "department_id": 20,
+              "purchase_count": 1051249,
+              "reorder_count": 638864
+            },
+            {
+              "department": "dry goods pasta",
+              "department_id": 9,
+              "purchase_count": 866627,
+              "reorder_count": 399581
+            },
+            {
+              "department": "frozen",
+              "department_id": 1,
+              "purchase_count": 2236432,
+              "reorder_count": 1211890
+            },
+            {
+              "department": "household",
+              "department_id": 17,
+              "purchase_count": 738666,
+              "reorder_count": 297075
+            },
+            {
+              "department": "international",
+              "department_id": 6,
+              "purchase_count": 269253,
+              "reorder_count": 99416
+            },
+            {
+              "department": "meat seafood",
+              "department_id": 12,
+              "purchase_count": 708931,
+              "reorder_count": 402442
+            },
+            {
+              "department": "missing",
+              "department_id": 21,
+              "purchase_count": 69145,
+              "reorder_count": 27371
+            },
+            {
+              "department": "other",
+              "department_id": 2,
+              "purchase_count": 36291,
+              "reorder_count": 14806
+            },
+            {
+              "department": "pantry",
+              "department_id": 13,
+              "purchase_count": 1875577,
+              "reorder_count": 650301
+            },
+            {
+              "department": "personal care",
+              "department_id": 11,
+              "purchase_count": 447123,
+              "reorder_count": 143584
+            },
+            {
+              "department": "pets",
+              "department_id": 8,
+              "purchase_count": 97724,
+              "reorder_count": 58760
+            },
+            {
+              "department": "produce",
+              "department_id": 4,
+              "purchase_count": 9479291,
+              "reorder_count": 6160710
+            },
+            {
+              "department": "snacks",
+              "department_id": 19,
+              "purchase_count": 2887550,
+              "reorder_count": 1657973
+            }
+          ],
+          "seconds": 14.602316064999968,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 26105,
+            "failed_task_attempts": 0,
+            "input_bytes": 70562653,
+            "input_records": 32484198,
+            "referenced_stages": 5,
+            "shuffle_read_bytes": 289395061,
+            "shuffle_write_bytes": 289395061,
+            "skipped_stages": 0,
+            "stages": 5,
+            "tasks": 68
+          }
+        }
+      ]
+    },
+    "warmups": [
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "joins/broadcast_hash/-1",
+        "physical_plan": "*(4) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1454L, reorder_count#1456L])\n+- Exchange hashpartitioning(department_id#37, department#47, 32), ENSURE_REQUIREMENTS, [plan_id=5070]\n   +- *(3) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1463L, sum#1464L])\n      +- *(3) Project [department_id#37, reordered#21, department#47]\n         +- *(3) BroadcastHashJoin [department_id#37], [department_id#46], Inner, BuildRight, false\n            :- *(3) Project [reordered#21, department_id#37]\n            :  +- *(3) BroadcastHashJoin [product_id#19], [product_id#34], Inner, BuildRight, false\n            :     :- *(3) Filter isnotnull(product_id#19)\n            :     :  +- *(3) ColumnarToRow\n            :     :     +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n            :     +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [plan_id=5056]\n            :        +- *(1) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n            :           +- *(1) ColumnarToRow\n            :              +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n            +- BroadcastExchange HashedRelationBroadcastMode(List(cast(input[0, tinyint, false] as bigint)),false), [plan_id=5064]\n               +- *(2) Filter isnotnull(department_id#46)\n                  +- *(2) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 2.028357767999978,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 3605,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 4,
+          "shuffle_read_bytes": 2946,
+          "shuffle_write_bytes": 2946,
+          "skipped_stages": 0,
+          "stages": 4,
+          "tasks": 36
+        }
+      },
+      {
+        "checksum": "d28ea7e86b822e6e739fc13b68eb5e1b35511d23b06d412c016fd39930eae378",
+        "job_group": "joins/sort_merge/-1",
+        "physical_plan": "*(9) HashAggregate(keys=[department_id#37, department#47], functions=[count(1), sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, purchase_count#1484L, reorder_count#1486L])\n+- *(9) HashAggregate(keys=[department_id#37, department#47], functions=[partial_count(1), partial_sum(cast(reordered#21 as bigint))], output=[department_id#37, department#47, count#1493L, sum#1494L])\n   +- *(9) Project [department_id#37, reordered#21, department#47]\n      +- *(9) SortMergeJoin [department_id#37], [department_id#46], Inner\n         :- *(6) Sort [department_id#37 ASC NULLS FIRST], false, 0\n         :  +- Exchange hashpartitioning(department_id#37, 32), ENSURE_REQUIREMENTS, [plan_id=5218]\n         :     +- *(5) Project [reordered#21, department_id#37]\n         :        +- *(5) SortMergeJoin [product_id#19], [product_id#34], Inner\n         :           :- *(2) Sort [product_id#19 ASC NULLS FIRST], false, 0\n         :           :  +- Exchange hashpartitioning(product_id#19, 32), ENSURE_REQUIREMENTS, [plan_id=5201]\n         :           :     +- *(1) Filter isnotnull(product_id#19)\n         :           :        +- *(1) ColumnarToRow\n         :           :           +- FileScan parquet [product_id#19,reordered#21] Batched: true, DataFilters: [isnotnull(product_id#19)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/order_products_prior], PartitionFilters: [], PushedFilters: [IsNotNull(product_id)], ReadSchema: struct<product_id:int,reordered:boolean>\n         :           +- *(4) Sort [product_id#34 ASC NULLS FIRST], false, 0\n         :              +- Exchange hashpartitioning(product_id#34, 32), ENSURE_REQUIREMENTS, [plan_id=5210]\n         :                 +- *(3) Filter (isnotnull(product_id#34) AND isnotnull(department_id#37))\n         :                    +- *(3) ColumnarToRow\n         :                       +- FileScan parquet [product_id#34,department_id#37] Batched: true, DataFilters: [isnotnull(product_id#34), isnotnull(department_id#37)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/products], PartitionFilters: [], PushedFilters: [IsNotNull(product_id), IsNotNull(department_id)], ReadSchema: struct<product_id:int,department_id:tinyint>\n         +- *(8) Sort [department_id#46 ASC NULLS FIRST], false, 0\n            +- Exchange hashpartitioning(department_id#46, 32), ENSURE_REQUIREMENTS, [plan_id=5227]\n               +- *(7) Filter isnotnull(department_id#46)\n                  +- *(7) ColumnarToRow\n                     +- FileScan parquet [department_id#46,department#47] Batched: true, DataFilters: [isnotnull(department_id#46)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/dimensions/departments], PartitionFilters: [], PushedFilters: [IsNotNull(department_id)], ReadSchema: struct<department_id:tinyint,department:string>\n",
+        "result": [
+          {
+            "department": "alcohol",
+            "department_id": 5,
+            "purchase_count": 153696,
+            "reorder_count": 87595
+          },
+          {
+            "department": "babies",
+            "department_id": 18,
+            "purchase_count": 423802,
+            "reorder_count": 245369
+          },
+          {
+            "department": "bakery",
+            "department_id": 3,
+            "purchase_count": 1176787,
+            "reorder_count": 739188
+          },
+          {
+            "department": "beverages",
+            "department_id": 7,
+            "purchase_count": 2690129,
+            "reorder_count": 1757892
+          },
+          {
+            "department": "breakfast",
+            "department_id": 14,
+            "purchase_count": 709569,
+            "reorder_count": 398013
+          },
+          {
+            "department": "bulk",
+            "department_id": 10,
+            "purchase_count": 34573,
+            "reorder_count": 19950
+          },
+          {
+            "department": "canned goods",
+            "department_id": 15,
+            "purchase_count": 1068058,
+            "reorder_count": 488535
+          },
+          {
+            "department": "dairy eggs",
+            "department_id": 16,
+            "purchase_count": 5414016,
+            "reorder_count": 3627221
+          },
+          {
+            "department": "deli",
+            "department_id": 20,
+            "purchase_count": 1051249,
+            "reorder_count": 638864
+          },
+          {
+            "department": "dry goods pasta",
+            "department_id": 9,
+            "purchase_count": 866627,
+            "reorder_count": 399581
+          },
+          {
+            "department": "frozen",
+            "department_id": 1,
+            "purchase_count": 2236432,
+            "reorder_count": 1211890
+          },
+          {
+            "department": "household",
+            "department_id": 17,
+            "purchase_count": 738666,
+            "reorder_count": 297075
+          },
+          {
+            "department": "international",
+            "department_id": 6,
+            "purchase_count": 269253,
+            "reorder_count": 99416
+          },
+          {
+            "department": "meat seafood",
+            "department_id": 12,
+            "purchase_count": 708931,
+            "reorder_count": 402442
+          },
+          {
+            "department": "missing",
+            "department_id": 21,
+            "purchase_count": 69145,
+            "reorder_count": 27371
+          },
+          {
+            "department": "other",
+            "department_id": 2,
+            "purchase_count": 36291,
+            "reorder_count": 14806
+          },
+          {
+            "department": "pantry",
+            "department_id": 13,
+            "purchase_count": 1875577,
+            "reorder_count": 650301
+          },
+          {
+            "department": "personal care",
+            "department_id": 11,
+            "purchase_count": 447123,
+            "reorder_count": 143584
+          },
+          {
+            "department": "pets",
+            "department_id": 8,
+            "purchase_count": 97724,
+            "reorder_count": 58760
+          },
+          {
+            "department": "produce",
+            "department_id": 4,
+            "purchase_count": 9479291,
+            "reorder_count": 6160710
+          },
+          {
+            "department": "snacks",
+            "department_id": 19,
+            "purchase_count": 2887550,
+            "reorder_count": 1657973
+          }
+        ],
+        "seconds": 14.650444758000049,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 26318,
+          "failed_task_attempts": 0,
+          "input_bytes": 70562653,
+          "input_records": 32484198,
+          "referenced_stages": 5,
+          "shuffle_read_bytes": 289395061,
+          "shuffle_write_bytes": 289395061,
+          "skipped_stages": 0,
+          "stages": 5,
+          "tasks": 68
+        }
+      }
+    ]
+  },
+  "partition_pruning": {
+    "date_filter": {
+      "median_seconds": 1.2284538970000085,
+      "runs_seconds": [
+        1.2374567399999705,
+        1.2284538970000085,
+        1.1875073730000167
+      ],
+      "trials": [
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/date_filter/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1832L, reorders#1834L, product_id_sum#1836L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6416]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1860L, sum#1861L, sum#1862L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) Filter ((isnotnull(synthetic_date#63) AND (synthetic_date#63 >= 2024-01-01)) AND (synthetic_date#63 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#54L,reordered#56,synthetic_date#63,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [isnotnull(synthetic_date#63), (synthetic_date#63 >= 2024-01-01), (synthetic_date#63 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 1.2374567399999705,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 2313,
+            "failed_task_attempts": 0,
+            "input_bytes": 52153677,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1416,
+            "shuffle_write_bytes": 1416,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        },
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/date_filter/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1900L, reorders#1902L, product_id_sum#1904L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6496]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1928L, sum#1929L, sum#1930L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) Filter ((isnotnull(synthetic_date#63) AND (synthetic_date#63 >= 2024-01-01)) AND (synthetic_date#63 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#54L,reordered#56,synthetic_date#63,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [isnotnull(synthetic_date#63), (synthetic_date#63 >= 2024-01-01), (synthetic_date#63 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 1.2284538970000085,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 2268,
+            "failed_task_attempts": 0,
+            "input_bytes": 52153677,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1416,
+            "shuffle_write_bytes": 1416,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        },
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/date_filter/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#2070L, reorders#2072L, product_id_sum#2074L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6687]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#2098L, sum#2099L, sum#2100L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) Filter ((isnotnull(synthetic_date#63) AND (synthetic_date#63 >= 2024-01-01)) AND (synthetic_date#63 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#54L,reordered#56,synthetic_date#63,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [isnotnull(synthetic_date#63), (synthetic_date#63 >= 2024-01-01), (synthetic_date#63 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 1.1875073730000167,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 2168,
+            "failed_task_attempts": 0,
+            "input_bytes": 52153677,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1416,
+            "shuffle_write_bytes": 1416,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        }
+      ]
+    },
+    "equivalent_filters_equal": true,
+    "full_scan": {
+      "median_seconds": 2.5114298890000555,
+      "runs_seconds": [
+        2.617111414999954,
+        2.466641587999902,
+        2.5114298890000555
+      ],
+      "trials": [
+        {
+          "checksum": "606dd08824f3408bc8a9fc9d11c3320999908acd1f2d1f1d3703b988c0081427",
+          "job_group": "partitions/full_scan/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1798L, reorders#1800L, product_id_sum#1802L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6375]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1826L, sum#1827L, sum#1828L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 33819106,
+              "product_id_sum": 864941036899,
+              "reorders": 19955360
+            }
+          ],
+          "seconds": 2.617111414999954,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 5069,
+            "failed_task_attempts": 0,
+            "input_bytes": 216222873,
+            "input_records": 33819106,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1701,
+            "shuffle_write_bytes": 1701,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        },
+        {
+          "checksum": "606dd08824f3408bc8a9fc9d11c3320999908acd1f2d1f1d3703b988c0081427",
+          "job_group": "partitions/full_scan/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1968L, reorders#1970L, product_id_sum#1972L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6572]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1996L, sum#1997L, sum#1998L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 33819106,
+              "product_id_sum": 864941036899,
+              "reorders": 19955360
+            }
+          ],
+          "seconds": 2.466641587999902,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 4773,
+            "failed_task_attempts": 0,
+            "input_bytes": 216222873,
+            "input_records": 33819106,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1701,
+            "shuffle_write_bytes": 1701,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        },
+        {
+          "checksum": "606dd08824f3408bc8a9fc9d11c3320999908acd1f2d1f1d3703b988c0081427",
+          "job_group": "partitions/full_scan/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#2036L, reorders#2038L, product_id_sum#2040L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6646]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#2064L, sum#2065L, sum#2066L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 33819106,
+              "product_id_sum": 864941036899,
+              "reorders": 19955360
+            }
+          ],
+          "seconds": 2.5114298890000555,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 4848,
+            "failed_task_attempts": 0,
+            "input_bytes": 216222873,
+            "input_records": 33819106,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 1701,
+            "shuffle_write_bytes": 1701,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 25
+          }
+        }
+      ]
+    },
+    "interpretation": "Full scan has a different scope; only date_filter and partition_filter are equivalent.",
+    "partition_filter": {
+      "median_seconds": 0.06401706699989518,
+      "runs_seconds": [
+        0.06401706699989518,
+        0.06566533599993818,
+        0.05403471099998569
+      ],
+      "trials": [
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/partition_filter/0",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1866L, reorders#1868L, product_id_sum#1870L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6455]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1894L, sum#1895L, sum#1896L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#64), isnotnull(synthetic_month#65), (synthetic_year#64 = 2024), (synthetic_month#65 = 1), (((((((synthetic_day#66 = 1) OR (synthetic_day#66 = 2)) OR (synthetic_day#66 = 3)) OR (synthetic_day#66 = 4)) OR (synthetic_day#66 = 5)) OR (synthetic_day#66 = 6)) OR (synthetic_day#66 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 0.06401706699989518,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 62,
+            "failed_task_attempts": 0,
+            "input_bytes": 1181369,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 140,
+            "shuffle_write_bytes": 140,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/partition_filter/1",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1934L, reorders#1936L, product_id_sum#1938L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6535]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1962L, sum#1963L, sum#1964L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#64), isnotnull(synthetic_month#65), (synthetic_year#64 = 2024), (synthetic_month#65 = 1), (((((((synthetic_day#66 = 1) OR (synthetic_day#66 = 2)) OR (synthetic_day#66 = 3)) OR (synthetic_day#66 = 4)) OR (synthetic_day#66 = 5)) OR (synthetic_day#66 = 6)) OR (synthetic_day#66 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 0.06566533599993818,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 55,
+            "failed_task_attempts": 0,
+            "input_bytes": 1181369,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 140,
+            "shuffle_write_bytes": 140,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        },
+        {
+          "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+          "job_group": "partitions/partition_filter/2",
+          "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#2002L, reorders#2004L, product_id_sum#2006L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6609]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#2030L, sum#2031L, sum#2032L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#64), isnotnull(synthetic_month#65), (synthetic_year#64 = 2024), (synthetic_month#65 = 1), (((((((synthetic_day#66 = 1) OR (synthetic_day#66 = 2)) OR (synthetic_day#66 = 3)) OR (synthetic_day#66 = 4)) OR (synthetic_day#66 = 5)) OR (synthetic_day#66 = 6)) OR (synthetic_day#66 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+          "result": [
+            {
+              "events": 177912,
+              "product_id_sum": 4556054508,
+              "reorders": 4815
+            }
+          ],
+          "seconds": 0.05403471099998569,
+          "task_metrics": {
+            "discarded_task_attempts": 0,
+            "executor_run_time_ms": 47,
+            "failed_task_attempts": 0,
+            "input_bytes": 1181369,
+            "input_records": 177912,
+            "referenced_stages": 2,
+            "shuffle_read_bytes": 140,
+            "shuffle_write_bytes": 140,
+            "skipped_stages": 0,
+            "stages": 2,
+            "tasks": 3
+          }
+        }
+      ]
+    },
+    "partition_filters_verified": true,
+    "warmups": [
+      {
+        "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+        "job_group": "partitions/partition_filter/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1696L, reorders#1698L, product_id_sum#1700L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6258]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1724L, sum#1725L, sum#1726L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [isnotnull(synthetic_year#64), isnotnull(synthetic_month#65), (synthetic_year#64 = 2024), (synthetic_month#65 = 1), (((((((synthetic_day#66 = 1) OR (synthetic_day#66 = 2)) OR (synthetic_day#66 = 3)) OR (synthetic_day#66 = 4)) OR (synthetic_day#66 = 5)) OR (synthetic_day#66 = 6)) OR (synthetic_day#66 = 7))], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+        "result": [
+          {
+            "events": 177912,
+            "product_id_sum": 4556054508,
+            "reorders": 4815
+          }
+        ],
+        "seconds": 0.12456846999998561,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 119,
+          "failed_task_attempts": 0,
+          "input_bytes": 1181369,
+          "input_records": 177912,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 140,
+          "shuffle_write_bytes": 140,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 3
+        }
+      },
+      {
+        "checksum": "606dd08824f3408bc8a9fc9d11c3320999908acd1f2d1f1d3703b988c0081427",
+        "job_group": "partitions/full_scan/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1730L, reorders#1732L, product_id_sum#1734L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6295]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1758L, sum#1759L, sum#1760L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) ColumnarToRow\n            +- FileScan parquet [product_id#54L,reordered#56,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<product_id:bigint,reordered:boolean>\n",
+        "result": [
+          {
+            "events": 33819106,
+            "product_id_sum": 864941036899,
+            "reorders": 19955360
+          }
+        ],
+        "seconds": 2.6153105800001413,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 5040,
+          "failed_task_attempts": 0,
+          "input_bytes": 216222873,
+          "input_records": 33819106,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 1701,
+          "shuffle_write_bytes": 1701,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 25
+        }
+      },
+      {
+        "checksum": "1278a9bc5e63c7ba63286eaecf87211d6c8c2459b8ee42fd44679b410fa70810",
+        "job_group": "partitions/date_filter/-1",
+        "physical_plan": "*(2) HashAggregate(keys=[], functions=[count(1), sum(cast(reordered#56 as bigint)), sum(product_id#54L)], output=[events#1764L, reorders#1766L, product_id_sum#1768L])\n+- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=6336]\n   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(cast(reordered#56 as bigint)), partial_sum(product_id#54L)], output=[count#1792L, sum#1793L, sum#1794L])\n      +- *(1) Project [product_id#54L, reordered#56]\n         +- *(1) Filter ((isnotnull(synthetic_date#63) AND (synthetic_date#63 >= 2024-01-01)) AND (synthetic_date#63 <= 2024-01-07))\n            +- *(1) ColumnarToRow\n               +- FileScan parquet [product_id#54L,reordered#56,synthetic_date#63,synthetic_year#64,synthetic_month#65,synthetic_day#66] Batched: true, DataFilters: [isnotnull(synthetic_date#63), (synthetic_date#63 >= 2024-01-01), (synthetic_date#63 <= 2024-01-07)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/curated/interactions], PartitionFilters: [], PushedFilters: [IsNotNull(synthetic_date), GreaterThanOrEqual(synthetic_date,2024-01-01), LessThanOrEqual(synthetic_date,2024-01-07)], ReadSchema: struct<product_id:bigint,reordered:boolean,synthetic_date:string>\n",
+        "result": [
+          {
+            "events": 177912,
+            "product_id_sum": 4556054508,
+            "reorders": 4815
+          }
+        ],
+        "seconds": 1.4942381249998107,
+        "task_metrics": {
+          "discarded_task_attempts": 0,
+          "executor_run_time_ms": 2794,
+          "failed_task_attempts": 0,
+          "input_bytes": 52153677,
+          "input_records": 177912,
+          "referenced_stages": 2,
+          "shuffle_read_bytes": 1416,
+          "shuffle_write_bytes": 1416,
+          "skipped_stages": 0,
+          "stages": 2,
+          "tasks": 25
+        }
+      }
+    ],
+    "window": [
+      "2024-01-01",
+      "2024-01-07"
+    ]
+  },
+  "run_id": "20260925T165601_f94ae7dd",
+  "status": "passed",
+  "validation": {
+    "counts": {
+      "aisles": 134,
+      "departments": 21,
+      "interactions": 33819106,
+      "orders": 3421083,
+      "prior": 32434489,
+      "products": 49688,
+      "train": 1384617,
+      "users": 206209
+    },
+    "fact_event_multisets_equal": true,
+    "partition_integrity": true,
+    "source_local_spark_equal": true,
+    "source_receipt": {
+      "feed_manifest": {
+        "batch_users": 2000,
+        "config": {
+          "delta": {
+            "hi_s": 120.0,
+            "kind": "exponential",
+            "lo_s": 5.0,
+            "mean_s": 30.0
+          },
+          "limit_users": null,
+          "scatter_window_weeks": 13,
+          "seed": 42,
+          "time_mode": "uniform"
+        },
+        "days": 456,
+        "events": 33819106,
+        "mean_daily": 74164.7,
+        "monotonic_violations": 0,
+        "orders": 3346083,
+        "output": "data/synthesized/scatter_3m/events.parquet",
+        "peak_daily": 212714,
+        "span": [
+          "2024-01-01",
+          "2025-03-31"
+        ],
+        "users": 206209
+      },
+      "files": 456,
+      "local_rows": 33819106,
+      "partitions": 456,
+      "source_columns": [
+        "event_id",
+        "order_id",
+        "user_id",
+        "order_number",
+        "product_id",
+        "add_to_cart_order",
+        "reordered",
+        "aisle_id",
+        "department_id",
+        "order_hour_of_day",
+        "order_dow",
+        "event_time_epoch_ms",
+        "event_time_iso",
+        "synthetic_date"
+      ],
+      "source_rows": 33819106,
+      "source_sha256": "5c324c933064987b465ee37580bc9562f3b974fe65c0a85f0546d907b76f1cf2",
+      "version": 1
+    },
+    "source_tables": {
+      "aisles": {
+        "rows": 134,
+        "sha256": "79d513606fc55c73861c5066999ce862ea023337f5000f63c2b0c2d7bc200a0f"
+      },
+      "departments": {
+        "rows": 21,
+        "sha256": "713f4e6b295fa830efcdb326f85ba5da7f6cb486033d22ca61bece5004f681df"
+      },
+      "order_products_prior": {
+        "rows": 32434489,
+        "sha256": "03e4e36e869d5a111247d19c643b0be1fd1c6777504d132fb4395edd3d29f344"
+      },
+      "order_products_train": {
+        "rows": 1384617,
+        "sha256": "17f99d837f89569e57e571d386462be04f656ec3bf120efacd22fe16a6f42894"
+      },
+      "orders": {
+        "rows": 3421083,
+        "sha256": "3434da7a916497e9f636beada13d7a0dd16bed27b81864da55734d850d58c5cf"
+      },
+      "products": {
+        "rows": 49688,
+        "sha256": "0bd1c65fa393e159186403622d1649c10ae762bb7b85cdae441b047673cf39a8"
+      }
+    }
+  }
+}

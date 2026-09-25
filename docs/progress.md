@@ -169,3 +169,15 @@ now requires source receipts and exact fact/event checks. The generator also
 restores the documented order_number column and records batch_users. The cap-30
 mask now follows sorted rows correctly. See [Module 2](module2.md) and its evidence
 for executed fixture checks and the remaining Docker/full-data gates.
+
+
+## Full Module 2 revalidation (2026-09-26, Asia/Saigon)
+
+The remaining gates above are now closed. Public source acquisition, corrected
+cleaning/generation, Docker build, 15 tests, HDFS staging and all Module 2
+analytics/experiments passed on GitHub Actions. Exact source/local/HDFS counts
+are 33,819,106 with 456 daily partitions and 456 files. Real execution also
+exposed and fixed NumPy 2 narrow-integer timestamp multiplication overflow.
+MongoDB verification found 49,677 product and 21 department documents.
+See [durable full evidence](evidence/full/README.md) for code SHA, source
+receipts, physical plans, repeated measurements and runtime limitations.

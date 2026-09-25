@@ -1,0 +1,6 @@
+NAME                                              IMAGE                                             COMMAND                  SERVICE        CREATED          STATUS                    PORTS
+instacart-datanode                                bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8   "/entrypoint.sh /run…"   datanode       12 minutes ago   Up 12 minutes (healthy)   0.0.0.0:9864->9864/tcp, [::]:9864->9864/tcp
+instacart-market-basket-analysis-mongodb-1        mongo:7.0.16                                      "docker-entrypoint.s…"   mongodb        8 minutes ago    Up 8 minutes (healthy)    27017/tcp
+instacart-market-basket-analysis-spark-master-1   instacart-spark:3.5.5                             "/opt/spark/bin/spar…"   spark-master   8 minutes ago    Up 8 minutes (healthy)    127.0.0.1:8080->8080/tcp
+instacart-market-basket-analysis-spark-worker-1   instacart-spark:3.5.5                             "/opt/spark/bin/spar…"   spark-worker   8 minutes ago    Up 8 minutes (healthy)    
+instacart-namenode                                bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8   "/entrypoint.sh /run…"   namenode       12 minutes ago   Up 12 minutes (healthy)   0.0.0.0:8020->8020/tcp, [::]:8020->8020/tcp, 0.0.0.0:9870->9870/tcp, [::]:9870->9870/tcp

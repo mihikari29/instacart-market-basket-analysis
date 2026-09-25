@@ -75,7 +75,12 @@ python src/generate.py --list-scenarios
 - **Presets**: `default`, `mobile-fast` (20 s), `desktop-browse` (40 s), `uniform`, `deterministic`.
 - **Invariant**: per-user monotonicity always enforced → **0 violations** across all 33.8 M events.
 
-## Scenario feeds (realized)
+## Scenario feeds (historical runs)
+
+The regenerated full-validation feed uses batch_users=2000 and has a peak of
+212,714 events/day across 456 days; seed, batching and manifest are recorded in
+[full evidence](docs/evidence/full/README.md). The earlier figures below describe
+the previous generated feeds.
 
 | folder | scatter | span | peak/mean daily | crowding |
 |---|---|---|---|---|
@@ -108,8 +113,8 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 
 | # | module | reads | status |
 |---|---|---|---|
-| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected handoff requires regeneration/restaging |
-| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Implemented / fixture-validated; Docker/HDFS and full-scale benchmark pending |
+| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
+| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
 | 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Next |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
@@ -179,9 +184,11 @@ partitions. A cap-30 sorting defect also affected regenerated order gaps. Regene
 cleaned data and feeds, then restage using the corrected code. Existing uploads
 without validation receipts are not accepted as a valid Module 2 handoff.
 
-Local fixture tests are real Spark executions. Docker/HDFS smoke tests and full
-33.8M-event execution remain pending because this delivery host lacks Docker and
-the source dataset.
+Full execution passed on a GitHub-hosted Linux runner using real Docker, standalone
+Spark, HDFS and MongoDB: **33,819,106 source/local/HDFS events**, 456 daily
+partitions, and **15 passing tests**. See [full measured evidence](docs/evidence/full/README.md)
+and [reproduction instructions](docs/full_execution.md). The hosted services are
+temporary; this validation does not install a permanent cluster on your computer.
 
 ## Next step: Module 3
 

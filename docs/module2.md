@@ -1,8 +1,9 @@
 # Module 2: historical Spark processing
 
-Status: implemented; local fixture evidence is in `docs/evidence/`. Full Instacart
-execution and Docker/HDFS smoke execution have not been performed on this host.
-Fixture timings do not establish 32-million-row performance.
+Status: complete and validated on the full Instacart dataset using Docker,
+standalone Spark, HDFS and MongoDB on a GitHub-hosted Linux runner. See
+[full execution evidence](evidence/full/README.md) and [reproduction](full_execution.md).
+Historical local fixture measurements remain in `docs/evidence/`.
 
 ## Architecture
 
@@ -127,6 +128,7 @@ Other repairs directly relevant to the handoff:
 
 - Compute cap-30 masks after sorting so updates follow the correct orders.
 - Restore documented order_number in events and record batch_users in manifests.
+- Widen timestamp/hash arithmetic to int64 before multiplication under NumPy 2.
 - Reject a bodyless initial WebHDFS 201 instead of falsely reporting an upload.
 - Propagate HDFS tree errors instead of silently suppressing them.
 
@@ -222,11 +224,12 @@ See docs/evidence for executed checks and measurements. Tests cover row-group
 collisions, stale partitions, upload failures, cap-30 sorting, contracts,
 analytics, joins, pruning and event-log attribution.
 
-This host has no Docker service or WSL distribution. A portable Compose binary
-validated configuration, but image build, worker registration, HDFS connectivity
-and the canonical Docker command remain unexecuted. Local Spark does not replace
-that gate. Full data and Kaggle credentials were absent. Full-scale correctness
-and performance remain pending; fixture success does not establish full completion.
+The Windows development host has no Docker/WSL. The full runtime gate was
+completed on GitHub Actions: image build, 15 container tests, worker registration,
+HDFS staging, canonical all command and MongoDB verification passed. The public
+source mirror required no credentials. These timings describe one hosted machine
+with a two-core Spark executor, not a multi-machine scaling experiment. Services
+and raw data were temporary; compact results are committed for durable review.
 
 - Missing receipts: rerun corrected staging; do not invent counts.
 - HDFS: check service logs/free disk and wait for safemode to end; Spark uses
