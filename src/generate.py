@@ -19,7 +19,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from config import SyntheticConfig, preset_summary
+try:
+    from .config import SyntheticConfig, preset_summary
+except ImportError:
+    from config import SyntheticConfig, preset_summary
 
 BASE = pd.Timestamp("2024-01-01")  # Monday; order_dow 0..6 aligns with +dow days
 DAY_MS = 86_400_000
@@ -42,7 +45,7 @@ def load_clean(clean_dir: Path):
 
 def order_time_parts(rng, order_ids: pd.Series, mode: str) -> tuple["np.ndarray", "np.ndarray"]:
     if mode == "hash":
-        minute = (order_ids * 10**6 + 1) % 60
+        minute = (order_ids.astype("int64") * 10**6 + 1) % 60
         return minute.to_numpy(), np.zeros(len(order_ids), dtype="int64")
     n = len(order_ids)
     return rng.integers(0, 60, size=n), rng.integers(0, 60, size=n)
@@ -67,7 +70,7 @@ def prepare_orders(orders: pd.DataFrame, conf: SyntheticConfig, rng) -> pd.DataF
     stream["base_ms"] = (
         BASE_EPOCH_MS
         + stream["day_offset"] * DAY_MS
-        + stream["order_hour_of_day"] * 3_600_000
+        + stream["order_hour_of_day"].astype("int64") * 3_600_000
         + minute * 60_000
         + second * 1_000
     ).astype("int64")

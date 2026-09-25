@@ -5,9 +5,31 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
+import numpy as np
 from src.partition_events import partition_events
 from src.clean import clean_orders
 from src.stage_hdfs import stage_interactions
+
+
+def test_generator_widens_narrow_time_columns():
+    from src.generate import prepare_orders, order_time_parts, BASE_EPOCH_MS, DAY_MS
+    from src.config import SyntheticConfig
+
+    orders = pd.DataFrame(
+        {
+            "order_id": pd.Series([3421083], dtype="int32"),
+            "user_id": [1],
+            "eval_set": ["prior"],
+            "order_number": [1],
+            "order_dow": pd.Series([0], dtype="int16"),
+            "order_hour_of_day": pd.Series([23], dtype="int16"),
+            "days_since_prior_order": [0.0],
+        }
+    )
+    result = prepare_orders(orders, SyntheticConfig(time_mode="hash"), np.random.default_rng(42))
+    minute = (3421083 * 10**6 + 1) % 60
+    assert (int(result.iloc[0].base_ms) - BASE_EPOCH_MS) % DAY_MS == 23 * 3600000 + minute * 60000
+    assert order_time_parts(None, orders.order_id, "hash")[0].tolist() == [minute]
 
 
 def source(path, dates=("2024-01-01", "2024-01-02") * 3):
