@@ -2,7 +2,8 @@
 
 Replay of the **Instacart Market Basket** dataset as a live real-time feed: cleaned
 parquet facts + synthesized absolute timestamps → Kafka → Spark Streaming, with a
-batch layer for ALS recommendation and trending.
+Spark batch layer for historical metrics, features and execution benchmarks.
+ALS/recommendation belongs to Module 4.
 
 ## Repo layout
 
@@ -31,7 +32,7 @@ Stream = prior + train = **3,346,083 orders · 33,819,106 events**.
 
 | file | reads | feeds |
 |---|---|---|
-| `data/clean/orders.parquet`, `order_products__*.parquet`, `products/aisles/departments.parquet` | batch/ML | Module 2 (trending, ALS), Module 4 |
+| `data/clean/orders.parquet`, `order_products__*.parquet`, `products/aisles/departments.parquet` | batch/ML | Module 2 (historical analytics), Module 4 (ALS) |
 | `data/synthesized/scatter_*/events.parquet` + `manifest.json` | producer | Module 1 → Kafka (Module 3) |
 | `data/raw/*.csv` | only `clean.py` | archive — never read by modules |
 
@@ -107,8 +108,8 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 
 | # | module | reads | status |
 |---|---|---|---|
-| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | **Done** (Validated, HDFS Staged, Producer Verified) |
-| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Next |
+| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected handoff requires regeneration/restaging |
+| 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Implemented / fixture-validated; Docker/HDFS and full-scale benchmark pending |
 | 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Next |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
@@ -143,7 +144,45 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
    - **HDFS IPC (Spark defaultFS):** `hdfs://localhost:8020` (hoặc `hdfs://namenode:8020` trong container)
    - **HDFS DataNode WebHDFS:** `http://localhost:9864`
 
-## Next steps (Module 2 & Module 3)
+## Module 2 — Spark batch layer
 
-1. **Module 2 (Batch Layer)**: Spark batch metrics on `/instacart/curated/`, join benchmarks (Broadcast vs Sort-Merge), and partition pruning experiment.
-2. **Module 3 (Speed Layer)**: Spark Structured Streaming consuming `instacart-purchase-events`, watermark trên `event_time_epoch_ms`, và tính realtime trending window.
+Module 2 now includes handoff validation, prior-only historical analytics and user
+features, MongoDB batch snapshots, forced Sort-Merge/Broadcast Hash Join trials,
+partition pruning and aggregate caching experiments. All benchmark arms retain
+plans, checksums, repetitions, medians and Spark input/shuffle metrics.
+
+After regenerating and staging data with the corrected Module 1 pipeline:
+
+```bash
+python scripts/module2.py all
+```
+
+The runner builds a pinned Spark 3.5.5 / Java 17 image and starts the Compose
+master, worker and MongoDB. See [Module 2 report](docs/module2.md) for the complete
+setup, schemas, individual commands, methodology and limitations. Outputs go to
+`results/module2/<run-id>/`, HDFS `/instacart/features/user_features`, and MongoDB
+`batch_product_metrics` / `department_metrics`. Compact measured fixture evidence
+is in [docs/evidence](docs/evidence).
+
+New source layout:
+
+```text
+src/partition_events.py   lossless streaming partition writer + receipt
+src/module2/             validation, analytics, experiments, task metrics, CLI
+scripts/module2.py       canonical Docker runner
+Dockerfile.spark         pinned Spark runtime
+tests/                   staging/unit/Spark integration regressions
+```
+
+**Migration:** the old interaction writer could overwrite overlapping date
+partitions. A cap-30 sorting defect also affected regenerated order gaps. Regenerate
+cleaned data and feeds, then restage using the corrected code. Existing uploads
+without validation receipts are not accepted as a valid Module 2 handoff.
+
+Local fixture tests are real Spark executions. Docker/HDFS smoke tests and full
+33.8M-event execution remain pending because this delivery host lacks Docker and
+the source dataset.
+
+## Next step: Module 3
+
+ **Module 3 (Speed Layer)**: Spark Structured Streaming consuming `instacart-purchase-events`, watermark trên `event_time_epoch_ms`, và tính realtime trending window.

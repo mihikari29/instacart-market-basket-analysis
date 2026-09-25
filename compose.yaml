@@ -41,6 +41,11 @@ services:
       HDFS_CONF_dfs_webhdfs_enabled: "true"
       HDFS_CONF_dfs_namenode_webhdfs_allowed_hosts: "*"
       HADOOP_OPTIONAL_TOOLS: hadoop-azure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     volumes:
       - namenode_data:/hadoop/dfs/name
 
@@ -55,9 +60,86 @@ services:
       HDFS_CONF_dfs_replication: "1"
       HDFS_CONF_dfs_datanode_webhdfs_enabled: "true"
       SERVICE_PRECONDITION: "namenode:9870"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9864/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
     volumes:
       - datanode_data:/hadoop/dfs/data
+
+  spark-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    image: instacart-spark:3.5.5
+    hostname: spark-master
+    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    environment:
+      SPARK_MASTER_HOST: spark-master
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - .:/workspace
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/json/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    image: instacart-spark:3.5.5
+    hostname: spark-worker
+    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--cores", "2", "--memory", "2g", "spark://spark-master:7077"]
+    volumes:
+      - .:/workspace
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/json/')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  mongodb:
+    image: mongo:7.0.16
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  module2:
+    image: instacart-spark:3.5.5
+    profiles: ["tools"]
+    hostname: module2
+    entrypoint: ["python3", "-m", "src.module2.cli"]
+    command: ["all"]
+    environment:
+      SPARK_MASTER: spark://spark-master:7077
+      MODULE2_ROOT: hdfs://namenode:8020/instacart
+      MONGODB_URI: mongodb://mongodb:27017/instacart
+      PYSPARK_SUBMIT_ARGS: --conf spark.driver.host=module2 --conf spark.driver.bindAddress=0.0.0.0 pyspark-shell
+    volumes:
+      - .:/workspace
+    depends_on:
+      spark-worker:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
 
 volumes:
   namenode_data:
   datanode_data:
+  mongodb_data:

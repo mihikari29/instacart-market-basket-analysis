@@ -157,3 +157,15 @@ python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synt
    - Kafka: `localhost:9092`
    - HDFS WebHDFS: `http://localhost:9870`
    - HDFS IPC: `hdfs://localhost:8020`
+
+
+## Module 2 handoff audit (2026-09-25)
+
+The earlier §9.1 staging statement records uploads, not verified Spark row counts.
+A regression reproduction confirmed that the original per-row-group dataset
+writer overwrote files for overlapping dates. Those prior full HDFS counts must
+be revalidated after regenerating/restaging with the corrected writer. Module 2
+now requires source receipts and exact fact/event checks. The generator also
+restores the documented order_number column and records batch_users. The cap-30
+mask now follows sorted rows correctly. See [Module 2](module2.md) and its evidence
+for executed fixture checks and the remaining Docker/full-data gates.

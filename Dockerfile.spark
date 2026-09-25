@@ -1,0 +1,6 @@
+FROM apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece564389258934655ba6f463d6daff8753ff0c639ce
+USER root
+COPY requirements.txt requirements-dev.txt /tmp/dependencies/
+RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
+WORKDIR /workspace
+ENV PYTHONPATH=/workspace
