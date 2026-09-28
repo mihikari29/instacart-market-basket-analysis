@@ -109,17 +109,17 @@ docker compose up -d namenode datanode kafka mongodb spark-master spark-worker
 - **MongoDB:** `mongodb://localhost:27017`
 
 ### 4.2. Chạy Pipeline Ingestion & Staging (Module 1)
+Có thể chạy nhanh toàn bộ pipeline qua script runner hoặc chạy từng bước riêng biệt:
 ```bash
-# 1. Làm sạch dữ liệu gốc
+# Cách 1: Chạy trọn gói toàn bộ pipeline Module 1 (Clean -> Generate -> Stage)
+python scripts/module1.py all
+
+# Cách 2: Chạy chi tiết từng bước
 python -m src.module1.clean --validate
-
-# 2. Tạo synthetic event stream (canonical 3-month scatter)
 python -m src.module1.generate --scenario default --scatter-weeks 13 --out-dir data/synthesized/scatter_3m
-
-# 3. Phân vùng và đẩy lên HDFS
 python -m src.module1.stage_hdfs
 
-# 4. Thử nghiệm phát stream Kafka (tuỳ chọn)
+# Thử nghiệm phát stream Kafka (tuỳ chọn)
 python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
 ```
 

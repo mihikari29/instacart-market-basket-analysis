@@ -52,6 +52,10 @@ It doesn't *have* to be parquet — CSV would work. Parquet wins because:
 ## Run
 
 ```bash
+# Run full Module 1 pipeline (clean -> generate -> stage)
+python scripts/module1.py all
+
+# Or run individual steps:
 python -m src.module1.clean --validate
 python -m src.module1.generate --scenario default --scatter-weeks 13 --out-dir data/synthesized/scatter_3m
 python -m src.module1.generate --scenario default --scatter-weeks 1  --out-dir data/synthesized/scatter_1w
