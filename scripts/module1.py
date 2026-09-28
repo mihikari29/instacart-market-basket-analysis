@@ -46,7 +46,14 @@ def main() -> None:
             "--out-dir",
             args.out_dir,
         )
-    if args.step == "stage":
+    if args.step in ("all", "stage"):
+        root = Path(__file__).resolve().parents[1]
+        print("==> [Module 1] Ensuring HDFS services (namenode, datanode) are running...", flush=True)
+        subprocess.run(
+            ["docker", "compose", "up", "-d", "--remove-orphans", "namenode", "datanode"],
+            cwd=root,
+            check=True,
+        )
         run_step("stage_hdfs")
 
 
