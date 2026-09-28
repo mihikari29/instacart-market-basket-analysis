@@ -1,10 +1,11 @@
+name: instacart
+
 # Module 1 transport layer (local dev)
 #   Kafka   : single-node KRaft broker -> topic instacart-purchase-events
 #   HDFS    : single-node (NameNode + DataNode) -> /instacart layout
 services:
   kafka:
     image: apache/kafka:3.7.0
-    container_name: instacart-kafka
     ports:
       - "9092:9092"
     environment:
@@ -29,7 +30,6 @@ services:
 
   namenode:
     image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-    container_name: instacart-namenode
     hostname: namenode
     ports:
       - "9870:9870"
@@ -51,7 +51,6 @@ services:
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: instacart-datanode
     hostname: datanode
     ports:
       - "9864:9864"
