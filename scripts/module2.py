@@ -1,26 +1,25 @@
 """Canonical container runner: python scripts/module2.py [all|validate|stats|...]."""
 
+import argparse
 import subprocess
-import sys
 from pathlib import Path
 
 
 def main():
     root = Path(__file__).resolve().parents[1]
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    
-    args = list(sys.argv[1:])
-    force_build = "--build" in args
-    if force_build:
-        args.remove("--build")
 
-    up_cmd = ["docker", "compose", "up", "-d", "--remove-orphans"]
-    if force_build:
-        up_cmd.append("--build")
-    up_cmd.extend(["spark-master", "spark-worker", "mongodb"])
+    parser = argparse.ArgumentParser(description=__doc__, add_help=False)
+    parser.add_argument("--build", action="store_true", help="Force rebuild Docker images")
+    known, forward_args = parser.parse_known_args()
 
-    subprocess.run(up_cmd, cwd=root, check=True)
-    command = args or ["all"]
+    build_flags = ["--build"] if known.build else []
+    subprocess.run(
+        ["docker", "compose", "up", "-d", "--remove-orphans", *build_flags, "spark-master", "spark-worker", "mongodb"],
+        cwd=root,
+        check=True,
+    )
+    command = forward_args or ["all"]
     subprocess.run(
         [
             "docker",
