@@ -1,6 +1,7 @@
 from datetime import date
 import json
 import pytest
+pyspark = pytest.importorskip("pyspark")
 from pyspark.sql import functions as F
 from src.module2.fixtures import create_fixture
 from src.module2.config import Config

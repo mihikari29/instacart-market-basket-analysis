@@ -1,6 +1,9 @@
 import json
 from functools import reduce
-from pyspark.sql import functions as F
+try:
+    from pyspark.sql import functions as F
+except ImportError:
+    F = None
 from .config import TABLES
 
 REQUIRED = {

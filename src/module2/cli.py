@@ -94,7 +94,7 @@ def main(argv=None):
         tables = read_tables(spark, config)
         report["validation"] = validate(spark, config, tables)
         if args.source_events:
-            from src.partition_events import file_sha256
+            from src.module1.partition_events import file_sha256
 
             require(
                 file_sha256(args.source_events) == report["validation"]["source_receipt"]["source_sha256"],

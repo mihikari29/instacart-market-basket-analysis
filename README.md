@@ -7,13 +7,14 @@ ALS/recommendation belongs to Module 4.
 
 ## Repo layout
 
-```
-src/clean.py      data/raw/*.csv → data/clean/*.parquet (cleaned facts + dims)
-src/config.py     SyntheticConfig + scenario presets
-src/generate.py   data/clean/ → data/synthesized/<scenario>/events.parquet + manifest.json
-data/raw/*.csv                   original Kaggle files (archive — only read by clean.py)
-data/clean/*.parquet             batch source of truth (facts + dims)
-data/synthesized/scatter_{1w,1m,3m}   three demo feeds, pick ONE
+```text
+src/module1/             data cleaning, synthetic timestamp generator, staging, producer
+src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
+data/raw/*.csv           original Kaggle files (archive — only read by clean.py)
+data/clean/*.parquet     batch source of truth (facts + dims)
+data/synthesized/        reproducible synthetic feeds (scatter_1w, scatter_1m, scatter_3m)
+scripts/                 canonical Docker runners and orchestration utilities
+tests/                   unit, staging, and Spark integration test suites
 ```
 
 ## Dataset (originals → cleaned)
@@ -51,11 +52,11 @@ It doesn't *have* to be parquet — CSV would work. Parquet wins because:
 ## Run
 
 ```bash
-python src/clean.py --validate
-python src/generate.py --scenario default --scatter-weeks 13 --out-dir data/synthesized/scatter_3m
-python src/generate.py --scenario default --scatter-weeks 1  --out-dir data/synthesized/scatter_1w
-python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synthesized/scatter_1m
-python src/generate.py --list-scenarios
+python -m src.module1.clean --validate
+python -m src.module1.generate --scenario default --scatter-weeks 13 --out-dir data/synthesized/scatter_3m
+python -m src.module1.generate --scenario default --scatter-weeks 1  --out-dir data/synthesized/scatter_1w
+python -m src.module1.generate --scenario default --scatter-weeks 4  --out-dir data/synthesized/scatter_1m
+python -m src.module1.generate --list-scenarios
 ```
 
 ## Cleaning (validated)
@@ -130,17 +131,17 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 
 2. **Dựng HDFS Data Lake (cho Module 2 & 4):**
    ```bash
-   python src/stage_hdfs.py
+   python -m src.module1.stage_hdfs
    ```
-   *(Kiểm tra cây thư mục HDFS: `python src/stage_hdfs.py --tree-only`)*.
+   *(Kiểm tra cây thư mục HDFS: `python -m src.module1.stage_hdfs --tree-only`)*.
 
 3. **Phát dữ liệu lên Kafka (cho Module 3 Streaming):**
    ```bash
    # Phát thử 50k events nhanh
-   python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
+   python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
 
    # Hoặc phát mô phỏng có lỗi trễ để test watermark
-   python src/producer.py --feed data/synthesized/scatter_3m --limit-events 20000 --replay-speed 50000 --inject "late:0.05,dup:0.02"
+   python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 20000 --replay-speed 50000 --inject "late:0.05,dup:0.02"
    ```
 
 4. **Các cổng dịch vụ đã ánh xạ sẵn:**
@@ -163,7 +164,7 @@ python scripts/module2.py all
 ```
 
 The runner builds a pinned Spark 3.5.5 / Java 17 image and starts the Compose
-master, worker and MongoDB. See [Module 2 report](docs/module2.md) for the complete
+master, worker and MongoDB. See [Progress Runbook](docs/progress.md) for the complete
 setup, schemas, individual commands, methodology and limitations. Outputs go to
 `results/module2/<run-id>/`, HDFS `/instacart/features/user_features`, and MongoDB
 `batch_product_metrics` / `department_metrics`. Compact measured fixture evidence
@@ -172,8 +173,8 @@ is in [docs/evidence](docs/evidence).
 New source layout:
 
 ```text
-src/partition_events.py   lossless streaming partition writer + receipt
-src/module2/             validation, analytics, experiments, task metrics, CLI
+src/module1/             data cleaning, synthetic timestamp generator, staging, producer
+src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
 scripts/module2.py       canonical Docker runner
 Dockerfile.spark         pinned Spark runtime
 tests/                   staging/unit/Spark integration regressions
@@ -187,7 +188,7 @@ without validation receipts are not accepted as a valid Module 2 handoff.
 Full execution passed on a GitHub-hosted Linux runner using real Docker, standalone
 Spark, HDFS and MongoDB: **33,819,106 source/local/HDFS events**, 456 daily
 partitions, and **15 passing tests**. See [full measured evidence](docs/evidence/full/README.md)
-and [reproduction instructions](docs/full_execution.md). The hosted services are
+and [execution guide](docs/progress.md). The hosted services are
 temporary; this validation does not install a permanent cluster on your computer.
 
 ## Next step: Module 3

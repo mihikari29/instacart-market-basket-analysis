@@ -5,13 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
-PARTITIONS = ["synthetic_year", "synthetic_month", "synthetic_day"]
+PARTITION_COLUMNS = ["synthetic_year", "synthetic_month", "synthetic_day"]
 
 
 def file_sha256(path: Path) -> str:
@@ -23,29 +22,40 @@ def file_sha256(path: Path) -> str:
 
 
 def partition_events(source: Path, destination: Path) -> dict:
-    """Destination must be empty. One writer owns names across ALL input batches.
-
-    At most 512 partition writers buffer 1024-row minimum groups. Larger feeds
-    may evict writers (unique names remain safe); standard feeds span 456 days.
-    """
-    pf = pq.ParquetFile(source)
-    if pf.metadata.num_rows == 0:
+    """Partition events by (year, month, day) in a single streaming writer session."""
+    parquet_file = pq.ParquetFile(source)
+    if parquet_file.metadata.num_rows == 0:
         raise ValueError("Empty interaction feed")
-    if set(PARTITIONS) & set(pf.schema_arrow.names):
+    if set(PARTITION_COLUMNS) & set(parquet_file.schema_arrow.names):
         raise ValueError("Source already contains partition columns")
-    schema = pf.schema_arrow
-    for name in PARTITIONS:
-        schema = schema.append(pa.field(name, pa.int32()))
+
+    schema = parquet_file.schema_arrow
+    for col_name in PARTITION_COLUMNS:
+        schema = schema.append(pa.field(col_name, pa.int32()))
 
     def batches():
-        for batch in pf.iter_batches(batch_size=65536):
+        for batch in parquet_file.iter_batches(batch_size=65536):
             table = pa.Table.from_batches([batch])
             dates = pc.strptime(table["synthetic_date"], format="%Y-%m-%d", unit="s")
             if dates.null_count:
-                raise ValueError("Null synthetic_date")
-            if not pc.all(pc.equal(pc.strftime(dates, format="%Y-%m-%d"), table["synthetic_date"])).as_py():
+                raise ValueError("Null synthetic_date found in input")
+
+            synthetic_dates = table["synthetic_date"]
+            years, months, days = pc.year(dates), pc.month(dates), pc.day(dates)
+            is_valid_date = pc.and_kleene(
+                pc.and_kleene(
+                    pc.equal(years, pc.cast(pc.utf8_slice_codeunits(synthetic_dates, 0, 4), pa.int32())),
+                    pc.equal(months, pc.cast(pc.utf8_slice_codeunits(synthetic_dates, 5, 7), pa.int32())),
+                ),
+                pc.and_kleene(
+                    pc.equal(days, pc.cast(pc.utf8_slice_codeunits(synthetic_dates, 8, 10), pa.int32())),
+                    pc.equal(pc.utf8_length(synthetic_dates), pa.scalar(10)),
+                ),
+            )
+            if not pc.all(is_valid_date).as_py():
                 raise ValueError("synthetic_date must be a valid ISO calendar date")
-            for name, values in zip(PARTITIONS, (pc.year(dates), pc.month(dates), pc.day(dates))):
+
+            for name, values in zip(PARTITION_COLUMNS, (years, months, days)):
                 table = table.append_column(name, pc.cast(values, pa.int32()))
             yield from table.to_batches()
 
@@ -54,7 +64,7 @@ def partition_events(source: Path, destination: Path) -> dict:
         str(destination),
         schema=schema,
         format="parquet",
-        partitioning=PARTITIONS,
+        partitioning=PARTITION_COLUMNS,
         partitioning_flavor="hive",
         existing_data_behavior="error",
         max_open_files=512,
@@ -64,18 +74,20 @@ def partition_events(source: Path, destination: Path) -> dict:
         max_rows_per_file=1048576,
         use_threads=False,
     )
-    files = sorted(destination.rglob("*.parquet"))
-    local_rows = sum(pq.ParquetFile(p).metadata.num_rows for p in files)
-    if local_rows != pf.metadata.num_rows:
-        raise ValueError(f"Lost rows: source={pf.metadata.num_rows}, local={local_rows}")
+
+    partition_files = sorted(destination.rglob("*.parquet"))
+    local_rows = sum(pq.ParquetFile(p).metadata.num_rows for p in partition_files)
+    if local_rows != parquet_file.metadata.num_rows:
+        raise ValueError(f"Row count mismatch: source={parquet_file.metadata.num_rows}, local={local_rows}")
+
     receipt = {
         "version": 1,
-        "source_rows": pf.metadata.num_rows,
+        "source_rows": parquet_file.metadata.num_rows,
         "local_rows": local_rows,
         "source_sha256": file_sha256(source),
-        "source_columns": pf.schema_arrow.names,
-        "files": len(files),
-        "partitions": len({p.parent for p in files}),
+        "source_columns": parquet_file.schema_arrow.names,
+        "files": len(partition_files),
+        "partitions": len({p.parent for p in partition_files}),
     }
     manifest = source.parent / "manifest.json"
     if manifest.exists():

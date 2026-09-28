@@ -5,8 +5,12 @@ import statistics
 import time
 from datetime import date, timedelta
 from functools import reduce
-from pyspark import StorageLevel
-from pyspark.sql import functions as F
+try:
+    from pyspark import StorageLevel
+    from pyspark.sql import functions as F
+except ImportError:
+    StorageLevel = None
+    F = None
 from .data import require
 
 

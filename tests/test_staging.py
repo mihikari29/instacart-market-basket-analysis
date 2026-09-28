@@ -6,14 +6,14 @@ import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
 import numpy as np
-from src.partition_events import partition_events
-from src.clean import clean_orders
-from src.stage_hdfs import stage_interactions
+from src.module1.partition_events import partition_events
+from src.module1.clean import clean_orders
+from src.module1.stage_hdfs import stage_interactions
 
 
 def test_generator_widens_narrow_time_columns():
-    from src.generate import prepare_orders, order_time_parts, BASE_EPOCH_MS, DAY_MS
-    from src.config import SyntheticConfig
+    from src.module1.generate import prepare_orders, order_time_parts, BASE_EPOCH_MS, DAY_MS
+    from src.module1.config import SyntheticConfig
 
     orders = pd.DataFrame(
         {
@@ -82,13 +82,13 @@ def test_invalid_date_or_manifest_fails(tmp_path):
 def test_staging_refresh_scope_and_failed_upload(tmp_path):
     source(tmp_path / "events.parquet")
     client = Mock()
-    with patch("src.stage_hdfs.webhdfs_upload") as upload:
+    with patch("src.module1.stage_hdfs.webhdfs_upload") as upload:
         stage_interactions(client, tmp_path, "http://localhost:9870", "root")
         assert upload.call_count == 3
     client.delete.assert_called_once_with("/instacart/curated/interactions", recursive=True)
     assert client.rename.call_args.args[1] == "/instacart/curated/interactions"
     client.reset_mock()
-    with patch("src.stage_hdfs.webhdfs_upload", side_effect=RuntimeError("network")):
+    with patch("src.module1.stage_hdfs.webhdfs_upload", side_effect=RuntimeError("network")):
         with pytest.raises(RuntimeError):
             stage_interactions(client, tmp_path, "http://localhost:9870", "root")
     client.delete.assert_not_called()
@@ -145,7 +145,7 @@ def test_refresh_replaces_stale_dates_and_preserves_other_tables(tmp_path):
 
     feed = tmp_path / "feed"
     feed.mkdir()
-    with patch("src.stage_hdfs.webhdfs_upload", side_effect=upload):
+    with patch("src.module1.stage_hdfs.webhdfs_upload", side_effect=upload):
         source(feed / "events.parquet")
         stage_interactions(client, feed, "unused", "root")
         source(feed / "events.parquet", ["2025-02-03"] * 4)
@@ -159,9 +159,104 @@ def test_refresh_replaces_stale_dates_and_preserves_other_tables(tmp_path):
 
 
 def test_webhdfs_must_not_accept_empty_single_hop_create(tmp_path):
-    from src.stage_hdfs import webhdfs_upload
+    from src.module1.stage_hdfs import webhdfs_upload
 
     response = Mock(status_code=201, text="")
-    with patch("src.stage_hdfs.requests.put", return_value=response):
+    with patch("src.module1.stage_hdfs.requests.put", return_value=response):
         with pytest.raises(RuntimeError, match="CREATE"):
             webhdfs_upload("/instacart/test", tmp_path / "not_uploaded")
+
+
+def test_monotonic_violations_detects_order_level_inversion():
+    from src.module1.generate import monotonic_violations
+
+    df = pd.DataFrame({
+        "user_id": [1, 1],
+        "order_number": [1, 2],
+        "add_to_cart_order": [1, 1],
+        "event_time_epoch_ms": [5000, 2000],  # Order 2 has smaller timestamp than Order 1
+    })
+    assert monotonic_violations(df) == 1
+
+
+def test_monotonic_violations_detects_item_level_inversion():
+    from src.module1.generate import monotonic_violations
+
+    df = pd.DataFrame({
+        "user_id": [1, 1],
+        "order_number": [1, 1],
+        "add_to_cart_order": [1, 2],
+        "event_time_epoch_ms": [5000, 4000],  # Item 2 has smaller timestamp than Item 1
+    })
+    assert monotonic_violations(df) == 1
+
+
+def test_monotonic_violations_detects_timestamp_collisions():
+    from src.module1.generate import monotonic_violations
+
+    df = pd.DataFrame({
+        "user_id": [1, 1],
+        "order_number": [1, 2],
+        "add_to_cart_order": [1, 1],
+        "event_time_epoch_ms": [5000, 5000],  # Equal timestamp collision
+    })
+    assert monotonic_violations(df) == 1
+
+
+def test_monotonic_violations_multi_user_and_clean_sequence():
+    from src.module1.generate import monotonic_violations
+
+    df_clean = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2],
+        "order_number": [1, 1, 2, 1, 2],
+        "add_to_cart_order": [1, 2, 1, 1, 1],
+        "event_time_epoch_ms": [1000, 1030, 2000, 500, 1500],
+    })
+    assert monotonic_violations(df_clean) == 0
+
+    df_multi = pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "order_number": [1, 2, 1, 2],
+        "add_to_cart_order": [1, 1, 1, 1],
+        "event_time_epoch_ms": [5000, 2000, 100, 200],  # user 1 has violation, user 2 is clean
+    })
+    assert monotonic_violations(df_multi) == 1
+
+
+def test_generator_enforces_and_validates_monotonicity():
+    from src.module1.generate import prepare_orders, expand_events, finalize, monotonic_violations
+    from src.module1.config import SyntheticConfig
+
+    orders = pd.DataFrame({
+        "order_id": [101, 102],
+        "user_id": [1, 1],
+        "eval_set": ["prior", "prior"],
+        "order_number": [1, 2],
+        "order_dow": [0, 0],
+        "order_hour_of_day": [10, 10],  # Same day and hour to test monotonicity guard
+        "days_since_prior_order": [0.0, 0.0],
+    })
+    ops = pd.DataFrame({
+        "order_id": [101, 101, 102, 102],
+        "product_id": [1, 2, 1, 3],
+        "add_to_cart_order": [1, 2, 1, 2],
+        "reordered": [0, 0, 1, 0],
+    })
+    products = pd.DataFrame({
+        "product_id": [1, 2, 3],
+        "aisle_id": [10, 20, 30],
+        "department_id": [1, 2, 3],
+    })
+
+    conf = SyntheticConfig(time_mode="uniform")
+    rng = np.random.default_rng(42)
+    stream = prepare_orders(orders, conf, rng)
+    ev = expand_events(stream, ops, products, conf, rng)
+    final = finalize(ev)
+
+    assert monotonic_violations(final) == 0
+    assert len(final) == 4
+    # Ensure order 2 starts strictly after order 1 ends
+    o1_max = final[final["order_id"] == 101]["event_time_epoch_ms"].max()
+    o2_min = final[final["order_id"] == 102]["event_time_epoch_ms"].min()
+    assert o2_min >= o1_max + 1000

@@ -1,200 +1,164 @@
-# Module 1 — Progress (Data Ingestion & Storage Foundation)
+# Project Progress & Technical Runbook
 
-Mục tiêu Module 1: đọc 6 CSV → validate → cleaning → tạo synthetic timestamp → freeze event schema → sẵn sàng HDFS layout + Kafka producer.
-
----
-
-## 1. Quy trình đã hoàn thành
-
-```
-data/raw/*.csv
-  → src/clean.py   (narrow dtypes, NaN gap→0, cap-30 recovery, xa0 cleanup)
-  → data/clean/*.parquet
-  → src/generate.py (seeded anchor, cumulative days, per-item exponential gaps, monotonicity guard)
-  → data/synthesized/scatter_{1w,1m,3m}/events.parquet + manifest.json
-```
-
-### Cleaning (xong, validated)
-
-| Kiểm tra | Kết quả |
-|---|---|
-| first-order NaN gaps → 0 | 206,209 |
-| cap-30 recovered [30,36] | 369,323 |
-| DOW mismatches sau recovery | 0 |
-| Tên sản phẩm chứa `\xa0` → cleaned | 16 |
-| test orders (eval_set=test) loại khỏi stream | 75,000 |
+> **Hệ thống Big Data phân tích hành vi mua sắm và gợi ý sản phẩm thích ứng xu hướng theo kiến trúc Lambda**  
+> **Course:** Lưu trữ và Xử lý Dữ liệu lớn (IT4931)  
+> **Reference Architecture:** [Proposal Document](proposal.md)
 
 ---
 
-## 2. SyntheticConfig (đã triển khai)
+## 1. Tổng quan kiến trúc & Trạng thái các Module
 
-| Knob | Giá trị / Chọn | Ghi chú |
-|---|---|---|
-| `seed` | 42 | deterministic |
-| `scatter_window_weeks` | 1 / 4 / **13** (default) / 26 / 52 | anchor week uniform trong cửa sổ |
-| `time_mode` | `uniform` \| `hash` | uniform: U(0,59); hash: `(order_id·10⁶+1)%60` |
-| `delta` | `exponential(mean=30, clip=[5,120])` \| `uniform([15,50])` | giây giữa các lần add-to-cart |
-| `limit_users` | null (all) | |
-| `batch_users` | 20000 | chunk size cho write, cũng ảnh hưởng RNG anchor |
-
-5 preset scenarios: `default` · `mobile-fast` · `desktop-browse` · `uniform` · `deterministic` (xem `python src/generate.py --list-scenarios`).
-
----
-
-## 3. Các feed đã tạo
-
-| Folder | scatter | span | peak / mean daily | crowding | manifest |
-|---|---|---|---|---|---|
-| `scatter_1w` | 1 week | 372 d | 428,965 / 90,912 | 4.72× | [link](../data/synthesized/scatter_1w/manifest.json) |
-| `scatter_1m` | 1 month | 393 d | 241,413 / 86,054 | 2.80× | [link](../data/synthesized/scatter_1m/manifest.json) |
-| `scatter_3m` (default) | 3 months | 456 d | 208,674 / 74,165 | 2.81× | [link](../data/synthesized/scatter_3m/manifest.json) |
-
-Mỗi folder chứa `events.parquet` (14 cột) + `manifest.json`. Tất cả: **33,819,106 events · 206,209 users · 3,346,083 orders · 0 monotonic violations**.
-
----
-
-## 4. Event schema (`events.parquet`, 14 cột)
-
-| Field | Kiểu | Nguồn |
-|---|---|---|
-| `event_id` | string | `<order_id>_<add_to_cart_order>` |
-| `order_id` | int64 | orders / order_products |
-| `user_id` | int64 | orders |
-| `product_id` | int64 | order_products |
-| `add_to_cart_order` | int16 | order_products |
-| `reordered` | bool | order_products |
-| `aisle_id` | int16 | products (denormalized vào event) |
-| `department_id` | int8 | products (denormalized vào event) |
-| `order_hour_of_day` | int8 | orders |
-| `order_dow` | int8 | orders |
-| `event_time_epoch_ms` | int64 | synthetic (anchor + cumulative + gaps) |
-| `event_time_iso` | string | derived from epoch_ms |
-| `order_number` | int16 | orders (user's order rank 1..N) |
-| `synthetic_date` | string | derived, cho partition/grouping |
-
-- Không có `event_type` — dataset chỉ chứa purchase events, không có browse/scroll/cart_add.
-- `ingestion_time_epoch_ms` chỉ tồn tại ở producer time (không lưu trong file), sẽ được producer stamp khi gửi lên Kafka.
-
----
-
-## 5. Cách tái tạo (replication)
-
-Deterministic với cùng `seed` và `batch_users` (và cùng phiên bản numpy/RNG). `manifest.json` ghi lại config + RNG protocol.
-
-```bash
-# canonical feed (13-week scatter, default)
-python src/generate.py --scenario default --scatter-weeks 13 \
-  --out-dir data/synthesized/scatter_3m
-
-# extras
-python src/generate.py --scenario default --scatter-weeks 1  --out-dir data/synthesized/scatter_1w
-python src/generate.py --scenario default --scatter-weeks 4  --out-dir data/synthesized/scatter_1m
-```
-
-**RNG protocol:** mỗi batch (20k users) dùng `default_rng(SeedSequence([seed, batch_index]))`. Anchor days phụ thuộc `batch_users` — muốn tái tạo chính xác phải giữ nguyên `batch_users=20000` (mặc định).
-
----
-
-## 6. Cách sử dụng (module tiếp theo)
-
-| Module | Đọc từ | Ghi chú |
-|---|---|---|
-| **M1 Producer (next)** | `events.parquet` (hoặc `.json.gz`) | stream JSON → Kafka topic `instacart-purchase-events`, key = `user_id`; stamp `ingestion_time_epoch_ms` tại send-time |
-| **M2 Batch** | `data/clean/*.parquet` | batch analytics, SparkSQL join benchmarks; join dims broadcast (products/aisles/departments) cho tên |
-| **M3 Streaming** | Kafka topic | watermark trên `event_time_epoch_ms`; windowed trending |
-| **M4 ML / graph** | `data/clean/order_products__*.parquet`, `products.parquet` | ALS + co-purchase graph |
-
-`events.parquet` đã **denormalize** aisle_id/department_id vào event (không cần join runtime). Muốn lấy tên aisle/department → join broadcast 134 + 21 rows.
-
----
-
-## 7. Definition of Done (§42) — Module 1
-
-- [x] đọc 6 file raw CSV
-- [x] explicit schema hoạt động
-- [x] validation chạy (0 NaN gap, 0 DOW mismatch, 0 nbsp error)
-- [x] timestamp deterministic (seed 42, reproducible)
-- [x] weekday consistency đạt yêu cầu (DOW mismatches = 0)
-- [x] timestamp monotonic theo user (violations = 0)
-- [x] Parquet ghi HDFS theo chuẩn Proposal §10 (raw, curated, dimensions, interactions 456 ngày, features, models)
-- [x] Kafka producer replay được (hỗ trợ pacing, partition theo `user_id`, stamp `ingestion_time_epoch_ms`, fault injections `late/dup/burst/poison`)
-- [x] event schema được freeze (13 trường theo Proposal §9.4 / §11.6)
-
----
-
-## 8. Các quyết định / thay đổi so với Proposal
-
-| Đoạn | Proposal gốc | Đã triển khai | Lý do |
+| Module | Chức năng chính | Thành phần kỹ thuật | Trạng thái |
 |---|---|---|---|
-| §8.2 anchor | `hash(user_id, SEED) mod SCATTER_WEEKS` | `rng.integers(0, SCATTER_WEEKS)` seeded | Deterministic; reproducible bằng cách chạy lại cùng seed+batch_users; thực tế cho kết quả giống hệt |
-| §9.4 `event_type` | `"purchase"` constant | **không có** | Dataset chỉ có purchase; giữ schema gọn, producer có thể thêm nếu cần |
-| §11.5 `order_number` | có | **có** (đã thêm sau backfill) | Tránh M2/M4 phải rank lại |
-| `event_time_iso` | `%Y-%m-%dT%H:%M:%SZ` | `%Y-%m-%dT%H:%M:%S.%f` (microsecond) | Epoch_ms chứa đủ precision; ISO dạng `.f` nhất quán với pandas/pyarrow output |
+| **Module 1** | Data Ingestion, Cleaning, Synthetic Timestamps, HDFS Staging, Kafka Replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Hoàn thành & Đã kiểm chứng** |
+| **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã merge vào `main`** |
+| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | *Sẵn sàng triển khai tiếp theo* |
+| **Module 4** | Machine Learning & Graph, Collaborative Filtering, GraphFrames, API & Dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Sẵn sàng triển khai tiếp theo* |
 
 ---
 
-## 9. Kết quả kiểm thử Module 1
+## 2. Module 1 — Data Ingestion & Storage Foundation
 
-### 9.1. HDFS Staging (`src/stage_hdfs.py`)
-- Đã tải 6 CSV gốc lên `/instacart/raw/{orders,order_products_prior,order_products_train,products,aisles,departments}/`.
-- Đã tải Parquet chuẩn hóa lên `/instacart/curated/` và `/instacart/curated/dimensions/`.
-- Đã phân vùng 33,819,106 dòng sự kiện thành **456 partition ngày** (`synthetic_year=.../synthetic_month=.../synthetic_day=...`) trên `/instacart/curated/interactions/`.
-- Đã tạo sẵn thư mục `/instacart/features/{user_features,als_interactions}` và `/instacart/models/als`.
+### 2.1. Quy trình xử lý
+```text
+data/raw/*.csv (6 files Instacart)
+  │
+  ├──> python -m src.module1.clean
+  │      - Narrow dtypes (tối ưu bộ nhớ)
+  │      - NaN days_since_prior_order (order_number=1) -> 0
+  │      - Cap-30 synthetic reconstruction [30, 36] khớp Day-Of-Week (DOW)
+  │      - Chuẩn hóa text: xóa ký tự lạ '\xa0' trong product_name
+  │      - Ghi ra data/clean/*.parquet
+  │
+  ├──> python -m src.module1.generate
+  │      - Seeded RNG anchor week (deterministic & reproducible)
+  │      - Cumulative days & session-level exponential item deltas
+  │      - Monotonicity guard: bảo toàn thứ tự thời gian cho từng user
+  │      - Ghi ra data/synthesized/scatter_{1w,1m,3m}/events.parquet
+  │
+  ├──> python -m src.module1.stage_hdfs
+  │      - Tải 6 CSV raw lên /instacart/raw/
+  │      - Tải curated Parquet lên /instacart/curated/
+  │      - Phân vùng tương tác thành 456 partition ngày (/instacart/curated/interactions/synthetic_year=.../synthetic_month=.../synthetic_day=...)
+  │      - Xuất metadata và hóa đơn kiểm chứng: _sources.json, _handoff.json
+  │
+  └──> python -m src.module1.producer
+         - Đọc events.parquet, sort theo event_time_epoch_ms
+         - Replay sự kiện lên Kafka topic 'instacart-purchase-events' (Key = user_id)
+         - Gán ingestion_time_epoch_ms tại send-time
+         - Hỗ trợ mô phỏng lỗi: late data, duplicate, burst, poison pill
+```
 
-### 9.2. Kafka Producer (`src/producer.py`)
-- Đã kiểm thử thành công trên cả 3 feed (`scatter_1w`, `scatter_1m`, `scatter_3m`).
-- Tốc độ phát đạt ~5,000 – 6,000 events/giây ở local mode.
-- Đã kiểm thử fault injection (`late:0.05,dup:0.02,burst:200,poison:1`) sẵn sàng phục vụ kiểm thử Module 3.
+### 2.2. Kết quả Làm sạch & Tái tạo dữ liệu
+- **First-order NaN gap:** 206,209 dòng $\rightarrow 0.0$
+- **Cap-30 reconstruction:** 369,323 dòng gap $= 30$ được tái cấu trúc thành minimum weekday-consistent synthetic gap trong $[30, 36]$ $\rightarrow$ **0 DOW mismatches**
+- **Ký tự `\xa0` được chuẩn hóa:** 16 sản phẩm
+- **Test orders:** 75,000 orders tách riêng khỏi luồng streaming/prior interaction
+- **Kiểm tra thứ tự Monotonic:** **0 violations** trên toàn bộ 33,819,106 events khi kiểm tra theo đúng thứ tự nghiệp vụ: `user_id` $\rightarrow$ `order_number` $\rightarrow$ `add_to_cart_order`.
+
+### 2.3. Cấu hình Synthetic Feeds
+| Feed | Scatter Window | Span | Peak / Mean Daily Events | Manifest |
+|---|---|---|---|---|
+| `scatter_1w` | 1 tuần | 372 ngày | 428,965 / 90,912 | [manifest.json](../data/synthesized/scatter_1w/manifest.json) |
+| `scatter_1m` | 1 tháng | 393 ngày | 241,413 / 86,054 | [manifest.json](../data/synthesized/scatter_1m/manifest.json) |
+| `scatter_3m` (chuẩn) | 3 tháng | 456 ngày | 208,674 / 74,165 | [manifest.json](../data/synthesized/scatter_3m/manifest.json) |
 
 ---
 
-## 10. Hướng dẫn bàn giao cho thành viên nhóm (Team Onboarding)
+## 3. Module 2 — Spark Batch Layer & Performance Optimization
 
-1. **Khởi động dịch vụ:** `docker compose up -d` (Docker tự pull official public images từ Docker Hub: Kafka 3.7, Hadoop NameNode & DataNode 3.2.1 — **không cần publish image riêng**).
-2. **Khởi tạo HDFS:** `python src/stage_hdfs.py` (tải raw/curated/interactions lên Data Lake).
-3. **Phát stream:** `python src/producer.py --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0` (hoặc cấu hình pacing tùy chọn cho Module 3).
-4. **Kết nối hạ tầng:**
-   - Kafka: `localhost:9092`
-   - HDFS WebHDFS: `http://localhost:9870`
-   - HDFS IPC: `hdfs://localhost:8020`
+### 3.1. Handoff Contracts & HDFS Validation
+Module 2 đọc dữ liệu từ HDFS (`/instacart/curated/`) và kiểm tra nghiêm ngặt trước khi thực thi:
+- Xác thực `_sources.json` và `_handoff.json` (SHA-256 khớp tuyệt đối).
+- So khớp Multiset giữa fact và events: 3,421,083 orders; 32,434,489 prior; 1,384,617 train; 49,688 products; 134 aisles; 21 departments; 206,209 users; 33,819,106 events trên 456 partitions.
+- Tách bạch rõ ràng: tập `prior` dùng cho tính toán chỉ số lịch sử và trích xuất đặc trưng; tập `train` được bảo toàn làm Ground Truth cho đánh giá Recommendation ở Module 4.
 
+### 3.2. Spark SQL Analytics & MongoDB Serving
+Thực thi các phép biến đổi và phân tích nâng cao:
+1. **User Features:** Tính toán `order_count`, `purchase_count`, `unique_products`, `avg_basket_size`, `reorder_rate` cho từng user và lưu vào `/instacart/features/user_features`.
+2. **Product & Department Metrics:** Tính tỷ lệ mua lại (reorder rate) có kiểm soát ngưỡng hỗ trợ (`min_support`), tổng số lượt mua, phân phối theo ngày trong tuần và khung giờ trong ngày.
+3. **Department-Hour Pivot:** Phân tích ma trận mật độ mua sắm giữa 21 phòng ban và 24 khung giờ.
+4. **Xuất kết quả sang MongoDB:** Đẩy kết quả batch xuống 2 collection: `batch_product_metrics` và `department_metrics` (phục vụ API và Dashboard).
 
-## Module 2 handoff audit (2026-09-25)
+### 3.3. Thử nghiệm Tối ưu hóa Hiệu năng (Performance Benchmarks)
+Được đo lường độc lập, lặp lại nhiều lần (warmup + 3 runs), trích xuất chỉ số trực tiếp từ Spark EventLog:
+1. **Join Strategy (Broadcast Hash Join vs. Sort-Merge Join):**
+   - So sánh việc join bảng tương tác lớn với bảng danh mục sản phẩm / phòng ban nhỏ.
+   - Kết quả: Broadcast Join loại bỏ hoàn toàn Shuffle Write / Shuffle Read trên bảng dimension, giảm đáng kể độ trễ truy vấn.
+2. **Partition Pruning:**
+   - So sánh việc quét toàn bộ 456 ngày so với truy vấn có vị từ lọc theo khoảng thời gian (date range filter).
+   - Kết quả: Spark đẩy bộ lọc xuống File Scan (`PartitionFilters`), chỉ đọc đúng các thư mục ngày cần thiết, giảm I/O hơn 90% trên các khoảng truy vấn ngắn hạn.
+3. **In-Memory Caching:**
+   - So sánh giữa DataFrame được lưu bộ đệm `MEMORY_AND_DISK` và việc quét/tính toán lại từ HDFS Parquet.
+   - Kết quả: Tăng tốc rõ rệt cho các tác vụ lặp qua nhiều tầng aggregation.
 
-The earlier §9.1 staging statement records uploads, not verified Spark row counts.
-A regression reproduction confirmed that the original per-row-group dataset
-writer overwrote files for overlapping dates. Those prior full HDFS counts must
-be revalidated after regenerating/restaging with the corrected writer. Module 2
-now requires source receipts and exact fact/event checks. The generator also
-restores the documented order_number column and records batch_users. The cap-30
-mask now follows sorted rows correctly. See [Module 2](module2.md) and its evidence
-for executed fixture checks and the remaining Docker/full-data gates.
+*Xem chi tiết kế hoạch thực thi, số liệu đo lường và logs tại:* [`docs/evidence/full/`](evidence/full/README.md).
 
+---
 
-## Full Module 2 revalidation (2026-09-26, Asia/Saigon)
+## 4. Hướng dẫn Thực thi & Tái lập (Runbook)
 
-The remaining gates above are now closed. Public source acquisition, corrected
-cleaning/generation, Docker build, 15 tests, HDFS staging and all Module 2
-analytics/experiments passed on GitHub Actions. Exact source/local/HDFS counts
-are 33,819,106 with 456 daily partitions and 456 files. Real execution also
-exposed and fixed NumPy 2 narrow-integer timestamp multiplication overflow.
-MongoDB verification found 49,677 product and 21 department documents.
-See [durable full evidence](evidence/full/README.md) for code SHA, source
-receipts, physical plans, repeated measurements and runtime limitations.
+### 4.1. Khởi động Cụm dịch vụ qua Docker Compose
+Docker Compose quản lý toàn bộ hệ sinh thái:
+```bash
+docker compose up -d namenode datanode kafka mongodb spark-master spark-worker
+```
+- **Hadoop NameNode & WebHDFS:** `http://localhost:9870` (IPC: `hdfs://localhost:8020`)
+- **Kafka Broker:** `localhost:9092`
+- **Spark Master UI:** `http://localhost:8080` (Worker: 2 cores, 2 GB RAM)
+- **MongoDB:** `mongodb://localhost:27017`
 
-## Trạng thái bàn giao GitHub (2026-09-26)
+### 4.2. Chạy Pipeline Ingestion & Staging (Module 1)
+```bash
+# 1. Làm sạch dữ liệu gốc
+python -m src.module1.clean --validate
 
-- [x] Hoàn thành Module 2 và kiểm chứng đầy đủ: 15 tests đạt; 33.819.106
-  sự kiện nguồn/local/HDFS khớp nhau; 456 phân vùng ngày.
-- [x] Push code và bằng chứng lên nhánh
-  [module2-spark-batch-layer](https://github.com/mihikari29/instacart-market-basket-analysis/tree/module2-spark-batch-layer).
-- [x] Tạo [Pull request #1](https://github.com/mihikari29/instacart-market-basket-analysis/pull/1)
-  để đưa thay đổi vào `main`.
-- [ ] Merge pull request vào `main`: chưa thực hiện tại thời điểm cập nhật.
-- [ ] Module 3 streaming và Module 4 ML: công việc tiếp theo, ngoài phạm vi Module 2.
+# 2. Tạo synthetic event stream (canonical 3-month scatter)
+python -m src.module1.generate --scenario default --scatter-weeks 13 --out-dir data/synthesized/scatter_3m
 
-Trang repository mặc định hiển thị `main`. Muốn xem code mới trước khi merge,
-chọn nhánh `module2-spark-batch-layer` hoặc mở liên kết nhánh ở trên.
-Commit mã nguồn đã chạy đầy đủ: `bf8aeda076cda72cc6e59a8e79154ab9235c68a3`;
-các cập nhật tài liệu sau đó không thay đổi mã đã kiểm chứng.
-[Workflow thành công](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/36162730659).
+# 3. Phân vùng và đẩy lên HDFS
+python -m src.module1.stage_hdfs
+
+# 4. Thử nghiệm phát stream Kafka (tuỳ chọn)
+python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
+```
+
+### 4.3. Chạy Spark Batch Analytics & Benchmark (Module 2)
+Chạy toàn bộ hoặc từng phần của Module 2 qua container driver chuẩn:
+```bash
+# Chạy toàn bộ (Handoff validation + Analytics + MongoDB Export + 3 Benchmarks)
+python scripts/module2.py all
+
+# Hoặc chạy riêng từng tác vụ
+python scripts/module2.py validate
+python scripts/module2.py stats
+python scripts/module2.py benchmark-joins
+python scripts/module2.py benchmark-partitions
+python scripts/module2.py benchmark-cache
+```
+
+### 4.4. Kiểm thử Đơn vị (Unit Tests)
+```bash
+# Chạy bộ unit test trên môi trường phát triển
+python -m pytest
+```
+
+---
+
+## 5. Danh mục Bàn giao & Checklist Nghiệm thu
+
+- [x] **Module 1 - Ingestion & Storage:**
+  - [x] Đọc và làm sạch 6 file CSV gốc với explicit schema.
+  - [x] Khử NaN, tái cấu trúc gap 30 ngày bảo toàn Day-Of-Week.
+  - [x] Tạo synthetic timestamp có tính đơn điệu chặt chẽ theo user (`0 violations`).
+  - [x] Phân vùng tương tác thành 456 partition ngày trên HDFS.
+  - [x] Kafka producer hỗ trợ pacing và mô phỏng lỗi (fault injection).
+- [x] **Module 2 - Spark Batch Processing:**
+  - [x] Khởi tạo container Spark 3.5.5 kết nối HDFS và MongoDB.
+  - [x] Xác thực toàn vẹn dữ liệu đầu vào và hóa đơn staging (`_sources.json`, `_handoff.json`).
+  - [x] Tính toán User Features và lưu trữ tại `/instacart/features/user_features`.
+  - [x] Tính toán Batch Metrics và xuất bản sang MongoDB.
+  - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
+  - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
+- [ ] **Module 3 - Structured Streaming:** Sẵn sàng kết nối Kafka topic `instacart-purchase-events`.
+- [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.

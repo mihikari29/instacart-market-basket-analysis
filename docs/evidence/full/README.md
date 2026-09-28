@@ -81,4 +81,4 @@ were stopped after the run. Raw data and giant logs are not committed; GitHub's
 artifact has 14-day retention, while these compact files remain in Git history.
 The complete workflow took approximately 19 minutes, including data acquisition,
 generation, Docker build, tests and cleanup. Module 3 streaming and Module 4 ML
-remain separate work. See [reproduction instructions](../../full_execution.md).
+remain separate work. See [progress runbook](../../progress.md).

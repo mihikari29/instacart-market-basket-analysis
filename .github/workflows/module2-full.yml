@@ -35,8 +35,8 @@ jobs:
         run: python scripts/fetch_instacart.py
       - name: Regenerate corrected Module 1 handoff
         run: |
-          python src/clean.py --validate
-          python src/generate.py --scenario default --scatter-weeks 13 --batch-users 2000 --out-dir data/synthesized/scatter_3m
+          python -m src.module1.clean --validate
+          python -m src.module1.generate --scenario default --scatter-weeks 13 --batch-users 2000 --out-dir data/synthesized/scatter_3m
       - name: Build pinned Spark runtime and run tests
         run: |
           docker compose build spark-master
@@ -45,7 +45,7 @@ jobs:
         run: |
           docker compose up -d --wait namenode datanode
           docker compose exec -T namenode hdfs dfsadmin -safemode wait
-          python src/stage_hdfs.py
+          python -m src.module1.stage_hdfs
       - name: Canonical full Module 2 execution
         run: python scripts/module2.py all --shuffle-partitions 32 --source-events data/synthesized/scatter_3m/events.parquet
       - name: Verify full counts and serving outputs

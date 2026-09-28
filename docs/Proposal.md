@@ -378,16 +378,16 @@ order_date(i)
 + cumulative_sum(days_since_prior_order)
 ```
 
-## 8.4. Recovery cho gap bị cap ở 30
+## 8.4. Synthetic reconstruction cho gap bị cap ở 30
 
-Với các gap bằng 30, dùng:
+Với các gap bị cap bằng 30 (khoảng thời gian thực tế có thể lớn hơn 30 ngày), thuật toán tái cấu trúc synthetic gap tối thiểu trong khoảng 30–36 ngày sao cho khớp với day-of-week (minimum weekday-consistent synthetic gap):
 
 ```text
-gap_true
+gap_synthetic
 = 30 + ((next_dow - prev_dow - 2) mod 7)
 ```
 
-nhằm khôi phục gap 30–36 ngày và đảm bảo weekday consistency.
+nhằm đảm bảo tính nhất quán giữa synthetic calendar dates và weekday (`order_dow`) trong dữ liệu.
 
 ## 8.5. Item-level event time
 
