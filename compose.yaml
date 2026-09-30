@@ -138,6 +138,28 @@ services:
       mongodb:
         condition: service_healthy
 
+  module3:
+    image: instacart-spark:3.5.5
+    profiles: ["tools"]
+    hostname: module3
+    entrypoint: ["python3", "-m", "src.module3.cli"]
+    command: ["all"]
+    environment:
+      SPARK_MASTER: spark://spark-master:7077
+      MODULE3_ROOT: hdfs://namenode:8020/instacart
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MONGODB_URI: mongodb://mongodb:27017/instacart
+      PYSPARK_SUBMIT_ARGS: --conf spark.driver.host=module3 --conf spark.driver.bindAddress=0.0.0.0 pyspark-shell
+    volumes:
+      - .:/workspace
+    depends_on:
+      spark-worker:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
 volumes:
   namenode_data:
   datanode_data:

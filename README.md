@@ -120,7 +120,7 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Next |
+| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Implemented; awaiting live-cluster validation in CI |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
 ## Team Onboarding & Environment Setup
@@ -195,6 +195,54 @@ partitions, and **15 passing tests**. See [full measured evidence](docs/evidence
 and [execution guide](docs/progress.md). The hosted services are
 temporary; this validation does not install a permanent cluster on your computer.
 
-## Next step: Module 3
+## Module 3 — Speed layer (Spark Structured Streaming)
 
- **Module 3 (Speed Layer)**: Spark Structured Streaming consuming `instacart-purchase-events`, watermark trên `event_time_epoch_ms`, và tính realtime trending window.
+Consumes `instacart-purchase-events` (Module 1 producer), applies an
+event-time watermark of 10 minutes on `event_time_epoch_ms`, computes
+trending scores over 30- and 120-minute sliding windows (5-minute slide)
+and upserts `realtime_trending` into MongoDB via idempotent `foreachBatch`
+(Proposal §17–22).
+
+```bash
+# Validate Kafka + Mongo connectivity (no streaming)
+python scripts/module3.py validate
+
+# Run streaming query in the foreground (Ctrl+C to stop)
+python scripts/module3.py run --duration-seconds 0
+
+# Trending blend with default 0.7/0.3 weights; configurable via flags
+# --window-short 30 minutes --window-long 120 minutes --slide 5 minutes
+# --watermark 10 minutes --weight-short 0.7 --weight-long 0.3
+
+# Late-event / poison-pill demo: start producer with --inject from another shell
+#   python -m src.module1.producer --feed data/synthesized/scatter_3m \
+#     --limit-events 50000 --inject "late:0.05,dup:0.02"
+python scripts/module3.py late-demo --duration-seconds 60
+
+# Throughput + Kafka partition sweep (Proposal §15.4, §15.5)
+python scripts/module3.py benchmark-throughput --duration-seconds 60
+python scripts/module3.py benchmark-partitions --duration-seconds 60
+
+# All benchmarks in one go
+python scripts/module3.py all --duration-seconds 60
+```
+
+Output goes to `results/module3/<run_id>/` (summary.json, analytics
+streaming_progress.jsonl, event log) and into MongoDB collection
+`realtime_trending` with indexes `(window_end, product_id)` unique and
+`(window_end, trend_rank)`. TTL on `updated_at` is **disabled by default**
+(`ttl_seconds = 0`); pass `--ttl-seconds 86400` to demo W4 automatic
+window cleanup. Evidence lives in [docs/evidence/module3](docs/evidence/module3/README.md)
+and is uploaded by [module3-full.yml](.github/workflows/module3-full.yml).
+
+Tests: `tests/test_module3.py` covers Kafka JSON schema parse, poison-pill
+drop, window aggregation counts, trend-score normalization bounds, trend-rank
+uniqueness within each window, and weight-sum invariant. All gated behind
+`pytest.mark.integration` (skipped if `pyspark` is unavailable locally).
+
+## Next step: Module 4
+
+**Module 4 (ML & Serving)**: ALS recommendation from `order_products__prior`
+(history) with `order_products__train` as ground truth, GraphFrames
+co-purchase graph (weighted degree + PageRank), and Serving Layer
+blending `λ·norm(ALS) + (1-λ)·norm(Trend)` into `final_recommendations`.

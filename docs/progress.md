@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Module 1** | Data Ingestion, Cleaning, Synthetic Timestamps, HDFS Staging, Kafka Replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Hoàn thành & Đã kiểm chứng** |
 | **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã merge vào `main`** |
-| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | *Sẵn sàng triển khai tiếp theo* |
+| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành implement; chờ CI live-cluster** |
 | **Module 4** | Machine Learning & Graph, Collaborative Filtering, GraphFrames, API & Dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Sẵn sàng triển khai tiếp theo* |
 
 ---
@@ -137,10 +137,42 @@ python scripts/module2.py benchmark-partitions
 python scripts/module2.py benchmark-cache
 ```
 
-### 4.4. Kiểm thử Đơn vị (Unit Tests)
+### 4.4. Chạy Spark Structured Streaming (Module 3)
+Module 3 tiêu thụ Kafka topic `instacart-purchase-events`, áp dụng watermark
+10 phút trên `event_time_epoch_ms`, tính trending score qua 2 sliding windows
+(30/120 phút, slide 5 phút) và upsert idempotent vào MongoDB collection
+`realtime_trending` (Proposal §17–22):
+```bash
+# Validate Kafka + Mongo connectivity (không stream)
+python scripts/module3.py validate
+
+# Run streaming foreground (Ctrl+C để dừng; --duration-seconds 0 = forever)
+python scripts/module3.py run --duration-seconds 0
+
+# Late/poison-pill demo — khởi động producer ở shell khác:
+#   python -m src.module1.producer --feed data/synthesized/scatter_3m \
+#     --limit-events 50000 --inject "late:0.05,dup:0.02"
+python scripts/module3.py late-demo --duration-seconds 60
+
+# Benchmarks (Proposal §15.4, §15.5)
+python scripts/module3.py benchmark-throughput --duration-seconds 60
+python scripts/module3.py benchmark-partitions --duration-seconds 60
+python scripts/module3.py all --duration-seconds 60
+
+# Tuỳ chọn: bật TTL 24h trên realtime_trending.updated_at để demo W4
+python scripts/module3.py run --ttl-seconds 86400
+```
+Cấu hình windows/watermark/weights có thể override qua CLI flags:
+`--window-short`, `--window-long`, `--slide`, `--watermark`,
+`--weight-short`, `--weight-long`, `--trigger-interval`.
+
+### 4.5. Kiểm thử Đơn vị (Unit Tests)
 ```bash
 # Chạy bộ unit test trên môi trường phát triển
 python -m pytest
+
+# Chỉ test Module 3 (cần pyspark; Kafka/Mongo live test cần cluster)
+docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q tests/test_module3.py
 ```
 
 ---
@@ -160,5 +192,16 @@ python -m pytest
   - [x] Tính toán Batch Metrics và xuất bản sang MongoDB.
   - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
   - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
-- [ ] **Module 3 - Structured Streaming:** Sẵn sàng kết nối Kafka topic `instacart-purchase-events`.
+- [x] **Module 3 - Structured Streaming:**
+  - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
+  - [x] Event-time watermark 10 phút trên `event_time_epoch_ms`.
+  - [x] 2 sliding windows (30/120 phút, slide 5 phút) + trend_score = 0.7·N(C30m) + 0.3·N(C120m).
+  - [x] `foreachBatch` upsert idempotent vào MongoDB `realtime_trending` (key `window_end__product_id`).
+  - [x] Indexes `(window_end, product_id)` unique + `(window_end, trend_rank)`; TTL tuỳ chọn (mặc định 0).
+  - [x] Checkpoint dir theo run_id; query progress ghi vào `streaming_progress.jsonl`.
+  - [x] Late/poison/dup demo qua `--inject` của module1 producer (không thêm code mới).
+  - [x] Benchmark throughput (Proposal §15.4) + Kafka partition sweep 1/2/4/8 (§15.5).
+  - [x] Unit tests trong `tests/test_module3.py`: schema, poison-pill, window counts, normalization, rank, weights.
+  - [x] CI workflow `.github/workflows/module3-full.yml` + evidence folder `docs/evidence/module3/`.
+  - [ ] Live-cluster CI pass (chưa trigger; cần push branch `module3-speed-layer`).
 - [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.
