@@ -1,14 +1,14 @@
 """Checkpoint location management for streaming queries.
 
-Each run_id gets its own checkpoint dir so concurrent runs and partition
-sweep benchmarks don't trample state. Reset deletes the dir for clean re-runs.
+Checkpoint identity is deliberately separate from evidence run identity so a
+later process can resume Kafka offsets and aggregation state.
 """
 
 from pathlib import Path
 
 
-def ensure_checkpoint(output_dir: Path, run_id: str) -> str:
-    checkpoint = (output_dir / "checkpoint" / run_id).resolve()
+def ensure_checkpoint(output_dir: Path, checkpoint_id: str) -> str:
+    checkpoint = (output_dir / "checkpoint" / checkpoint_id).resolve()
     checkpoint.mkdir(parents=True, exist_ok=True)
     return checkpoint.as_uri()
 

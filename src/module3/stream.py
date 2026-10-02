@@ -1,7 +1,7 @@
 """Stream runner: Kafka -> trending -> foreachBatch MongoDB upsert.
 
-Designed for the `run` and `late-demo` CLI subcommands. Benchmarks use
-benchmark.py which drives its own queries with explicit AvailableNow triggers.
+Designed for the `run` and `late-demo` CLI subcommands and reused by benchmark
+orchestration with finite durations.
 """
 
 import json
@@ -14,7 +14,7 @@ from pyspark.sql.streaming import StreamingQuery
 from .config import Config
 from .parse import from_kafka
 from .sink_mongo import write_mongo
-from .trending import build_trending
+from .trending import build_window_counts, rank_trending_batch
 from .checkpoint import ensure_checkpoint
 
 
@@ -25,59 +25,109 @@ def _progress_logger(query: StreamingQuery, output_dir: Path, stop_event) -> Thr
     """Background thread that polls recentProgress into a JSONL log."""
     log_path = output_dir / PROGRESS_LOG_NAME
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    seen_batch_ids = set()
+
+    def _record(progress):
+        batch_id = progress.get("batchId")
+        if batch_id in seen_batch_ids:
+            return None
+        seen_batch_ids.add(batch_id)
+        duration = progress.get("durationMs") or {}
+        event_time = progress.get("eventTime") or {}
+        state_operators = []
+        for operator in progress.get("stateOperators") or []:
+            state_operators.append(
+                {
+                    "numRowsTotal": operator.get("numRowsTotal"),
+                    "numRowsUpdated": operator.get("numRowsUpdated"),
+                    "numRowsRemoved": operator.get("numRowsRemoved"),
+                    "numRowsDroppedByWatermark": operator.get("numRowsDroppedByWatermark"),
+                }
+            )
+        return {
+            "capturedAtEpoch": time.time(),
+            "id": progress.get("id"),
+            "batchId": batch_id,
+            "numInputRows": progress.get("numInputRows"),
+            "inputRowsPerSecond": progress.get("inputRowsPerSecond"),
+            "processedRowsPerSecond": progress.get("processedRowsPerSecond"),
+            "durationMs": {
+                "triggerExecution": duration.get("triggerExecution"),
+                "addBatch": duration.get("addBatch"),
+                "getBatch": duration.get("getBatch"),
+            },
+            "eventTime": event_time,
+            "stateOperators": state_operators,
+            "sources": progress.get("sources") or [],
+            "sink": progress.get("sink") or {},
+            "timestamp": progress.get("timestamp"),
+        }
 
     def _loop():
         with log_path.open("a", encoding="utf-8") as fh:
-            while not stop_event.is_set() and query.isActive:
+            while True:
                 try:
                     for progress in query.recentProgress:
-                        progress_record = {
-                            "captured_at": time.time(),
-                            "id": progress.get("id"),
-                            "batch_id": progress.get("batchId"),
-                            "input_rows_per_second": progress.get("inputRowsPerSecond"),
-                            "processed_rows_per_second": progress.get("processedRowsPerSecond"),
-                            "trigger_duration_ms": (progress.get("triggerDuration") or {}).get("computeExecutionMs"),
-                            "num_input_sources": len(progress.get("sources", [])),
-                            "timestamp": progress.get("timestamp"),
-                        }
-                        fh.write(json.dumps(progress_record, default=str) + "\n")
-                        fh.flush()
+                        progress_record = _record(progress)
+                        if progress_record is not None:
+                            fh.write(json.dumps(progress_record, default=str) + "\n")
+                            fh.flush()
                 except Exception:
                     pass
-                stop_event.wait(2.0)
+                if stop_event.wait(2.0) or not query.isActive:
+                    break
+
+            try:
+                for progress in query.recentProgress:
+                    progress_record = _record(progress)
+                    if progress_record is not None:
+                        fh.write(json.dumps(progress_record, default=str) + "\n")
+                fh.flush()
+            except Exception:
+                pass
 
     thread = Thread(target=_loop, daemon=True)
     return thread
 
 
-def run_stream(spark, config: Config, output_dir: Path, run_id: str, duration_seconds: int | None = None) -> dict:
-    """Start the streaming query. If duration_seconds given, block until done."""
-    from pyspark.sql.streaming import Trigger
-
+def run_stream(
+    spark,
+    config: Config,
+    output_dir: Path,
+    run_id: str,
+    duration_seconds: int | None = None,
+    checkpoint_id: str | None = None,
+    on_query_started=None,
+) -> dict:
+    """Run until the duration expires, or indefinitely until interrupted."""
     events = from_kafka(spark, config)
-    trend = build_trending(events, config)
-    checkpoint = ensure_checkpoint(output_dir, run_id)
-
-    trigger = Trigger.ProcessingTime(config.trigger_interval) if config.trigger_interval else Trigger.ProcessingTime()
+    counts = build_window_counts(events, config)
+    checkpoint_identity = checkpoint_id or run_id
+    checkpoint = ensure_checkpoint(output_dir.parent, checkpoint_identity)
 
     def _foreach(batch_df, batch_id):
-        return write_mongo(batch_df, batch_id, config)
+        ranked = rank_trending_batch(batch_df, config)
+        return write_mongo(ranked, batch_id, config)
 
-    query = (
-        trend.writeStream
-        .outputMode("update")
-        .trigger(trigger)
+    writer = (
+        counts.writeStream
+        # Append emits only finalized windows. This guarantees foreachBatch sees
+        # every product for a window_end together for complete normalization.
+        .outputMode("append")
         .option("checkpointLocation", checkpoint)
         .foreachBatch(_foreach)
         .queryName("instacart-realtime-trending")
-        .start()
     )
+    if config.trigger_interval:
+        writer = writer.trigger(processingTime=config.trigger_interval)
+    query = writer.start()
+    started_monotonic = time.monotonic()
 
     info = {
         "query_id": query.id,
         "query_name": query.name,
         "checkpoint_location": checkpoint,
+        "checkpoint_id": checkpoint_identity,
         "trigger_interval": config.trigger_interval,
         "window_short": config.window_short,
         "window_long": config.window_long,
@@ -87,18 +137,26 @@ def run_stream(spark, config: Config, output_dir: Path, run_id: str, duration_se
         "progress_log": str(output_dir / PROGRESS_LOG_NAME),
     }
 
-    if duration_seconds is None:
-        return info
-
     stop_event = __import__("threading").Event()
     logger_thread = _progress_logger(query, output_dir, stop_event)
     logger_thread.start()
     try:
-        deadline = time.time() + duration_seconds
-        while query.isActive and time.time() < deadline:
-            time.sleep(1.0)
+        if on_query_started is not None:
+            info["orchestration"] = on_query_started(query)
+        if duration_seconds is not None and duration_seconds > 0:
+            elapsed = time.monotonic() - started_monotonic
+            query.awaitTermination(max(0.0, duration_seconds - elapsed))
+        else:
+            # Do not block inside a Py4J call forever: PySpark's SIGINT handler
+            # also uses the gateway and can otherwise re-enter it on Ctrl+C.
+            while query.isActive:
+                time.sleep(1.0)
+            failure = query.exception()
+            if failure is not None:
+                raise failure
+    except KeyboardInterrupt:
+        info["interrupted"] = True
     finally:
-        query.awaitTermination(timeout=5)
         if query.isActive:
             query.stop()
         stop_event.set()

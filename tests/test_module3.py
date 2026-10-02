@@ -6,18 +6,27 @@ poison-pill guard. Kafka/Mongo live integration is gated behind the
 `integration` marker (CI may skip when services unavailable).
 """
 
+# ruff: noqa: E402 -- imports intentionally follow pytest.importorskip.
+
 from datetime import datetime, timezone
+import json
 import pytest
 
 pyspark = pytest.importorskip("pyspark")
-from pyspark.sql import functions as F
-from pyspark.sql.types import LongType
+from pyspark.sql.types import StringType, StructField, StructType
 
 from src.module3.config import Config
+from src.module3.checkpoint import ensure_checkpoint
 from src.module3.spark import session
 from src.module3.fixtures import make_events_dataframe
+from src.module3.parse import parse_json_events
 from src.module3.schemas import KAFKA_EVENT_SCHEMA
-from src.module3.trending import _window_agg, build_trending
+from src.module3.trending import (
+    _window_agg,
+    build_trending,
+    build_window_counts,
+    rank_trending_batch,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -65,26 +74,53 @@ def test_poison_pill_product_id_falls_to_null_and_drops(spark_session):
          "add_to_cart_order": 1, "reordered": True, "aisle_id": 1, "department_id": 1,
          "order_dow": 0, "order_hour_of_day": 0, "event_time_epoch_ms": base + 60_000,
          "event_time_iso": "2024-01-01T00:01:00Z", "ingestion_time_epoch_ms": base + 60_000},
+        {"event_id": "bad_3", "order_id": 3, "user_id": 1, "product_id": 2,
+         "add_to_cart_order": 1, "reordered": True, "aisle_id": 1, "department_id": 1,
+         "order_dow": 0, "order_hour_of_day": 0, "event_time_epoch_ms": "MALFORMED",
+         "event_time_iso": "invalid", "ingestion_time_epoch_ms": base + 60_000},
     ]
-    # KAFKA_EVENT_SCHEMA declares product_id LongType; createDataFrame coerces to null
-    df = spark_session.createDataFrame(rows, schema=KAFKA_EVENT_SCHEMA)
-    casted = df.withColumn("product_id", F.col("product_id").cast(LongType()))
-    casted = casted.where(F.col("product_id").isNotNull() & F.col("event_time_epoch_ms").isNotNull())
-    assert casted.count() == 1
-    assert casted.collect()[0].event_id == "ok_1"
+    payloads = [json.dumps(row) for row in rows] + ["{not valid json", json.dumps({"product_id": 7})]
+    raw = spark_session.createDataFrame(
+        [(payload,) for payload in payloads],
+        StructType([StructField("json_str", StringType())]),
+    )
+    parsed = parse_json_events(raw)
+    assert parsed.count() == 1
+    assert parsed.collect()[0].event_id == "ok_1"
 
 
 def test_window_short_aggregation_counts(spark_session):
     """30 minute windows at 5 minute slide: assert expected counts on fixture rows."""
     events = make_events_dataframe(spark_session)
     short = _window_agg(events, "30 minutes", "5 minutes", "purchase_count_short")
-    rows = short.collect()
-    # window at base+0..base+30m contains products 1,2,3,1 (4 events, 3 distinct products)
-    # Find that window.
-    matching = [r for r in rows if r.purchase_count_short == 4]
-    assert matching, f"Expected one window with 4 events; got {[r.asDict() for r in rows]}"
-    products_in_that_window = sorted({r.product_id for r in matching})
-    assert products_in_that_window == [1, 2, 3]
+    start = datetime(2024, 1, 1, 0, 0)
+    end = datetime(2024, 1, 1, 0, 30)
+    matching = {
+        row.product_id: row.purchase_count_short
+        for row in short.collect()
+        if row.window_start == start and row.window_end == end
+    }
+    assert matching == {1: 2, 2: 1, 3: 2}
+
+
+def test_fixture_does_not_mutate_global_schema(spark_session):
+    original_names = KAFKA_EVENT_SCHEMA.fieldNames()
+    make_events_dataframe(spark_session)
+    make_events_dataframe(spark_session)
+    assert KAFKA_EVENT_SCHEMA.fieldNames() == original_names
+
+
+def test_single_aggregation_computes_short_and_long_counts(spark_session):
+    events = make_events_dataframe(spark_session)
+    counts = build_window_counts(events, Config.environment(shuffle_partitions=2))
+    start = datetime(2024, 1, 1, 0, 0)
+    end = datetime(2024, 1, 1, 2, 0)
+    matching = {
+        row.product_id: (row.purchase_count_30m, row.purchase_count_120m)
+        for row in counts.collect()
+        if row.window_start == start and row.window_end == end
+    }
+    assert matching == {1: (1, 3), 2: (0, 2), 3: (0, 2)}
 
 
 def test_trend_score_normalization_bounded(spark_session):
@@ -116,3 +152,29 @@ def test_weights_sum_to_one_enforced():
     """Config must reject weight combinations that don't sum to 1.0 (Proposal §28.3)."""
     with pytest.raises(ValueError, match="sum to 1"):
         Config.environment(weight_short=0.6, weight_long=0.5)
+
+
+def test_degenerate_normalization_and_rank_tie_break(spark_session):
+    rows = [
+        (datetime(2024, 1, 1, 0, 0), datetime(2024, 1, 1, 2, 0), 2, 4, 8),
+        (datetime(2024, 1, 1, 0, 0), datetime(2024, 1, 1, 2, 0), 1, 4, 8),
+    ]
+    counts = spark_session.createDataFrame(
+        rows,
+        "window_start timestamp, window_end timestamp, product_id long, "
+        "purchase_count_30m long, purchase_count_120m long",
+    )
+    ranked = rank_trending_batch(counts, Config.environment(shuffle_partitions=2)).collect()
+    assert [(row.product_id, row.trend_score, row.trend_rank) for row in ranked] == [
+        (1, 0.0, 1),
+        (2, 0.0, 2),
+    ]
+
+
+def test_checkpoint_identity_is_stable_across_run_ids(tmp_path):
+    first = ensure_checkpoint(tmp_path, "recovery-smoke")
+    second = ensure_checkpoint(tmp_path, "recovery-smoke")
+    other = ensure_checkpoint(tmp_path, "other-run")
+    assert first == second
+    assert first != other
+    assert first.endswith("/checkpoint/recovery-smoke")

@@ -13,6 +13,8 @@ venv/
 .env.*
 !.env.example
 /results/module2/
+/results/module3/
+/results/module3-smoke/
 /spark-warehouse/
 /metastore_db/
 derby.log

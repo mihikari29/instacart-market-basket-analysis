@@ -1,51 +1,79 @@
 # Module 3 Evidence (Speed Layer)
 
-> Status: **Implementation complete; live-cluster validation pending in CI.**
+> Status: **Implemented and validated locally with Docker Compose on 2026-10-02.**
 
-This folder collects acceptance evidence for the Spark Structured Streaming
-speed layer (Proposal §17–22, syllabus W10). Layout mirrors
-[`docs/evidence/`](../README.md) used by Module 2.
+Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The host Python/Java
+installations are not used for Spark execution. The checked-in CI workflow
+repeats a bounded version of the live validations below. Its current execution
+status is reported by the pull-request checks rather than this local snapshot.
 
-## Expected deliverables (Definition of Done — Proposal §42)
+## Local validation results
 
-| Gate | Artifact |
-|---|---|
-| Kafka connectivity + topic metadata | `results/module3/<run_id>/summary.json` → `kafka_validation` |
-| Kafka → Spark Structured Streaming runs | `streaming_progress.jsonl` per `benchmark-throughput`/`run` |
-| JSON parse + poison-pill drop | covered by `tests/test_module3.py::test_poison_pill_*` |
-| Event-time window (30 / 120 minutes, 5-minute slide) | `tests/test_module3.py::test_window_short_aggregation_counts` |
-| Watermark 10 minutes active | `streaming_progress.jsonl` records dropped windows |
-| Late-event handling | `late-demo` subcommand + producer `--inject "late:0.05,dup:0.02"` |
-| Trending score computed | `trend_score`/`trend_rank` fields in `realtime_trending` Mongo collection |
-| Checkpoint recovery | checkpoint dir under `results/module3/<run_id>/checkpoint/` |
-| Idempotent MongoDB upsert | `sink_mongo.write_mongo` uses `_id = "window_end__product_id"`, `upsert=True` |
-| Throughput benchmark (Proposal §15.4) | `results/module3/<run_id>/summary.json` → `throughput_benchmark` |
-| Kafka partition sweep (Proposal §15.5) | `results/module3/<run_id>/summary.json` → `partition_benchmark` |
+| Gate | Measured result | Local artifact |
+|---|---|---|
+| Module 3 tests | `10 passed in 11.91s` | Docker pytest output |
+| Complete repository tests | `30 passed in 24.62s` | Docker pytest output |
+| Kafka connectivity | host listener `localhost:9092`; Docker listener `kafka:29092`; canonical topic has 4 partitions | `results/module3/validate/` |
+| Spark Kafka connector | `spark-sql-kafka-0-10_2.12:3.5.5` loaded by a live query | `results/module3/smoke/` |
+| Live end-to-end smoke | 50,000 produced and 50,000 processed; 1,111,592 finalized Mongo documents | `results/module3/smoke/smoke_evidence.json` |
+| Watermark / late data | within-watermark event accepted; beyond-watermark event dropped; selected output count remained 2 | `results/module3/late/*/late_data_evidence.json` |
+| Checkpoint recovery | first process read 3 rows; second process with the same checkpoint read only 2 new rows; query ID unchanged | `results/module3/recovery/recovery_evidence.json` |
+| Duration zero | remained active until interactive Ctrl+C, then stopped with exit code 0 | `results/module3/duration-zero/` |
+| Throughput | 100/s, 500/s, and bulk producer arms; 1 warm-up + 3 measured trials each | `results/module3/benchmark-throughput/*/summary.json` |
+| Kafka partitions | broker and Spark both observed actual 1/2/4/8 partition topics; 1 warm-up + 3 runs each | `results/module3/benchmark-partitions/*/summary.json` |
 
-## Live cluster run
+Generated `results/module3/` data is intentionally gitignored because Spark
+event logs and checkpoints are large. A compact checked-in measurement summary
+is in [`local-validation-2026-10-02.json`](local-validation-2026-10-02.json).
 
-A full run is triggered automatically on pushes to
-`module3-speed-layer` via [module3-full.yml](../../.github/workflows/module3-full.yml)
-and uploads `results/module3/*` as an artifact for 14 days. Once a successful
-run is recorded, copy `summary.json` and `streaming_progress.jsonl` into
-`full/` and link the GitHub Actions run URL here.
+## Architecture validated
 
-## Local / fixture evidence
+The streaming plan contains one stateful 120-minute sliding aggregation with a
+5-minute slide and 10-minute watermark. `purchase_count_30m` is calculated by
+conditionally counting events in `[window_end - 30 minutes, window_end)`.
+Append mode emits finalized windows. Min/max normalization and deterministic
+`row_number` ranking run only on the static DataFrame provided by
+`foreachBatch`.
 
-The unit-level evidence for schema parsing, window alignment, normalization
-bounds, trend-rank uniqueness and weight-sum invariant is captured by
-`tests/test_module3.py`. Numbers will be filled in after the first
-`docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q
-tests/test_module3.py` execution.
+Progress JSONL records each `batchId` once and includes input/processing rates,
+`durationMs`, watermark, state totals/updates/removals/drops, source offsets,
+and sink metadata.
 
-## Notes / known limitations
+## Measured summaries
 
-- The partition sweep requires recreating the Kafka topic between arms
-  (`kafka-topics.sh --create --partitions n`); this is documented in the
-  `partition_benchmark.note` field of `summary.json` and is driven from CLI.
-- Single-broker KRaft (compose.yaml) cannot demonstrate broker-level HA; the
-  benchmark instead exercises consumer-side parallelism (number of partitions
-  pulling in parallel from a single broker).
-- TTL on `realtime_trending.updated_at` is **disabled by default**
-  (`ttl_seconds = 0`, see Q-B); pass `--ttl-seconds 86400` to demo the W4
-  eventual-consistency / automatic window-cleanup behavior.
+The 50,000-event smoke producer achieved 13,021.60 events/s. Spark consumed all
+records in one data batch at 4,351.61 processed rows/s with an 11,489 ms trigger.
+The subsequent finalized-window sink batch took 82,434 ms; this large fan-out is
+expected because each source row can contribute to 24 five-minute windows.
+
+Throughput trial medians:
+
+| Producer target | Measured producer rate | Spark processed rows/s | Trigger ms |
+|---:|---:|---:|---:|
+| 100/s | 100.74/s | 40.55 | 2,383 |
+| 500/s | 497.97/s | 46.86 | 2,123 |
+| unbounded bulk | 5,695.47/s | 47.48 | 2,106 |
+
+Partition trial medians:
+
+| Actual partitions | Spark-observed partitions | Processed rows/s | Trigger ms |
+|---:|---:|---:|---:|
+| 1 | 1 | 51.57 | 1,939 |
+| 2 | 2 | 60.86 | 1,643 |
+| 4 | 4 | 47.73 | 2,095 |
+| 8 | 8 | 31.26 | 3,199 |
+
+These are small development measurements, not production capacity claims.
+
+## Limitations
+
+- GitHub Actions results are intentionally not represented in this local
+  evidence snapshot; use the pull-request checks for current CI status.
+- The single Kafka broker validates consumer partition parallelism, not broker
+  high availability.
+- Kafka duplicate injection represents duplicate input and increments counts
+  more than once. Mongo idempotent upsert prevents duplicate output documents;
+  it does not deduplicate source events. The Proposal does not require source
+  event deduplication.
+- TTL remains disabled by default. Pass `--ttl-seconds 86400` only when the
+  optional cleanup behavior is desired.

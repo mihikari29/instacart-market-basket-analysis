@@ -117,10 +117,24 @@ def main() -> int:
     parser.add_argument("--topic", default=DEFAULT_TOPIC)
     parser.add_argument("--replay-speed", type=float, default=1.0,
                         help="Wall-time multiplier (0 = bulk streaming without pacing)")
+    parser.add_argument(
+        "--target-events-per-second",
+        type=float,
+        default=None,
+        help="Explicit send-rate limit; overrides replay-speed (0 = unbounded bulk send)",
+    )
     parser.add_argument("--limit-events", type=int, default=None)
+    parser.add_argument("--start-delay-seconds", type=float, default=0.0,
+                        help="Delay before the first send (useful for stream orchestration)")
+    parser.add_argument("--receipt", type=Path, default=None,
+                        help="Optional JSON file for measured producer results")
     parser.add_argument("--inject", default=None,
                         help="Fault injection spec: late:<p>,dup:<p>,burst:<n>,poison:<n>")
     args = parser.parse_args()
+    if args.target_events_per_second is not None and args.target_events_per_second < 0:
+        parser.error("--target-events-per-second must be non-negative")
+    if args.start_delay_seconds < 0:
+        parser.error("--start-delay-seconds must be non-negative")
 
     feed_path = Path(args.feed)
     event_path = feed_path if feed_path.name == "events.parquet" else feed_path / "events.parquet"
@@ -138,6 +152,8 @@ def main() -> int:
     rng = np.random.default_rng(1234)
     producer = build_producer(args.bootstrap)
     first_event_ms = columns["event_time_epoch_ms"][0]
+    if args.start_delay_seconds > 0:
+        time.sleep(args.start_delay_seconds)
     replay_start = time.monotonic()
     sent_count = 0
     last_report_count = 0
@@ -145,7 +161,12 @@ def main() -> int:
 
     for idx in range(total_events):
         event_time_ms = int(columns["event_time_epoch_ms"][idx])
-        if args.replay_speed > 0:
+        if args.target_events_per_second is not None and args.target_events_per_second > 0:
+            target_time = replay_start + sent_count / args.target_events_per_second
+            sleep_duration = target_time - time.monotonic()
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+        elif args.target_events_per_second is None and args.replay_speed > 0:
             target_time = replay_start + max(0, event_time_ms - first_event_ms) / (args.replay_speed * 1000.0)
             sleep_duration = target_time - time.monotonic()
             if sleep_duration > 0:
@@ -191,12 +212,34 @@ def main() -> int:
         pass
 
     elapsed = time.monotonic() - replay_start
+    achieved_rate = sent_count / max(1e-9, elapsed)
     print(f"[done ] topic={args.topic} key=user_id sent={sent_count:,} "
-          f"elapsed={elapsed:.1f}s rate={sent_count / max(1e-9, elapsed):,.0f}/s", flush=True)
+          f"elapsed={elapsed:.1f}s rate={achieved_rate:,.0f}/s", flush=True)
     if latencies:
         latencies_arr = np.asarray(latencies, dtype="int64")
         p50, p99 = np.percentile(latencies_arr, [50, 99])
         print(f"  ingestion - event_time (ms): p50={p50:.0f} p99={p99:.0f}", flush=True)
+    if args.receipt is not None:
+        args.receipt.parent.mkdir(parents=True, exist_ok=True)
+        args.receipt.write_text(
+            json.dumps(
+                {
+                    "topic": args.topic,
+                    "feed": str(event_path),
+                    "requested_events": args.limit_events,
+                    "sent_events": sent_count,
+                    "elapsed_seconds": elapsed,
+                    "achieved_events_per_second": achieved_rate,
+                    "target_events_per_second": args.target_events_per_second,
+                    "replay_speed_multiplier": args.replay_speed,
+                    "injections": injections,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     print("[exit ] hard-exit (kafka-python cleanup)", flush=True)
     sys.stdout.flush()
     os._exit(0)

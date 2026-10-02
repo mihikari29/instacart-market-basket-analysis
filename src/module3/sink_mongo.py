@@ -34,43 +34,43 @@ def ensure_indexes(collection, ttl_seconds: int) -> None:
         )
 
 
-def write_mongo(batch_df: DataFrame, batch_id: int, config: Config) -> dict:
-    """foreachBatch sink: upsert each batch into realtime_trending."""
+def write_mongo(batch_df: DataFrame, batch_id: int, config: Config, batch_size: int = 1000) -> dict:
+    """Upsert a micro-batch with bounded-memory unordered bulk writes."""
     from pymongo import UpdateOne
-
-    if batch_df.rdd.isEmpty():
-        return {"batch_id": batch_id, "upserted": 0, "skipped": True}
-
-    rows = list(batch_df.toLocalIterator())
-    if not rows:
-        return {"batch_id": batch_id, "upserted": 0, "skipped": True}
-
-    now = datetime.now(timezone.utc)
-    operations = []
-    for row in rows:
-        doc = row.asDict()
-        doc["updated_at"] = now
-        # _id is the natural composite key -> idempotent across replays
-        doc_id = f"{doc['window_end'].isoformat()}__{doc['product_id']}"
-        operations.append(
-            UpdateOne(
-                {"_id": doc_id},
-                {"$set": doc},
-                upsert=True,
-            )
-        )
 
     from pymongo import MongoClient
 
+    totals = {"upserted": 0, "modified": 0, "matched": 0}
+    row_count = 0
     with MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=10000) as client:
-        db = client[config.mongo_database]
-        col = db[config.mongo_collection]
-        result = col.bulk_write(operations, ordered=False)
+        col = client[config.mongo_database][config.mongo_collection]
         ensure_indexes(col, config.ttl_seconds)
+
+        operations = []
+
+        def flush():
+            if not operations:
+                return
+            result = col.bulk_write(operations, ordered=False)
+            totals["upserted"] += result.upserted_count
+            totals["modified"] += result.modified_count
+            totals["matched"] += result.matched_count
+            operations.clear()
+
+        now = datetime.now(timezone.utc)
+        for row in batch_df.toLocalIterator():
+            row_count += 1
+            doc = row.asDict()
+            doc["updated_at"] = now
+            doc_id = f"{doc['window_end'].isoformat()}__{doc['product_id']}"
+            operations.append(UpdateOne({"_id": doc_id}, {"$set": doc}, upsert=True))
+            if len(operations) >= batch_size:
+                flush()
+        flush()
 
     return {
         "batch_id": batch_id,
-        "upserted": result.upserted_count,
-        "modified": result.modified_count,
-        "matched": result.matched_count,
+        "rows": row_count,
+        "skipped": row_count == 0,
+        **totals,
     }

@@ -21,7 +21,7 @@ class Config:
     warmups: int = 1
 
     # Kafka source
-    bootstrap_servers: str = "localhost:9092"
+    bootstrap_servers: str = "kafka:29092"
     topic: str = DEFAULT_TOPIC
     starting_offsets: str = "earliest"
 
@@ -35,8 +35,8 @@ class Config:
     weight_short: float = 0.7
     weight_long: float = 0.3
 
-    # Stream trigger (chốt Q-A: 5 minutes, đúng proposal slide)
-    trigger_interval: str = "5 minutes"
+    # Processing cadence is independent of the five-minute event-time slide.
+    trigger_interval: str = "10 seconds"
 
     # Serving store
     mongodb_uri: str = "mongodb://mongodb:27017/instacart"

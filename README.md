@@ -120,7 +120,7 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Implemented; awaiting live-cluster validation in CI |
+| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Implemented and locally validated; current CI status is reported by the pull-request checks |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
 ## Team Onboarding & Environment Setup
@@ -197,11 +197,12 @@ temporary; this validation does not install a permanent cluster on your computer
 
 ## Module 3 — Speed layer (Spark Structured Streaming)
 
-Consumes `instacart-purchase-events` (Module 1 producer), applies an
-event-time watermark of 10 minutes on `event_time_epoch_ms`, computes
-trending scores over 30- and 120-minute sliding windows (5-minute slide)
-and upserts `realtime_trending` into MongoDB via idempotent `foreachBatch`
-(Proposal §17–22).
+Consumes `instacart-purchase-events` (Module 1 producer), applies a 10-minute
+event-time watermark, and uses one stateful 120-minute sliding aggregation
+(5-minute slide). The 30-minute count is calculated conditionally inside that
+same window. Finalized rows are normalized and ranked on the static
+`foreachBatch` DataFrame, then idempotently upserted into MongoDB
+`realtime_trending` (Proposal §17–22).
 
 ```bash
 # Validate Kafka + Mongo connectivity (no streaming)
@@ -214,14 +215,18 @@ python scripts/module3.py run --duration-seconds 0
 # --window-short 30 minutes --window-long 120 minutes --slide 5 minutes
 # --watermark 10 minutes --weight-short 0.7 --weight-long 0.3
 
-# Late-event / poison-pill demo: start producer with --inject from another shell
-#   python -m src.module1.producer --feed data/synthesized/scatter_3m \
-#     --limit-events 50000 --inject "late:0.05,dup:0.02"
+# Deterministic on-time / within-watermark / beyond-watermark scenario
 python scripts/module3.py late-demo --duration-seconds 60
 
+# Bounded real Module 1 producer -> Kafka -> Spark -> Mongo smoke
+python scripts/module3_smoke.py --events 50000 --duration-seconds 120
+
+# Two separate Spark processes reuse checkpoint ID "recovery-smoke"
+python scripts/module3_recovery.py --duration-seconds 25
+
 # Throughput + Kafka partition sweep (Proposal §15.4, §15.5)
-python scripts/module3.py benchmark-throughput --duration-seconds 60
-python scripts/module3.py benchmark-partitions --duration-seconds 60
+python scripts/module3.py benchmark-throughput --duration-seconds 15 --benchmark-events 100
+python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark-events 100
 
 # All benchmarks in one go
 python scripts/module3.py all --duration-seconds 60
@@ -235,10 +240,15 @@ streaming_progress.jsonl, event log) and into MongoDB collection
 window cleanup. Evidence lives in [docs/evidence/module3](docs/evidence/module3/README.md)
 and is uploaded by [module3-full.yml](.github/workflows/module3-full.yml).
 
-Tests: `tests/test_module3.py` covers Kafka JSON schema parse, poison-pill
-drop, window aggregation counts, trend-score normalization bounds, trend-rank
-uniqueness within each window, and weight-sum invariant. All gated behind
-`pytest.mark.integration` (skipped if `pyspark` is unavailable locally).
+The producer's `--replay-speed` remains a synthetic event-time acceleration
+multiplier. Benchmarks use the separate `--target-events-per-second` control and
+record achieved wall-clock send rate. Kafka duplicate injection is not input
+deduplication: repeated source events count repeatedly; Mongo idempotency only
+prevents duplicate output documents for the same window/product.
+
+`tests/test_module3.py` covers JSON/schema failures, fixture immutability,
+30/120-minute counts, normalization, deterministic rank ties, weights, and
+checkpoint identity. It is marked `integration` because it requires PySpark.
 
 ## Next step: Module 4
 

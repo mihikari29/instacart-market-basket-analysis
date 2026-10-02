@@ -3,7 +3,7 @@
 from .config import Config
 
 
-def validate_kafka(spark, config: Config) -> dict:
+def validate_kafka(config: Config) -> dict:
     """Connect, list partitions, return topic metadata. Does NOT consume data."""
     from kafka import KafkaAdminClient
 
@@ -16,7 +16,14 @@ def validate_kafka(spark, config: Config) -> dict:
         admin = KafkaAdminClient(bootstrap_servers=config.bootstrap_servers, request_timeout_ms=5000)
         try:
             partitions = admin.describe_topics([config.topic])
-            topic_info = next((p for p in partitions if p.get("topic") == config.topic), None)
+            topic_info = next(
+                (
+                    topic
+                    for topic in partitions
+                    if topic.get("name", topic.get("topic")) == config.topic
+                ),
+                None,
+            )
             if topic_info is None:
                 info["error"] = "topic not found"
                 return info
@@ -24,7 +31,14 @@ def validate_kafka(spark, config: Config) -> dict:
             info["partitions"] = partition_count
             info["ok"] = True
             info["replication_factor"] = (
-                len(topic_info["partitions"][0]["replicas"]) if partition_count else 0
+                len(
+                    topic_info["partitions"][0].get(
+                        "replica_nodes",
+                        topic_info["partitions"][0].get("replicas", []),
+                    )
+                )
+                if partition_count
+                else 0
             )
         finally:
             admin.close()

@@ -91,6 +91,28 @@ def main(argv=None):
     # Run / benchmark durations
     parser.add_argument("--duration-seconds", type=int, default=60,
                         help="Stream run duration in seconds (run/late-demo/benchmarks). 0 = forever (until Ctrl+C).")
+    parser.add_argument(
+        "--checkpoint-id",
+        default=None,
+        help="Stable checkpoint identity to reuse across separate run processes (default: run_id).",
+    )
+    parser.add_argument(
+        "--feed",
+        type=Path,
+        default=Path("data/synthesized/module3_dev"),
+        help="Bounded Module 1 feed used by benchmark producer orchestration",
+    )
+    parser.add_argument(
+        "--benchmark-events",
+        type=int,
+        default=500,
+        help="Events produced in each benchmark trial",
+    )
+    parser.add_argument(
+        "--benchmark-rates",
+        default="100,500,0",
+        help="Explicit producer events/second arms; 0 means unbounded bulk",
+    )
 
     args = parser.parse_args(argv)
 
@@ -136,10 +158,11 @@ def main(argv=None):
     try:
         # Validate is cheap and runs for all subcommands requiring Kafka/Mongo
         report["kafka_validation"] = validate_kafka(config)
-        if args.command in ("run", "late-demo", "benchmark-throughput", "benchmark-partitions", "all"):
-            if not report["kafka_validation"].get("ok"):
-                raise RuntimeError(f"Kafka unreachable: {report['kafka_validation'].get('error')}")
         report["mongo_validation"] = validate_mongo(config)
+        if not report["kafka_validation"].get("ok"):
+            raise RuntimeError(f"Kafka validation failed: {report['kafka_validation'].get('error')}")
+        if not report["mongo_validation"].get("ok"):
+            raise RuntimeError(f"Mongo validation failed: {report['mongo_validation'].get('error')}")
 
         if args.command == "validate":
             report["status"] = "passed"
@@ -162,16 +185,36 @@ def main(argv=None):
             },
         )
 
-        if args.command in ("run", "late-demo"):
+        if args.command == "run":
             duration = args.duration_seconds if args.duration_seconds > 0 else None
-            report["stream"] = run_stream(spark, config, output, run_id, duration_seconds=duration)
-            if args.command == "late-demo":
-                report["late_demo_guidance"] = (
-                    "Start the producer with: python -m src.module1.producer --feed "
-                    "data/synthesized/scatter_3m --limit-events 50000 --inject \"late:0.05,dup:0.02\". "
-                    "Late events past the 10-minute watermark are dropped by Spark; "
-                    "those within watermark update the existing window document (idempotent upsert)."
-                )
+            report["stream"] = run_stream(
+                spark,
+                config,
+                output,
+                run_id,
+                duration_seconds=duration,
+                checkpoint_id=args.checkpoint_id,
+            )
+            report["status"] = "passed"
+            spark.stop()
+            spark = None
+            save(output / "summary.json", report)
+            print(f"[ARTIFACTS] {output.resolve()}", flush=True)
+            return 0
+
+        if args.command == "late-demo":
+            from .demo import run_late_data_demo
+
+            if args.duration_seconds <= 0:
+                raise ValueError("late-demo requires a positive --duration-seconds")
+            report["late_data_demo"] = run_late_data_demo(
+                spark,
+                config,
+                output,
+                run_id,
+                duration_seconds=args.duration_seconds,
+                checkpoint_id=args.checkpoint_id,
+            )
             report["status"] = "passed"
             spark.stop()
             spark = None
@@ -180,14 +223,26 @@ def main(argv=None):
             return 0
 
         if args.command in ("all", "benchmark-throughput"):
+            target_rates = tuple(float(value) for value in args.benchmark_rates.split(","))
             report["throughput_benchmark"] = benchmark_throughput(
-                spark, config, output, duration_seconds=args.duration_seconds
+                spark,
+                config,
+                output,
+                duration_seconds=args.duration_seconds,
+                feed=args.feed,
+                event_count=args.benchmark_events,
+                target_rates=target_rates,
             )
             print("[throughput_benchmark] complete", flush=True)
 
         if args.command in ("all", "benchmark-partitions"):
             report["partition_benchmark"] = benchmark_kafka_partitions(
-                spark, config, output, duration_seconds=args.duration_seconds
+                spark,
+                config,
+                output,
+                duration_seconds=args.duration_seconds,
+                feed=args.feed,
+                event_count=args.benchmark_events,
             )
             print("[partition_benchmark] complete", flush=True)
 

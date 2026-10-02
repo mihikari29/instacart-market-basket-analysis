@@ -8,7 +8,7 @@ the trending logic deterministically without needing a Kafka broker.
 from datetime import datetime, timezone
 
 from pyspark.sql import Row, SparkSession
-from pyspark.sql.types import StructField, TimestampType
+from pyspark.sql.types import StructField, StructType, TimestampType
 
 from .schemas import KAFKA_EVENT_SCHEMA
 
@@ -59,5 +59,7 @@ def make_events_dataframe(spark: SparkSession, rows=None):
         Row(**{**r, "event_time": datetime.fromtimestamp(r["event_time_epoch_ms"] / 1000, tz=timezone.utc)})
         for r in rows
     ]
-    schema = KAFKA_EVENT_SCHEMA.add(StructField("event_time", TimestampType()))
+    schema = StructType(
+        list(KAFKA_EVENT_SCHEMA.fields) + [StructField("event_time", TimestampType())]
+    )
     return spark.createDataFrame(rows_with_time, schema=schema)

@@ -1,11 +1,11 @@
-"""Trending score pipeline (Proposal §18):
+"""Streaming-safe aggregation and static micro-batch ranking (Proposal §18).
 
     Trend(p,t) = w_short * N(C_30m(p,t)) + w_long * N(C_120m(p,t))
 
-Two sliding windows (30 / 120 minutes, 5-minute slide) share the same
-window_end cadence because slide is identical. Normalization is window-scope
-min-max on purchase_count, falling back to 0.0 when the window is degenerate.
-validate đi cùng watermark 10 phút (Proposal §19).
+The streaming plan has one stateful 120-minute sliding aggregation. Its short
+count is conditional on the event falling in the final 30 minutes of that same
+window. Min/max normalization and row-number ranking run only on the static
+DataFrame supplied by ``foreachBatch``.
 """
 
 from pyspark.sql import DataFrame
@@ -45,35 +45,46 @@ def _normalize(df: DataFrame, count_col: str) -> DataFrame:
     )
 
 
-def build_trending(events_df: DataFrame, config: Config) -> DataFrame:
-    """Two sliding windows joined on (window_end, product_id) -> ranked trend."""
+def build_window_counts(events_df: DataFrame, config: Config) -> DataFrame:
+    """Build the single stateful aggregation used by the production stream."""
     watermarked = events_df.withWatermark("event_time", config.watermark)
-
-    short_w = _normalize(_window_agg(watermarked, config.window_short, config.slide, "purchase_count_short"),
-                         "purchase_count_short")
-    long_w = _normalize(_window_agg(watermarked, config.window_long, config.slide, "purchase_count_long"),
-                        "purchase_count_long")
-
-    # Both windows share slide=5min so window_end cadence is identical.
-    # Outer join so products only seen in one window still rank.
-    joined = short_w.join(
-        long_w,
-        on=["window_end", "product_id"],
-        how="outer",
-    ).select(
-        F.coalesce(short_w["window_start"], long_w["window_start"]).alias("window_start"),
-        "window_end",
-        "product_id",
-        F.coalesce(F.col("purchase_count_short"), F.lit(0)).alias("purchase_count_30m"),
-        F.coalesce(F.col("purchase_count_long"), F.lit(0)).alias("purchase_count_120m"),
-        F.coalesce(F.col("norm_purchase_count_short"), F.lit(0.0)).alias("norm_short"),
-        F.coalesce(F.col("norm_purchase_count_long"), F.lit(0.0)).alias("norm_long"),
+    windowed = watermarked.withColumn(
+        "_window", F.window("event_time", config.window_long, config.slide)
+    )
+    return (
+        windowed.groupBy("_window", "product_id")
+        .agg(
+            F.sum(
+                F.when(
+                    F.col("event_time")
+                    >= F.col("_window.end") - F.expr(f"INTERVAL {config.window_short}"),
+                    F.lit(1),
+                ).otherwise(F.lit(0))
+            ).cast("long").alias("purchase_count_30m"),
+            F.count(F.lit(1)).cast("long").alias("purchase_count_120m"),
+        )
+        .select(
+            F.col("_window.start").alias("window_start"),
+            F.col("_window.end").alias("window_end"),
+            "product_id",
+            "purchase_count_30m",
+            "purchase_count_120m",
+        )
     )
 
-    trend = joined.withColumn(
+
+def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
+    """Normalize and rank one static, finalized micro-batch."""
+    if counts_df.isStreaming:
+        raise ValueError("rank_trending_batch requires a static foreachBatch DataFrame")
+
+    normalized = _normalize(counts_df, "purchase_count_30m")
+    normalized = _normalize(normalized, "purchase_count_120m")
+
+    trend = normalized.withColumn(
         "trend_score",
-        F.col("norm_short") * F.lit(config.weight_short)
-        + F.col("norm_long") * F.lit(config.weight_long),
+        F.col("norm_purchase_count_30m") * F.lit(config.weight_short)
+        + F.col("norm_purchase_count_120m") * F.lit(config.weight_long),
     )
 
     rank_window = Window.partitionBy("window_end").orderBy(F.desc("trend_score"), "product_id")
@@ -88,3 +99,10 @@ def build_trending(events_df: DataFrame, config: Config) -> DataFrame:
         "trend_score",
         "trend_rank",
     )
+
+
+def build_trending(events_df: DataFrame, config: Config) -> DataFrame:
+    """Static fixture convenience; production ranks inside ``foreachBatch``."""
+    if events_df.isStreaming:
+        raise ValueError("Use build_window_counts for streaming DataFrames")
+    return rank_trending_batch(build_window_counts(events_df, config), config)
