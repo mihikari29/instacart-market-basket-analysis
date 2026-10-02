@@ -78,7 +78,7 @@ jobs:
         run: python3 scripts/module3.py late-demo --duration-seconds 60
       - name: Short measured throughput smoke
         run: |
-          python3 scripts/module3.py benchmark-throughput --duration-seconds 12 \
+          python3 scripts/module3.py benchmark-throughput --duration-seconds 30 \
             --benchmark-events 50 --benchmark-rates 500
       - name: Capture runtime diagnostics
         if: always()
