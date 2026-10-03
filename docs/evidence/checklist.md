@@ -13,13 +13,16 @@ Historical fixture evidence remains in [README.md](README.md).
 | Analytics, SQL, pivot, rolling trends and HDFS user features | PASS on full data |
 | MongoDB serving | PASS; 49,677 products / 21 departments; fixture also checks rerun cleanup |
 | SMJ/BHJ operators, AQE, repeated output equality | PASS; one warm-up, three trials, plans and task metrics retained |
-| Equivalent partition filters | PASS; 177,912 events; 97.73% lower task input bytes |
+| Equivalent partition filters | PASS on current run 37107843181; 177,739 events; 97.74% lower task input bytes |
 | Caching | PASS; materialization reported separately; InMemoryTableScan verified |
-| Automated suite | PASS; 15 tests in 16.94 seconds in Docker |
-| Compile / Ruff / Compose / whitespace | PASS; final documentation update rechecked |
+| Automated suite | PASS; current full Docker suite 51 tests in 30.72 seconds, run 37107843181 on `a35170f` |
+| Module 3 streaming — validation/dedup/window/watermark/late/trending | PASS; final-source CI run 37107841330 on `a35170f` |
+| Module 3 streaming — finalized Top-K snapshot / TTL / recovery | PASS; tests, local 50k historical smoke and final CI run 37107841330 |
+| Module 3 streaming — throughput + Kafka partition benchmark | PASS as bounded development evidence; producer/consumer pair measured via `streaming_progress.jsonl` |
+| Compile / Ruff / Compose / whitespace | PASS; final 51-test local and CI gates |
 | Credentials and datasets excluded from Git | PASS; compact measured evidence only |
-| Commits and remote push | PASS; feature branch published; full-run source bf8aeda |
-| Merge | Not automatic; review feature branch through a pull request |
+| Commits and remote push | PASS; `fix/module3-hardening` published; final source `a35170f` |
+| Merge | PR #2 is open against `main`; not merged as of 2026-10-03 |
 
 This records executed acceptance gates, not a subjective 10/10 grade. Timings are
 specific to the recorded single-host resources and warm-system methodology.

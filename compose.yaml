@@ -11,9 +11,10 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: controller,broker
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENERS: HOST://:9092,DOCKER://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,HOST:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -136,6 +137,28 @@ services:
       spark-worker:
         condition: service_healthy
       mongodb:
+        condition: service_healthy
+
+  module3:
+    image: instacart-spark:3.5.5
+    profiles: ["tools"]
+    hostname: module3
+    entrypoint: ["python3", "-m", "src.module3.cli"]
+    command: ["all"]
+    environment:
+      SPARK_MASTER: spark://spark-master:7077
+      MODULE3_ROOT: hdfs://namenode:8020/instacart
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MONGODB_URI: mongodb://mongodb:27017/instacart
+      PYSPARK_SUBMIT_ARGS: --conf spark.driver.host=module3 --conf spark.driver.bindAddress=0.0.0.0 pyspark-shell
+    volumes:
+      - .:/workspace
+    depends_on:
+      spark-worker:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
 volumes:

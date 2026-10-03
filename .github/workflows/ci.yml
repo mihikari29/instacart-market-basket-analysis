@@ -1,0 +1,29 @@
+name: Fast validation
+on:
+  pull_request:
+  push:
+    branches: [main, module2-spark-batch-layer, module3-speed-layer, fix/module3-hardening]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: fast-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose config --quiet
+      - name: Build pinned Spark test runtime
+        run: docker compose build spark-master
+      - name: Lint
+        run: >-
+          docker run --rm -v "$PWD:/workspace" -w /workspace
+          instacart-spark:3.5.5 ruff check .
+      - name: Unit and fixture Spark tests
+        run: >-
+          docker run --rm -v "$PWD:/workspace" -w /workspace
+          instacart-spark:3.5.5 python3 -m pytest -q

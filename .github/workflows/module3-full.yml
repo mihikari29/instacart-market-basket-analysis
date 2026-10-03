@@ -1,0 +1,105 @@
+name: Module 3 streaming validation
+on:
+  push:
+    branches:
+      - main
+      - module3-speed-layer
+      - fix/module3-hardening
+    paths:
+      - 'src/module3/**'
+      - 'src/module1/producer.py'
+      - 'src/module1/event_reader.py'
+      - 'src/module1/generate.py'
+      - 'src/module1/config.py'
+      - 'scripts/module3*.py'
+      - 'tests/test_module3.py'
+      - 'tests/test_module1_hardening.py'
+      - 'compose.yaml'
+      - 'Dockerfile.spark'
+      - 'requirements*.txt'
+      - '.github/workflows/module3-full.yml'
+  pull_request:
+    branches:
+      - main
+      - module3-speed-layer
+    paths:
+      - 'src/module3/**'
+      - 'src/module1/producer.py'
+      - 'src/module1/event_reader.py'
+      - 'src/module1/generate.py'
+      - 'scripts/module3*.py'
+      - 'tests/test_module3.py'
+      - 'tests/test_module1_hardening.py'
+      - 'compose.yaml'
+      - 'Dockerfile.spark'
+      - 'requirements*.txt'
+      - '.github/workflows/module3-full.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: module3-full-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  streaming:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Host dependencies and environment
+        run: |
+          python -m pip install -r requirements.txt
+          mkdir -p results/ci
+          { uname -a; free -h; df -h; docker version; docker compose version; } > results/ci/environment.txt
+          docker compose config --quiet
+      - name: Regenerate bounded Module 1 feed
+        run: |
+          python scripts/fetch_instacart.py
+          python -m src.module1.clean --validate
+          python -m src.module1.generate --scenario default --scatter-weeks 13 \
+            --limit-users 500 --batch-users 500 --out-dir data/synthesized/module3_dev
+      - name: Build pinned Spark runtime and run streaming tests
+        run: |
+          docker compose build spark-master
+          docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q
+      - name: Start services (Spark, Kafka, Mongo)
+        run: |
+          docker compose up -d --wait spark-master spark-worker kafka mongodb
+          docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka:29092 --create --if-not-exists \
+            --topic instacart-purchase-events --partitions 4 --replication-factor 1
+          docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka:29092 --describe --topic instacart-purchase-events
+      - name: Validate connectivity (no streaming)
+        run: python3 scripts/module3.py validate
+      - name: Real Kafka to Spark to Mongo smoke
+        run: python3 scripts/module3_smoke.py --events 5000 --duration-seconds 60
+      - name: Checkpoint recovery across separate Spark processes
+        run: python3 scripts/module3_recovery.py --duration-seconds 20
+      - name: Deterministic late-data and watermark validation
+        run: python3 scripts/module3.py late-demo --duration-seconds 60
+      - name: Short measured throughput smoke
+        run: |
+          python3 scripts/module3.py benchmark-throughput --duration-seconds 30 \
+            --benchmark-events 50 --benchmark-rates 500
+      - name: Capture runtime diagnostics
+        if: always()
+        run: |
+          mkdir -p results/ci
+          docker compose ps -a > results/ci/compose-status.txt
+          docker compose logs --no-color --tail 300 kafka spark-master spark-worker > results/ci/compose-logs.txt
+          sudo chown -R "$(id -u):$(id -g)" results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: module3-evidence
+          retention-days: 14
+          path: |
+            results/ci/
+            results/module3/**
+      - name: Stop ephemeral services
+        if: always()
+        run: docker compose down

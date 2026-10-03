@@ -1,3 +1,5 @@
+# ruff: noqa: E402 -- imports intentionally follow pytest.importorskip.
+
 from datetime import date
 import json
 import pytest
@@ -7,7 +9,7 @@ from src.module2.fixtures import create_fixture
 from src.module2.config import Config
 from src.module2.spark import session
 from src.module2.data import read_tables, validate
-from src.module2.analytics import analyze
+from src.module2.analytics import analyze, department_hour_pivot_unpivot, history
 from src.module2.benchmarks import (
     join_query,
     trial,
@@ -50,6 +52,26 @@ def test_handoff_and_analytics(context):
     trends = outputs["department_daily_trends"].collect()
     assert sum(r.rolling_7day_purchase_count for r in trends if r.synthetic_date == "2024-01-04") == 24
     assert not any(r.synthetic_date == "2024-02-01" for r in trends)  # train excluded
+    assert summary["pivot_unpivot_validation"] == {
+        "pivot_total": 24,
+        "unpivot_total": 24,
+        "consistent": True,
+    }
+    assert outputs["department_hour_metrics"].count() == 2 * 24
+
+
+def test_department_hour_pivot_unpivot_consistency(context):
+    _spark, _config, tables, _root = context
+    pivoted, unpivoted = department_hour_pivot_unpivot(history(tables))
+    pivot_total = sum(
+        int(row[str(hour)])
+        for row in pivoted.collect()
+        for hour in range(24)
+    )
+    unpivot_total = sum(row.purchase_count for row in unpivoted.collect())
+    assert pivoted.count() == 2
+    assert unpivoted.count() == 48
+    assert pivot_total == unpivot_total == 24
 
 
 def test_both_physical_strategies_and_pruning(context):

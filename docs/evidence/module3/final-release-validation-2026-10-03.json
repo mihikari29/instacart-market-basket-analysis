@@ -1,0 +1,68 @@
+{
+  "classification": "FINAL RELEASE / GITHUB-HOSTED VALIDATION",
+  "date_utc": "2026-10-03",
+  "source_revision": "a35170ff0f98729ad2b64b8df4c96c4bf6321201",
+  "pull_request_merge_revision": "4a41d42e27383a8e9f2074f8aeb287e5af5a1be1",
+  "source_code_sha256": "88d94941bd3263ed49f238d023f38d87527ed1162a7dd50466857c3e078270a1",
+  "local_gate": {
+    "tests": "51 passed in 28.33s",
+    "ruff": "passed",
+    "compose": "passed",
+    "git_diff_check": "passed"
+  },
+  "github_actions": {
+    "fast_validation": {
+      "run_id": 37107841305,
+      "result": "success",
+      "tests": "51 passed in 31.30s"
+    },
+    "module3_streaming_validation": {
+      "run_id": 37107841330,
+      "result": "success",
+      "test_count": 51,
+      "fail_on_data_loss": true,
+      "smoke": {
+        "producer_attempted": 5000,
+        "producer_acknowledged": 5000,
+        "producer_failed": 0,
+        "spark_input": 5000,
+        "spark_valid": 5000,
+        "spark_invalid": 0,
+        "processed_rows_per_second": 374.195479718605,
+        "mongo_documents": 79970,
+        "duplicate_window_products": 0,
+        "duplicate_window_ranks": 0,
+        "invalid_scores": 0,
+        "windows_over_top_k": 0
+      },
+      "checkpoint_recovery": {
+        "first_process_input": 3,
+        "second_process_new_input": 2,
+        "same_query_id": true,
+        "resumed": true,
+        "replayed_from_earliest": false,
+        "mongo_documents": 109,
+        "duplicate_groups": 0
+      },
+      "late_data": {
+        "accepted_count": 2,
+        "duplicate_event_id_dropped": true,
+        "poison_event_counted_invalid": true,
+        "within_watermark_accepted": true,
+        "beyond_watermark_dropped": true,
+        "selected_purchase_count_30m": 2,
+        "selected_purchase_count_120m": 2
+      },
+      "throughput_smoke": {
+        "classification": "BOUNDED DEVELOPMENT SMOKE",
+        "target_events_per_second": 500,
+        "events_per_trial": 50,
+        "warmups": 1,
+        "measured_repetitions": 3,
+        "median_processed_rows_per_second": 16.005121638924454,
+        "median_trigger_execution_ms": 3124
+      }
+    }
+  },
+  "result": "passed"
+}

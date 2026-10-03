@@ -806,14 +806,19 @@ instacart-purchase-events
 Kafka
 → Spark Structured Streaming
 → parse JSON
-→ schema validation
-→ event-time processing
-→ watermark
-→ window aggregation
-→ trending score
-→ foreachBatch
-→ MongoDB upsert
+→ schema + domain validation / quality metrics
+→ event-time watermark
+→ event_id deduplication within watermark
+→ one 120-minute sliding aggregation (C30 + C120)
+→ append-mode finalized window
+→ foreachBatch full-population normalization + deterministic ranking
+→ configurable Top-K
+→ replace finalized MongoDB snapshot + idempotent upsert
 ```
+
+Ranking chỉ được tính khi window đã finalized. Thiết kế này không xuất
+open-window leaderboard ở mỗi processing trigger, vì normalization cần toàn bộ
+product population của cùng `window_end`.
 
 ---
 
@@ -897,7 +902,7 @@ Spark sử dụng:
 MongoDB sink dùng deterministic key:
 
 ```text
-(window_start, window_end, product_id)
+(window_end, product_id)
 ```
 
 và:
@@ -907,10 +912,23 @@ upsert = true
 ```
 
 Nếu micro-batch bị retry, cùng logical result sẽ ghi đè cùng document thay vì tạo duplicate.
+Trước upsert, toàn bộ snapshot của các finalized `window_end` trong batch được
+thay thế để stale non-Top-K rows và rank cũ không còn tồn tại. Top-K chỉ được áp
+dụng sau normalization/ranking trên full population. TTL mặc định là 7 ngày và
+có thể tắt rõ ràng bằng `ttl_seconds = 0`.
+
+Replacement hội tụ đúng và logically idempotent khi Spark retry, nhưng delete +
+upsert không transactionally atomic đối với concurrent reader. Dashboard có thể
+thoáng quan sát snapshot rỗng hoặc một phần trong lúc thay thế. Production design
+có thể dùng immutable snapshot/version ID, active-version pointer, hoặc Mongo
+transaction khi phù hợp; project hiện tại chấp nhận giới hạn này. Kafka source
+mặc định `failOnDataLoss=true`; việc cho phép bỏ qua unavailable offsets phải
+được opt-in rõ ràng.
 
 Mức đảm bảo trong dự án được mô tả là:
 
-**effectively exactly-once for deterministic aggregated outputs with idempotent sink design.**
+**deterministic, replay-convergent aggregated output with an idempotent sink
+design; not transactionally exactly-once serving for concurrent readers.**
 
 ---
 
@@ -1269,7 +1287,8 @@ _id
 window_start
 window_end
 product_id
-purchase_count
+purchase_count_30m
+purchase_count_120m
 trend_score
 trend_rank
 updated_at
@@ -1280,6 +1299,7 @@ Indexes:
 ```text
 (window_end, trend_rank)
 (window_end, product_id)
+updated_at TTL (mặc định 7 ngày)
 ```
 
 ## 31.3. `user_recommendations`

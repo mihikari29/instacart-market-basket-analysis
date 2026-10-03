@@ -1,0 +1,127 @@
+{
+  "classification": "LOCAL_BOUNDED_DEVELOPMENT",
+  "date_utc": "2026-10-03",
+  "implementation": {
+    "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
+    "source_code_sha256": "3fb1c0240e873cb0700320a236caef73761b9f9ccbfbf2713d8a1fae264da8b4"
+  },
+  "environment": {
+    "platform": "Linux WSL2 development host",
+    "spark": "3.5.5",
+    "java": "17.0.14",
+    "python": "3.10.12",
+    "spark_cores": 2,
+    "spark_shuffle_partitions": 8,
+    "kafka_brokers": 1,
+    "kafka_partitions": 4,
+    "mongo_top_k_per_window": 20,
+    "mongo_ttl_seconds": 604800,
+    "window_short": "30 minutes",
+    "window_long": "120 minutes",
+    "slide": "5 minutes",
+    "watermark": "10 minutes"
+  },
+  "commands": {
+    "tests": "docker run --rm -v $PWD:/workspace -w /workspace instacart-spark:3.5.5 python3 -m pytest -q",
+    "lint": "docker run --rm -v $PWD:/workspace -w /workspace instacart-spark:3.5.5 ruff check .",
+    "compose": "docker compose config --quiet",
+    "smoke_50k": "python3 scripts/module3_smoke.py --events 50000 --duration-seconds 120 --feed data/synthesized/hardening_500 --output results/module3-hardening/smoke-50k-final-61ae930 --top-k 20"
+  },
+  "correctness": {
+    "tests_passed": 43,
+    "ruff": "passed",
+    "compose_validation": "passed",
+    "git_diff_check": "passed",
+    "generation_batch_invariance": "passed",
+    "pivot_unpivot_consistency": "passed",
+    "late_data_ci": {
+      "source_run_id": 37103621207,
+      "kafka_inputs": 3,
+      "valid_rows": 2,
+      "invalid_rows": 1,
+      "duplicate_event_ids_dropped": 1,
+      "beyond_watermark_event_dropped": true,
+      "selected_purchase_count_30m": 2,
+      "selected_purchase_count_120m": 2
+    },
+    "checkpoint_recovery": {
+      "source_run_id": 37103621207,
+      "first_process_input_rows": 3,
+      "second_process_new_input_rows": 2,
+      "same_query_id": true,
+      "batch_number_continued": true,
+      "replayed_from_earliest": false
+    }
+  },
+  "performance_50k": {
+    "timestamp_utc": "2026-10-03T06:37:19.121821+00:00",
+    "kafka": {
+      "attempted_events": 50000,
+      "acknowledged_events": 50000,
+      "failed_events": 0,
+      "elapsed_seconds": 4.620551755999998,
+      "acknowledged_events_per_second": 10821.218469216954,
+      "reader_strategy": "external-merge-sort",
+      "reader_chunk_rows": 65536,
+      "reader_initial_runs": 2
+    },
+    "spark": {
+      "total_input_rows": 50000,
+      "input_rows_per_second": 0.0,
+      "input_rate_note": "Kafka was preloaded before the streaming query started",
+      "processed_rows_per_second": 3203.8959374599513,
+      "trigger_execution_ms": 15605,
+      "add_batch_ms": 14098,
+      "peak_aggregate_state_rows": 1174010,
+      "peak_deduplication_state_rows": 50000,
+      "rows_dropped_by_watermark": 0,
+      "final_aggregate_state_rows": 661,
+      "final_deduplication_state_rows": 16
+    },
+    "mongo": {
+      "documents_written": 580342,
+      "finalized_windows": 35701,
+      "max_rows_per_window": 20,
+      "sink_batch_duration_ms": 62021.821,
+      "replaced_documents": 580342,
+      "duplicate_window_products": 0,
+      "duplicate_window_ranks": 0,
+      "invalid_scores": 0,
+      "windows_over_top_k": 0
+    }
+  },
+  "github_actions": [
+    {
+      "workflow": "Fast validation",
+      "run_id": 37094705692,
+      "commit": "ff062393d5fbff8a851924c0cfd32e58885b98fa",
+      "result": "success"
+    },
+    {
+      "workflow": "Module 3 streaming validation",
+      "run_id": 37094705601,
+      "commit": "ff062393d5fbff8a851924c0cfd32e58885b98fa",
+      "result": "success"
+    },
+    {
+      "workflow": "Fast validation",
+      "run_id": 37103618599,
+      "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
+      "result": "success"
+    },
+    {
+      "workflow": "Module 3 streaming validation",
+      "run_id": 37103621207,
+      "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
+      "result": "success"
+    }
+  ],
+  "limitations": [
+    "single development host",
+    "single Kafka broker",
+    "bounded workload",
+    "two Spark cores",
+    "finalized-window rather than open-window serving",
+    "driver-side bounded Mongo bulk writer"
+  ]
+}

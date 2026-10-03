@@ -105,7 +105,12 @@ def main(argv=None):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
             save(output / "analytics.json", summary)
             outputs["user_features"].write.mode("overwrite").parquet(config.features())
-            for name in ("batch_product_metrics", "department_metrics", "department_daily_trends"):
+            for name in (
+                "batch_product_metrics",
+                "department_metrics",
+                "department_daily_trends",
+                "department_hour_metrics",
+            ):
                 outputs[name].write.mode("error").parquet((output / name).resolve().as_uri())
             if not args.skip_serving:
                 publish_mongo(

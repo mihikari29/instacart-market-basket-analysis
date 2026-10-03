@@ -1,0 +1,61 @@
+{
+  "status": "local_docker_validation_passed",
+  "runtime": {
+    "spark": "3.5.5",
+    "java": "17.0.14",
+    "python": "3.10.12",
+    "kafka": "3.7.0",
+    "mongodb": "7.0.16"
+  },
+  "tests": {
+    "module3": {"passed": 10, "seconds": 11.91},
+    "repository": {"passed": 30, "seconds": 24.62}
+  },
+  "smoke": {
+    "events_produced": 50000,
+    "kafka_partitions": 4,
+    "spark_input_rows": 50000,
+    "spark_processed_rows_per_second": 4351.610095735422,
+    "spark_trigger_execution_ms": 11489,
+    "mongo_documents_written": 1111592,
+    "duplicate_window_product_groups": 0,
+    "invalid_trend_scores": 0
+  },
+  "recovery": {
+    "checkpoint_id": "recovery-smoke",
+    "first_process_input_rows": 3,
+    "second_process_new_input_rows": 2,
+    "same_query_id": true,
+    "replayed_from_earliest": false,
+    "duplicate_window_product_groups": 0
+  },
+  "duration_zero_ctrl_c_clean": true,
+  "late_data": {
+    "watermark": "2030-01-01T02:50:00.000Z",
+    "within_watermark_accepted": true,
+    "beyond_watermark_dropped": true,
+    "dropped_sliding_window_memberships": 24,
+    "selected_purchase_count_30m": 2,
+    "selected_purchase_count_120m": 2
+  },
+  "throughput": {
+    "warmups_per_arm": 1,
+    "measured_runs_per_arm": 3,
+    "arms": {
+      "100_eps": {"producer_rate": 100.74, "processed_rows_per_second": 40.55, "trigger_ms": 2383},
+      "500_eps": {"producer_rate": 497.97, "processed_rows_per_second": 46.86, "trigger_ms": 2123},
+      "bulk": {"producer_rate": 5695.47, "processed_rows_per_second": 47.48, "trigger_ms": 2106}
+    }
+  },
+  "partitions": {
+    "warmups_per_arm": 1,
+    "measured_runs_per_arm": 3,
+    "arms": {
+      "1": {"broker": 1, "spark": 1, "processed_rows_per_second": 51.57, "trigger_ms": 1939},
+      "2": {"broker": 2, "spark": 2, "processed_rows_per_second": 60.86, "trigger_ms": 1643},
+      "4": {"broker": 4, "spark": 4, "processed_rows_per_second": 47.73, "trigger_ms": 2095},
+      "8": {"broker": 8, "spark": 8, "processed_rows_per_second": 31.26, "trigger_ms": 3199}
+    }
+  },
+  "github_actions_included": false
+}

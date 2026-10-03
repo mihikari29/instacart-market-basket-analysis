@@ -2,5 +2,19 @@ FROM apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece56438925893
 USER root
 COPY requirements.txt requirements-dev.txt /tmp/dependencies/
 RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
+
+# Spark does not bundle the Structured Streaming Kafka source. Keep the
+# connector and its compile-time dependencies in the image, pinned and
+# checksum-verified so workers never need to resolve Maven packages at runtime.
+RUN set -eu; \
+    base=https://repo.maven.apache.org/maven2; \
+    fetch() { path="$1"; sha="$2"; file="/opt/spark/jars/${path##*/}"; \
+      curl -fsSL "$base/$path" -o "$file"; \
+      echo "$sha  $file" | sha512sum -c -; \
+    }; \
+    fetch org/apache/spark/spark-sql-kafka-0-10_2.12/3.5.5/spark-sql-kafka-0-10_2.12-3.5.5.jar 613ababeebcfc14239167dd56acaf320bb931db48fef1495301891d71c7cc40d69f7be933f074c5002b83f18555c5aeb4eb81f0c8c8ed33082f814f0f4e01e34; \
+    fetch org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.5.5/spark-token-provider-kafka-0-10_2.12-3.5.5.jar e01ff13050ef5a97b9e98dc1fd75245dd08e9a0ed7ad12a46ac0a5e0203a9e01fcdb12d6fe1640ab26f1d7067ac3884563b16aebb0334b23c9182e86efd7dfc5; \
+    fetch org/apache/kafka/kafka-clients/3.4.1/kafka-clients-3.4.1.jar b111e1980fd6bf65ca546f6b517fb31a140b19b4dc88646e723b11b54b521e48643f33aa341f47b3111a4556af131200f80c851e1b68d37cb4e747e283eefd7e; \
+    fetch org/apache/commons/commons-pool2/2.11.1/commons-pool2-2.11.1.jar 7177d8a9e45ae47881ec323150dc7bd3372ce32eff9866029b47a77cb734535d5e987f22e6cb7009104832c3772079fb6322b2919650765b76a4b4aa8eae648e
 WORKDIR /workspace
 ENV PYTHONPATH=/workspace
