@@ -81,11 +81,14 @@ def test_invalid_date_or_manifest_fails(tmp_path):
 def test_staging_refresh_scope_and_failed_upload(tmp_path):
     source(tmp_path / "events.parquet")
     client = Mock()
+    client.status.return_value = {"type": "DIRECTORY"}
     with patch("src.module1.stage_hdfs.webhdfs_upload") as upload:
         stage_interactions(client, tmp_path, "http://localhost:9870", "root")
         assert upload.call_count == 3
-    client.delete.assert_called_once_with("/instacart/curated/interactions", recursive=True)
-    assert client.rename.call_args.args[1] == "/instacart/curated/interactions"
+    backup_path = client.rename.call_args_list[0].args[1]
+    assert backup_path.startswith("/instacart/curated/interactions.__backup_")
+    assert client.rename.call_args_list[1].args[1] == "/instacart/curated/interactions"
+    client.delete.assert_called_once_with(backup_path, recursive=True)
     client.reset_mock()
     with patch("src.module1.stage_hdfs.webhdfs_upload", side_effect=RuntimeError("network")):
         with pytest.raises(RuntimeError):
@@ -95,6 +98,28 @@ def test_staging_refresh_scope_and_failed_upload(tmp_path):
     assert failed_path.startswith("/instacart/curated/interactions.__staging_")
     assert client.delete.call_args.kwargs == {"recursive": True}
     client.rename.assert_not_called()
+
+
+def test_staging_promotion_failure_restores_previous_target(tmp_path):
+    source(tmp_path / "events.parquet")
+    client = Mock()
+    client.status.side_effect = [
+        {"type": "DIRECTORY"},  # Existing target is moved to the backup.
+        None,  # Failed promotion did not create a replacement target.
+    ]
+    client.rename.side_effect = [None, RuntimeError("promotion failed"), None]
+
+    with patch("src.module1.stage_hdfs.webhdfs_upload"):
+        with pytest.raises(RuntimeError, match="promotion failed"):
+            stage_interactions(client, tmp_path, "http://localhost:9870", "root")
+
+    target = "/instacart/curated/interactions"
+    backup = client.rename.call_args_list[0].args[1]
+    staging = client.rename.call_args_list[1].args[0]
+    assert client.rename.call_args_list[0].args == (target, backup)
+    assert client.rename.call_args_list[1].args == (staging, target)
+    assert client.rename.call_args_list[2].args == (backup, target)
+    client.delete.assert_called_once_with(staging, recursive=True)
 
 
 def test_cap30_mask_tracks_rows_after_sort():
@@ -132,8 +157,15 @@ def test_refresh_replaces_stale_dates_and_preserves_other_tables(tmp_path):
         def makedirs(self, path):
             self.location(path).mkdir(parents=True, exist_ok=True)
 
+        def status(self, path, strict=False):
+            location = self.location(path)
+            if not location.exists():
+                if strict:
+                    raise FileNotFoundError(path)
+                return None
+            return {"type": "DIRECTORY" if location.is_dir() else "FILE"}
+
         def delete(self, path, recursive):
-            assert path == "/instacart/curated/interactions"
             if self.location(path).exists():
                 shutil.rmtree(self.location(path))
 

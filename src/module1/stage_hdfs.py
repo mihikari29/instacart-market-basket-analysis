@@ -113,8 +113,11 @@ def stage_curated(client: InsecureClient, webhdfs_url: str, user: str) -> None:
 
 def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str, user: str) -> None:
     target_path = f"{HDFS_ROOT}/curated/interactions"
-    staging_path = f"{target_path}.__staging_{uuid.uuid4().hex}"
+    transaction_id = uuid.uuid4().hex
+    staging_path = f"{target_path}.__staging_{transaction_id}"
+    backup_path = f"{target_path}.__backup_{transaction_id}"
     temp_dir = Path(tempfile.mkdtemp(prefix="hdfs_interactions_"))
+    target_backed_up = False
     try:
         receipt = partition_events(feed_dir / "events.parquet", temp_dir)
         print(f"[interactions] validated {receipt['local_rows']:,} rows in {receipt['files']} files")
@@ -122,12 +125,35 @@ def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str,
             relative_posix = file_path.relative_to(temp_dir).as_posix()
             upload_file(client, f"{staging_path}/{relative_posix}", file_path, webhdfs_url, user)
 
-        client.delete(target_path, recursive=True)
+        if client.status(target_path, strict=False) is not None:
+            client.rename(target_path, backup_path)
+            target_backed_up = True
         client.rename(staging_path, target_path)
+        if target_backed_up:
+            try:
+                client.delete(backup_path, recursive=True)
+            except Exception as cleanup_error:
+                print(
+                    f"[warn ] could not remove replaced backup path {backup_path}: {cleanup_error}",
+                    flush=True,
+                )
         print(f"[done] {target_path}: source/local rows = {receipt['source_rows']:,}")
     except Exception:
-        # Never mask the upload/validation failure. The production target has
-        # not been touched at this point in the normal failure path.
+        # A failed promotion must restore the last complete target. HDFS rename
+        # is atomic, so the backup remains a complete snapshot throughout the
+        # staging-to-target swap.
+        if target_backed_up:
+            try:
+                if client.status(target_path, strict=False) is not None:
+                    client.delete(target_path, recursive=True)
+                client.rename(backup_path, target_path)
+                target_backed_up = False
+                print(f"[rollback] restored {target_path}", flush=True)
+            except Exception as rollback_error:
+                print(
+                    f"[warn ] could not restore backup {backup_path}: {rollback_error}",
+                    flush=True,
+                )
         try:
             client.delete(staging_path, recursive=True)
             print(f"[clean] removed failed staging path {staging_path}", flush=True)
