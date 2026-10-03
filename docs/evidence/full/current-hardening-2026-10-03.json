@@ -1,17 +1,11 @@
 {
-  "classification": "FULL PUBLIC DATASET / GITHUB-HOSTED VALIDATION",
+  "classification": "FULL PUBLIC DATASET / ISOLATED RUNTIME VALIDATION",
   "date_utc": "2026-10-03",
-  "workflow": {
-    "name": "Module 2 full-data validation",
-    "run_id": 37107843181,
-    "result": "success",
-    "commit": "a35170ff0f98729ad2b64b8df4c96c4bf6321201"
-  },
   "execution": {
     "run_id": "20261003T080535_74b9d443",
     "source_code_sha256": "88d94941bd3263ed49f238d023f38d87527ed1162a7dd50466857c3e078270a1",
     "timestamp_utc": "2026-10-03T08:05:35.041350+00:00",
-    "platform": "GitHub-hosted Ubuntu 24.04 runner, Linux 6.17.0-1022-azure",
+    "platform": "Isolated Ubuntu 24.04 environment, Linux 6.17.0-1022-azure",
     "resources": "approximately 16 GiB RAM; standalone Spark with two cores and one 1 GiB executor",
     "spark": "3.5.5",
     "java": "17.0.14",

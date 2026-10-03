@@ -1,35 +1,76 @@
-# Full-data executions
+# Full-data Validation and Batch Benchmark Report
 
-## Current hardening validation: passed
+## Experiment summary
 
-[GitHub Actions run 37107843181](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107843181)
-completed successfully on 2026-10-03 against current hardening source revision
-`a35170ff0f98729ad2b64b8df4c96c4bf6321201`.
+Full public-dataset validation was executed on 2026-10-03 in an isolated Ubuntu
+24.04 environment. The experiment fetched and verified the source archive,
+cleaned the data, regenerated the complete deterministic event feed, promoted it
+atomically into HDFS, executed Module 2 analytics and benchmarks, published the
+serving outputs to MongoDB, and then verified the resulting counts and contracts.
 
-Classification: **FULL PUBLIC DATASET / GITHUB-HOSTED VALIDATION**.
+Classification: **FULL PUBLIC DATASET / ISOLATED RUNTIME VALIDATION**.
 
-The workflow fetched and verified the public dataset, regenerated the complete
-entity-keyed feed with `seed=42`, `scatter_weeks=13`, and `batch_users=2000`, ran
-the pinned Docker test suite (**51 passed in 30.72s**), staged the source through
-atomic HDFS promotion, executed all Module 2 analytics and benchmarks, verified
-Mongo publication, uploaded evidence, and cleaned up services.
+| Configuration | Value |
+|---|---|
+| Experiment ID | `20261003T080535_74b9d443` |
+| Timestamp | `2026-10-03T08:05:35Z` |
+| Platform | Ubuntu 24.04, Linux 6.17.0-1022-azure |
+| Spark / Java / Python | 3.5.5 / 17.0.14 / 3.10.12 |
+| Spark resources | Standalone, 2 cores, one 1 GiB executor |
+| Shuffle partitions | 32 |
+| Repetitions | 1 warm-up + 3 measured trials per arm |
+| Generation | seed 42, 13-week scatter, 2,000 users per batch |
+| Source-code digest | `88d94941bd3263ed49f238d023f38d87527ed1162a7dd50466857c3e078270a1` |
+| Automated tests | 51 passed in 30.72 seconds |
 
-- Source counts: 3,421,083 orders; 32,434,489 prior facts; 1,384,617 train facts;
-  49,688 products; 206,209 users.
-- Source = local partitioned feed = HDFS Spark read = **33,819,106 events** across
-  **456 partitions / 456 files**; exact fact/event reconciliation and partition
-  integrity passed; monotonicity violations were zero.
-- `_sources.json`, `_handoff.json`, source/event SHA reconciliation, prior-only
-  analytics, train preservation, Spark SQL, pivot/unpivot, BHJ/SMJ, pruning,
-  caching, and Mongo batch publication all passed.
-- Pivot and unpivot totals both equal **32,434,489**. Mongo contained 49,677
-  product documents and 21 department documents for the current run.
+## Dataset and reconciliation
 
-Current benchmark environment: GitHub-hosted Ubuntu 24.04, Spark 3.5.5, Java
-17.0.14, Python 3.10.12, standalone Spark with two cores and one 1 GiB executor,
-32 shuffle partitions, one warm-up and three measured repetitions.
+| Dataset | Rows |
+|---|---:|
+| Orders | 3,421,083 |
+| Prior facts | 32,434,489 |
+| Train facts | 1,384,617 |
+| Products | 49,688 |
+| Users | 206,209 |
+| Aisles / departments | 134 / 21 |
+| Reconstructed events | 33,819,106 |
 
-| Experiment / arm | Current median seconds |
+Source facts, the local partitioned feed and the Spark read from HDFS each
+contained **33,819,106 events**. Exact fact/event multiset equality, key and
+relationship checks, date/epoch consistency and partition integrity all passed.
+The feed spans 2024-01-01 through 2025-03-31 in **456 daily partitions / 456
+files**; entity-keyed generation is invariant to batch size and produced zero
+per-user monotonicity violations.
+
+## Module 2 technical acceptance
+
+- Historical analytics use `order_products__prior` only; the train set remains
+  untouched as Module 4 ground truth.
+- `_sources.json` and `_handoff.json` checksums and counts match the staged data.
+- User features were written to `/instacart/features/user_features`.
+- Spark SQL analytics, rolling trends and explicit department/hour pivot and
+  `unpivot` completed; both pivot totals equal **32,434,489**.
+- MongoDB publication produced **49,677 product** and **21 department**
+  documents. Eleven catalog products have no prior purchases.
+- Sort-Merge Join and Broadcast Hash Join plans were asserted and returned equal
+  outputs. Partition filters and cached/uncached aggregates also returned equal
+  outputs.
+
+Observed prior-only reorder rate was **58.9697%** and average basket size was
+**10.0889**. The most-purchased products were Banana (472,565), Bag of Organic
+Bananas (379,450) and Organic Strawberries (264,683). Calendar trends are based
+on synthesized replay time and must not be interpreted as original purchase
+dates.
+
+## Benchmark methodology and results
+
+AQE and automatic broadcast selection were disabled so each join arm exercised
+the requested physical strategy. Each experiment used one warm-up and three
+measured repetitions with alternating or rotating arm order. Equivalent arms
+were accepted only after operator, row-count and checksum assertions. Spark task
+metrics came from the event log.
+
+| Experiment / arm | Median seconds |
 |---|---:|
 | Join: Sort-Merge | 17.581934 |
 | Join: Broadcast Hash | 2.304046 |
@@ -40,91 +81,40 @@ Current benchmark environment: GitHub-hosted Ubuntu 24.04, Spark 3.5.5, Java
 | Cache materialization | 2.175583 |
 | Aggregate: cached reuse | 0.088085 |
 
-The current compact machine-readable record is
-[`current-hardening-2026-10-03.json`](current-hardening-2026-10-03.json). Full
-raw run artifacts are retained by GitHub Actions for 14 days.
+The equivalent date and partition filters both returned **177,739 events**.
+Partition pruning substantially reduced the scanned input and median latency for
+this seven-day query. Broadcast Hash Join was faster than Sort-Merge Join in this
+single-executor configuration. Cache materialization is reported separately:
+reuse is fast, but the build cost must be included when assessing total benefit.
 
-## Historical full-data validation: passed
+These timings compare controlled arms on one warm system. OS and HDFS page caches
+were not flushed, the all-date scan has different scope from the filtered arms,
+and the measurements do not establish cluster-scale performance.
 
-[GitHub Actions run 36162730659](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/36162730659) completed successfully on
-2026-09-25 at 17:04 UTC (2026-09-26 in Asia/Saigon). Executed source commit:
-`bf8aeda076cda72cc6e59a8e79154ab9235c68a3`.
-Production Python digest: `d3e76ca21b4bf76cbd9c20e0c8c75f7f431fbb95ce750eb7c7ac6fdf09e21e38`.
-The digest was independently matched against committed Python source bytes.
-Later documentation commits do not change this executed source.
+## Evidence files
 
-## Acceptance evidence
-
-- Public version-1 Kaggle mirror downloaded and all six source counts verified.
-- Corrected cleaning and full feed generation: 206,209 users, 33,819,106 events,
-  seed 42, 13-week scatter, 2,000 users/batch, no user limit; zero monotonic violations.
-- Docker build and **15 tests passed in 16.94 seconds**.
-- Source = partitioned local = Spark-read HDFS events = **33,819,106**;
-  **456 daily partitions / 456 files**, exact fact/event multiset equality,
-  keys, relationships and date/epoch consistency passed.
-- Canonical Docker runner completed analytics, SQL, pivot, seven-day trends,
-  HDFS user features, all three benchmark families and serving publication.
-- MongoDB verification: **49,677 product** and **21 department** documents, matching
-  aggregate Parquet and run ID. Eleven catalog products have no prior purchases.
-- HDFS, Spark master/worker and MongoDB healthchecks passed. The final check printed
-  `FULL DATA + STANDALONE SPARK + HDFS + MONGODB: PASS`.
-
-| Source | Rows |
-|---|---:|
-| Orders | 3,421,083 |
-| Prior facts | 32,434,489 |
-| Train facts | 1,384,617 |
-| Products | 49,688 |
-| Aisles / departments | 134 / 21 |
-
-Prior-only reorder rate: **58.9697%**; average basket size: **10.0889**.
-Top purchased products: Banana (472,565), Bag of Organic Bananas (379,450),
-Organic Strawberries (264,683). Synthetic calendar trends are replay simulations.
-
-## Measured benchmarks
-
-Spark 3.5.5, Java 17.0.14, Python 3.10.12; standalone master and HDFS containers.
-One two-core, 1 GiB executor; 32 shuffle partitions; AQE and automatic broadcast
-disabled. One warm-up and three measured repetitions per arm, alternating/rotating
-order, asserted physical operators and equal output checksums for equivalent arms.
-
-| Experiment / arm | Median seconds | Task input bytes | Shuffle read / write bytes |
-|---|---:|---:|---:|
-| Join: Sort-Merge | 14.602316 | 70,562,653 | 289,395,061 / 289,395,061 |
-| Join: Broadcast Hash | 2.083508 | 70,562,653 | 2,946 / 2,946 |
-| Scan: all dates | 2.511430 | 216,222,873 | 1,701 / 1,701 |
-| Scan: date-column filter | 1.228454 | 52,153,677 | 1,416 / 1,416 |
-| Scan: partition-column filter | 0.064017 | 1,181,369 | 140 / 140 |
-| Aggregate: uncached | 1.858871 | 70,562,653 | 2,946 / 2,946 |
-| Aggregate: cached reuse | 0.085279 | 10,316 | 0 / 0 |
-
-Broadcast was **7.01 times faster** than Sort-Merge in this configuration.
-Equivalent date filters both returned 177,912 events for January 1–7, 2024.
-Partition pruning reduced task input bytes by **97.73%** and median runtime by a
-factor of **19.19** versus the date-column filter. The all-date scan has different
-scope and is not used as an equivalent-query speedup comparison.
-
-Cache materialization costs an additional **1.833358 seconds** (median); reuse is
-useful across repeated consumers. Cached task input describes cache batches, not
-disk reads or semantic department-row counts. Build cost must be included when
-assessing total benefit. OS/HDFS page caches were not flushed.
-
-## Files and limits
-
-- [summary.json](summary.json): configuration, validation, trial timings, checksums,
+- [current-hardening-2026-10-03.json](current-hardening-2026-10-03.json): compact
+  configuration, reconciliation and benchmark record.
+- [summary.json](summary.json): detailed validation, trial timings, checksums,
   physical plans and Spark task metrics.
 - [analytics.json](analytics.json): observed full-data aggregates.
 - [manifest.json](manifest.json): generated feed identity and calendar statistics.
-- [source-receipt.json](source-receipt.json): archive/file SHA-256 and source counts.
-- [environment.txt](environment.txt), [compose-status.txt](compose-status.txt):
-  hosted runtime and healthy services; [execution-checks.txt](execution-checks.txt)
-  retains selected test/staging/serving log lines.
+- [source-receipt.json](source-receipt.json): source archive/file SHA-256 values
+  and row counts.
+- [environment.txt](environment.txt), [compose-status.txt](compose-status.txt) and
+  [execution-checks.txt](execution-checks.txt): selected runtime, health and
+  acceptance output.
 
-Absolute checkout prefixes are normalized to `<repository>`; numeric evidence is
-unchanged. The runner had approximately 16 GiB RAM; this is a single hosted Linux
-machine, not a multi-node scaling result or a permanent deployment. Containers
-were stopped after the run. Raw data and giant logs are not committed; GitHub's
-artifact has 14-day retention, while these compact files remain in Git history.
-The complete workflow took approximately 19 minutes, including data acquisition,
-generation, Docker build, tests and cleanup. Module 3 streaming and Module 4 ML
-remain separate work. See [progress runbook](../../progress.md).
+## Limitations
+
+- The experiment used one isolated host, one two-core Spark executor and
+  approximately 16 GiB RAM; it is not a multi-node scaling study.
+- Raw source data and large transient logs are not stored with this compact
+  evidence.
+- Storage publication assumes a single writer during an execution.
+- The complete experiment took approximately 19 minutes, including acquisition,
+  generation, image build, tests and cleanup.
+- Module 3 streaming validation is reported separately, and Module 4 has not yet
+  been implemented.
+
+See the [technical runbook](../../progress.md) for reproduction commands.

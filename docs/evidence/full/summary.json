@@ -1797,7 +1797,6 @@
     ]
   },
   "environment": {
-    "commit": "bf8aeda076cda72cc6e59a8e79154ab9235c68a3",
     "config": {
       "master": "spark://spark-master:7077",
       "repetitions": 3,
@@ -1805,7 +1804,6 @@
       "shuffle_partitions": 32,
       "warmups": 1
     },
-    "dirty": null,
     "java": "17.0.14",
     "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.35",
     "python": "3.10.12",

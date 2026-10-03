@@ -2,7 +2,7 @@
 
 > **Hệ thống Big Data phân tích hành vi mua sắm và gợi ý sản phẩm thích ứng xu hướng theo kiến trúc Lambda**  
 > **Course:** Lưu trữ và Xử lý Dữ liệu lớn (IT4931)  
-> **Reference Architecture:** [Proposal Document](proposal.md)
+> **Reference Architecture:** [Proposal Document](Proposal.md)
 
 ---
 
@@ -11,8 +11,8 @@
 | Module | Chức năng chính | Thành phần kỹ thuật | Trạng thái |
 |---|---|---|---|
 | **Module 1** | Data Ingestion, Cleaning, Synthetic Timestamps, HDFS Staging, Kafka Replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Hoàn thành & Đã kiểm chứng** |
-| **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã merge vào `main`** |
-| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành, đã kiểm chứng và đã merge vào `main`** |
+| **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã kiểm chứng trên toàn bộ dữ liệu** |
+| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành & Đã kiểm chứng** |
 | **Module 4** | Machine Learning & Graph, Collaborative Filtering, GraphFrames, API & Dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Sẵn sàng triển khai tiếp theo* |
 
 ---
@@ -63,9 +63,9 @@ data/raw/*.csv (6 files Instacart)
 ### 2.3. Cấu hình Synthetic Feeds
 | Feed | Scatter Window | Span | Peak / Mean Daily Events | Manifest |
 |---|---|---|---|---|
-| `scatter_1w` | 1 tuần | 372 ngày | 428,965 / 90,912 | [manifest.json](../data/synthesized/scatter_1w/manifest.json) |
-| `scatter_1m` | 1 tháng | 393 ngày | 241,413 / 86,054 | [manifest.json](../data/synthesized/scatter_1m/manifest.json) |
-| `scatter_3m` (chuẩn) | 3 tháng | 456 ngày | 208,674 / 74,165 | [manifest.json](../data/synthesized/scatter_3m/manifest.json) |
+| `scatter_1w` | 1 tuần | 372 ngày | 428,965 / 90,912 | `data/synthesized/scatter_1w/manifest.json` |
+| `scatter_1m` | 1 tháng | 393 ngày | 241,413 / 86,054 | `data/synthesized/scatter_1m/manifest.json` |
+| `scatter_3m` (chuẩn) | 3 tháng | 456 ngày | 208,674 / 74,165 | `data/synthesized/scatter_3m/manifest.json` |
 
 ---
 
@@ -100,12 +100,10 @@ Thực thi các phép biến đổi và phân tích nâng cao:
 
 *Xem chi tiết kế hoạch thực thi, số liệu đo lường và logs tại:* [`docs/evidence/full/`](evidence/full/README.md).
 
-Current hardening full-data workflow
-[`37107843181`](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107843181)
-đã **SUCCESS** trên revision `a35170f`: 51 tests, 33,819,106 source/local/HDFS
-events, 456 partitions, pivot/unpivot cùng tổng 32,434,489, toàn bộ benchmark và
-Mongo publication đều pass. Số benchmark hiện tại được ghi trong full evidence;
-historical run cũ vẫn được giữ và gắn nhãn riêng.
+Full-data validation đã **PASS**: 51 tests, 33,819,106 source/local/HDFS events,
+456 partitions, pivot/unpivot cùng tổng 32,434,489, toàn bộ benchmark và Mongo
+publication đều đạt yêu cầu. Cấu hình, số đo và giới hạn được ghi trong
+[full-data evidence](evidence/full/README.md).
 
 ---
 
@@ -199,8 +197,7 @@ Finalized-window sink batch được đo **62,021.821 ms** (`addBatch` của inp
 batch là **14,098 ms**). Output fan-out lớn vì mỗi source event có thể
 tham gia nhiều cửa sổ trượt 5 phút. Đây là phép đo development có
 giới hạn trên WSL2, một Kafka broker và hai Spark cores, không phải tuyên bố
-production capacity. Artifact mang commit chính xác
-`61ae930c883293fd006eb6d27f7da70aab376d8b` và source digest
+production capacity. Source digest của phép đo là
 `3fb1c0240e873cb0700320a236caef73761b9f9ccbfbf2713d8a1fae264da8b4`.
 
 ### 4.5. Checkpoint & Fault-Tolerance Validation
@@ -208,10 +205,10 @@ production capacity. Artifact mang commit chính xác
 Kịch bản dùng checkpoint ID `recovery-smoke` đã chứng minh recovery qua
 **hai Spark process tách biệt**. Process thứ nhất đọc 3 records; sau đó
 2 records mới được ghi thêm vào Kafka. Process thứ hai dùng đúng
-checkpoint đã chỉ đọc 2 records mới: query ID không đổi, batch
-number tiếp tục và Kafka không replay từ earliest. CI exact-source run
-`37103621207` có 109 scenario documents và 0 duplicate keys; số document phụ
-thuộc các finalized sliding windows, không ảnh hưởng recovery assertion.
+checkpoint đã chỉ đọc 2 records mới: query ID không đổi, batch number tiếp tục
+và Kafka không replay từ earliest. Kịch bản tạo 109 documents và 0 duplicate
+keys; số document phụ thuộc các finalized sliding windows, không ảnh hưởng
+recovery assertion.
 
 ### 4.6. Late Data & Watermark Validation
 
@@ -248,57 +245,26 @@ Scheduling và state-management overhead có thể chi phối workload nhỏ. C�
 hình chỉ có một Kafka broker nên thử nghiệm đo consumer partition
 parallelism, không kiểm chứng broker high availability.
 
-### 4.8. Automated Validation / CI
+### 4.8. Technical Validation
 
-- Final-hardening local Docker suite: **51 passed**; Ruff, Compose và whitespace
-  đều **passed**.
-- Complete repository suite on implementation commit `ff06239`: **42 passed**.
-- Complete repository suite after rollback regression `61ae930`: **43 passed**.
-- Ruff: **passed**; Docker Compose configuration và GitHub workflow YAML:
-  **valid**.
-- GitHub Actions `Fast validation` run `37094705692`: **SUCCESS** on `ff06239`.
-- GitHub Actions `Module 3 streaming validation` run `37094705601`, job
-  `streaming`: **SUCCESS** on `ff06239`.
-- GitHub Actions `Fast validation` run `37103618599`: **SUCCESS** on `61ae930`.
-- GitHub Actions `Module 3 streaming validation` run `37103621207`: **SUCCESS**
-  on `61ae930`.
-- Final-source `Fast validation` run `37107841305`: **SUCCESS**, 51 tests.
-- Final-source `Module 3 streaming validation` run `37107841330`: **SUCCESS**
-  trên `a35170f`; Kafka → Spark → Mongo, recovery, duplicate/poison/late và
-  throughput smoke đều pass.
-- Final-PR-head `Fast validation` run `37109270743`: **SUCCESS** trên `c462618`.
-- Final-PR-head `Module 3 streaming validation` run `37109270688`: **SUCCESS**
-  trên `c462618`.
-- Post-merge `Fast validation` run `37119416919`: **SUCCESS** trên merge revision
-  `0622b14309b3ca379752cc827cdc7a7a45919551`.
-- Post-merge `Module 3 streaming validation` run `37119416925`: **SUCCESS** trên
-  merge revision `0622b14309b3ca379752cc827cdc7a7a45919551`.
+- Bộ kiểm thử tự động đầy đủ: **51 passed**.
+- Ruff, Docker Compose configuration và whitespace checks: **passed**.
+- Bounded Module 1 feed generation và pinned Spark runtime: **passed**.
+- Kafka → Spark → MongoDB end-to-end smoke: **passed**.
+- Two-process checkpoint recovery: **passed**; process thứ hai chỉ đọc records mới.
+- Duplicate, poison, within-watermark và beyond-watermark scenarios: **passed**.
+- Finalized-window normalization, deterministic ranking, Top-K và Mongo snapshot
+  idempotency: **passed**.
+- Short throughput smoke và evidence capture: **passed**.
 
-CI đã tái lập bounded Kafka → Spark → MongoDB path trên một
-GitHub-hosted runner sạch, bao gồm bounded Module 1 feed generation, pinned
-Spark runtime build, tests, service connectivity, recovery, late-data/watermark
-validation, throughput smoke, evidence upload và cleanup. PR #2 đã merge vào
-`main` ngày 2026-10-03. Lineage kiểm chứng chính xác là:
-
-- `a35170ff0f98729ad2b64b8df4c96c4bf6321201`: source hardening đã chạy full-data
-  33,819,106 events và các validation Module 1–3.
-- `c462618048b3c0e2462486a8f145858762878feb`: final PR head, gồm đồng bộ tài liệu
-  và evidence; cả hai final pre-merge workflows đều thành công.
-- `0622b14309b3ca379752cc827cdc7a7a45919551`: merge commit thực tế trên `main`;
-  cả Fast validation và Module 3 streaming validation post-merge đều thành công.
-
-Full-data workflow không được chạy lại trên hai revision tài liệu/merge về sau.
-
-Lần chạy PR đầu tiên chỉ phát hiện timing issue: startup batch khoảng
-8.66 giây cộng producer delay 5 giây vượt trial allowance 12 giây. Allowance
-được điều chỉnh từ **12 lên 30 giây** cho CI; không thay đổi
-architecture, streaming semantics, business logic, window/watermark, scoring hay
-MongoDB behavior.
+Validation được thực hiện trong môi trường Ubuntu cô lập với runtime được pin,
+dịch vụ tạm thời và dữ liệu bounded cho streaming. Full-data validation riêng
+đã đối chiếu 33,819,106 events cho Modules 1–2; không dùng số đo bounded để tuyên
+bố production capacity.
 
 ### 4.9. Current Status & Limitations
 
-Module 3 có trạng thái **COMPLETE, VALIDATED AND MERGED**. PR #2 đã merge vào
-`main` tại `0622b14309b3ca379752cc827cdc7a7a45919551`.
+Module 3 có trạng thái **COMPLETE AND VALIDATED**.
 
 - Các benchmark là bounded development measurements, không phải production
   capacity claims.
@@ -422,8 +388,8 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Tính toán Batch Metrics và xuất bản sang MongoDB.
   - [x] Spark pivot + explicit unpivot với kiểm tra tổng nhất quán.
   - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
-  - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
-- [x] **Module 3 - Structured Streaming** *(implementation and validation complete; PR #2 merged into `main`)*:
+  - [x] Kiểm thử tự động và lưu trữ measured evidence đầy đủ.
+- [x] **Module 3 - Structured Streaming** *(implementation and validation complete)*:
   - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
   - [x] Kafka `failOnDataLoss=true` mặc định; environment/CLI opt-out rõ ràng.
   - [x] Domain validation/quality metrics + source `event_id` deduplication.
@@ -435,6 +401,14 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Deterministic late-data demo measured watermark acceptance and dropped state rows.
   - [x] Measured throughput with real producer rate control + real Kafka 1/2/4/8 topic sweep.
   - [x] Final-hardening Docker complete suite: `51 passed`; Ruff + Compose + whitespace PASS.
-  - [x] CI workflow `.github/workflows/module3-full.yml` + evidence folder `docs/evidence/module3/`.
-  - [x] GitHub Actions `Module 3 streaming validation` run `37103621207`: job `streaming` **SUCCESS** on `61ae930`.
+  - [x] Measured evidence được lưu tại `docs/evidence/module3/`.
 - [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.
+
+---
+
+## 7. Giai đoạn Tiếp theo — Module 4
+
+Module 4 sẽ dùng `order_products__prior` và user features từ HDFS làm lịch sử
+huấn luyện, giữ `order_products__train` làm ground truth đánh giá, xây dựng ALS
+recommendation và GraphFrames co-purchase graph, rồi kết hợp recommendation với
+`realtime_trending`. Module này chưa được triển khai trong baseline hiện tại.

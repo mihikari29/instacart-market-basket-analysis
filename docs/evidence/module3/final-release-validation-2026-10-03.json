@@ -1,24 +1,19 @@
 {
-  "classification": "FINAL RELEASE / GITHUB-HOSTED VALIDATION",
+  "classification": "FINAL TECHNICAL / ISOLATED RUNTIME VALIDATION",
   "date_utc": "2026-10-03",
-  "validated_source_revision": "a35170ff0f98729ad2b64b8df4c96c4bf6321201",
-  "final_pr_head_revision": "c462618048b3c0e2462486a8f145858762878feb",
-  "merge_revision": "0622b14309b3ca379752cc827cdc7a7a45919551",
   "source_code_sha256": "88d94941bd3263ed49f238d023f38d87527ed1162a7dd50466857c3e078270a1",
   "local_gate": {
     "tests": "51 passed in 28.33s",
     "ruff": "passed",
     "compose": "passed",
-    "git_diff_check": "passed"
+    "whitespace_check": "passed"
   },
-  "github_actions": {
+  "technical_validation": {
     "fast_validation": {
-      "run_id": 37107841305,
       "result": "success",
       "tests": "51 passed in 31.30s"
     },
     "module3_streaming_validation": {
-      "run_id": 37107841330,
       "result": "success",
       "test_count": 51,
       "fail_on_data_loss": true,
@@ -63,20 +58,6 @@
         "median_processed_rows_per_second": 16.005121638924454,
         "median_trigger_execution_ms": 3124
       }
-    },
-    "final_pr_head_validation": {
-      "revision": "c462618048b3c0e2462486a8f145858762878feb",
-      "fast_validation_run_id": 37109270743,
-      "fast_validation_result": "success",
-      "module3_streaming_validation_run_id": 37109270688,
-      "module3_streaming_validation_result": "success"
-    },
-    "post_merge_validation": {
-      "revision": "0622b14309b3ca379752cc827cdc7a7a45919551",
-      "fast_validation_run_id": 37119416919,
-      "fast_validation_result": "success",
-      "module3_streaming_validation_run_id": 37119416925,
-      "module3_streaming_validation_result": "success"
     }
   },
   "result": "passed"

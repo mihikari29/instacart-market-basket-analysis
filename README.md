@@ -5,6 +5,22 @@ parquet facts + synthesized absolute timestamps → Kafka → Spark Streaming, w
 Spark batch layer for historical metrics, features and execution benchmarks.
 ALS/recommendation belongs to Module 4.
 
+## Architecture
+
+```text
+Instacart CSV
+  -> cleaning + deterministic event-time synthesis
+  -> HDFS curated data -> Spark batch analytics -> batch MongoDB collections
+  -> Kafka replay -> Spark Structured Streaming -> realtime_trending MongoDB
+  -> Module 4 (next): ALS + product graph + batch/stream recommendation blend
+```
+
+The batch layer provides reproducible historical aggregates and user features.
+The speed layer processes event time with validation, deduplication, watermarking
+and finalized-window trend ranking. MongoDB exposes bounded serving collections;
+Module 4 will add recommendation and graph outputs without changing the validated
+Modules 1–3 contracts.
+
 ## Repo layout
 
 ```text
@@ -125,8 +141,8 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete; merged into `main`; validated locally and on GitHub-hosted CI |
-| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending / Next |
+| 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete and validated |
+| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Next; not yet implemented |
 
 ## Team Onboarding & Environment Setup
 
@@ -215,12 +231,12 @@ partitions. A cap-30 sorting defect also affected regenerated order gaps. Regene
 cleaned data and feeds, then restage using the corrected code. Existing uploads
 without validation receipts are not accepted as a valid Module 2 handoff.
 
-Current full execution passed in GitHub Actions run **37107843181** on hardening
-revision `a35170f`, using real Docker, standalone Spark, HDFS and MongoDB:
-**33,819,106 source/local/HDFS events**, 456 daily partitions, and **51 passing
-tests**. See [full measured evidence](docs/evidence/full/README.md)
-and [execution guide](docs/progress.md). The hosted services are
-temporary; this validation does not install a permanent cluster on your computer.
+Full-data validation used Docker, standalone Spark, HDFS and MongoDB. It
+reconciled **33,819,106 source, local and HDFS events** across 456 daily
+partitions, and the automated suite passed **51 tests**. See the
+[full-data evidence](docs/evidence/full/README.md) and
+[technical runbook](docs/progress.md). The services are temporary validation
+infrastructure; the commands do not install a permanent cluster.
 
 ## Module 3 — Speed layer (Spark Structured Streaming)
 
@@ -283,22 +299,12 @@ python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark
 python scripts/module3.py all --duration-seconds 60
 ```
 
-Current final-hardening local validation reports **51 passed**; Ruff, Compose
-validation and whitespace checks pass. Fast validation run **37107841305** and
-Module 3 streaming run **37107841330** succeeded for source revision `a35170f`.
-Historically, the suite reported 43
-tests after the HDFS rollback regression. On implementation commit `ff06239`, GitHub Actions
-fast-validation run **37094705692** and streaming run **37094705601** succeeded with **42 tests**,
-a live Kafka → Spark → MongoDB path, two-process checkpoint recovery, and the
-duplicate/poison/late-data scenario. The rollback follow-up is commit `61ae930`;
-its fast run **37103618599** and streaming run **37103621207** also succeeded.
-Final PR-head runs **37109270743** and **37109270688** succeeded on `c462618`.
-PR #2 was merged into `main` on 2026-10-03 at merge commit `0622b143`; post-merge
-Fast validation run **37119416919** and Module 3 streaming run **37119416925**
-both succeeded on that exact merge revision. The 33,819,106-event full-data run
-remains attributed to `a35170f`; it was not rerun on the merge commit. See the
-[detailed progress and measurements](docs/progress.md) and [Module 3
-evidence](docs/evidence/module3/README.md).
+Automated validation passed with **51 tests**, plus Ruff, Compose and whitespace
+checks. Streaming validation exercised a live Kafka → Spark → MongoDB path,
+two-process checkpoint recovery, duplicate and poison handling, deterministic
+late-data/watermark behavior, finalized-window ranking, Top-K publication and a
+bounded throughput smoke. See the [technical runbook](docs/progress.md) and
+[Module 3 evidence](docs/evidence/module3/README.md).
 
 Output goes to `results/module3/<run_id>/` (summary.json, analytics
 streaming_progress.jsonl, event log) and into MongoDB collection
@@ -308,9 +314,8 @@ streaming_progress.jsonl, event log) and into MongoDB collection
 The default serving bound is Top-20 per finalized window and can be changed with
 `--mongo-top-k-per-window`. Before replay-safe upserts, each complete finalized
 window snapshot is replaced, removing stale rows and preventing rank conflicts
-when a bounded feed is recomputed. Evidence lives in
-[docs/evidence/module3](docs/evidence/module3/README.md) and is uploaded by
-[module3-full.yml](.github/workflows/module3-full.yml).
+when a bounded feed is recomputed. Detailed measurements live in
+[docs/evidence/module3](docs/evidence/module3/README.md).
 
 Finalized-window replacement is logically idempotent and converges correctly
 under Spark retry, but delete + upsert is not transactionally atomic for
@@ -331,14 +336,16 @@ normalization, deterministic rank ties, post-ranking Top-K, Mongo snapshot
 idempotency/index/TTL behavior, weights, and checkpoint identity. It is marked
 `integration` because it requires PySpark.
 
-## CI strategy
+## Validation strategy
 
-- `Fast validation` runs Compose validation, Ruff and the complete fixture/Spark
-  test suite on pull requests and pushes to active module branches and `main`.
-- `Module 2 full-data validation` remains manually dispatchable, runs weekly,
-  and retains its canonical full-data path.
-- `Module 3 streaming validation` runs bounded live Kafka/Spark/Mongo,
-  checkpoint-recovery, late-data and throughput checks for relevant changes.
+- Fast automated checks cover deterministic generation, staging behavior,
+  batch analytics, streaming logic, lint and Compose configuration.
+- Full-data validation verifies the complete Instacart dataset, exact
+  source/local/HDFS reconciliation and the Module 2 serving outputs.
+- Streaming validation exercises Kafka, Spark Structured Streaming and MongoDB,
+  including checkpoint recovery, duplicate handling, late data and watermarking.
+- Performance measurements are bounded experimental results, not production
+  capacity claims.
 
 ## Next step: Module 4
 

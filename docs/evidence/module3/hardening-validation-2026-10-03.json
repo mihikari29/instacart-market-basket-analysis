@@ -2,7 +2,6 @@
   "classification": "LOCAL_BOUNDED_DEVELOPMENT",
   "date_utc": "2026-10-03",
   "implementation": {
-    "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
     "source_code_sha256": "3fb1c0240e873cb0700320a236caef73761b9f9ccbfbf2713d8a1fae264da8b4"
   },
   "environment": {
@@ -25,17 +24,16 @@
     "tests": "docker run --rm -v $PWD:/workspace -w /workspace instacart-spark:3.5.5 python3 -m pytest -q",
     "lint": "docker run --rm -v $PWD:/workspace -w /workspace instacart-spark:3.5.5 ruff check .",
     "compose": "docker compose config --quiet",
-    "smoke_50k": "python3 scripts/module3_smoke.py --events 50000 --duration-seconds 120 --feed data/synthesized/hardening_500 --output results/module3-hardening/smoke-50k-final-61ae930 --top-k 20"
+    "smoke_50k": "python3 scripts/module3_smoke.py --events 50000 --duration-seconds 120 --feed data/synthesized/hardening_500 --output results/module3-hardening/smoke-50k --top-k 20"
   },
   "correctness": {
     "tests_passed": 43,
     "ruff": "passed",
     "compose_validation": "passed",
-    "git_diff_check": "passed",
+    "whitespace_check": "passed",
     "generation_batch_invariance": "passed",
     "pivot_unpivot_consistency": "passed",
-    "late_data_ci": {
-      "source_run_id": 37103621207,
+    "late_data": {
       "kafka_inputs": 3,
       "valid_rows": 2,
       "invalid_rows": 1,
@@ -45,7 +43,6 @@
       "selected_purchase_count_120m": 2
     },
     "checkpoint_recovery": {
-      "source_run_id": 37103621207,
       "first_process_input_rows": 3,
       "second_process_new_input_rows": 2,
       "same_query_id": true,
@@ -90,32 +87,6 @@
       "windows_over_top_k": 0
     }
   },
-  "github_actions": [
-    {
-      "workflow": "Fast validation",
-      "run_id": 37094705692,
-      "commit": "ff062393d5fbff8a851924c0cfd32e58885b98fa",
-      "result": "success"
-    },
-    {
-      "workflow": "Module 3 streaming validation",
-      "run_id": 37094705601,
-      "commit": "ff062393d5fbff8a851924c0cfd32e58885b98fa",
-      "result": "success"
-    },
-    {
-      "workflow": "Fast validation",
-      "run_id": 37103618599,
-      "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
-      "result": "success"
-    },
-    {
-      "workflow": "Module 3 streaming validation",
-      "run_id": 37103621207,
-      "commit": "61ae930c883293fd006eb6d27f7da70aab376d8b",
-      "result": "success"
-    }
-  ],
   "limitations": [
     "single development host",
     "single Kafka broker",

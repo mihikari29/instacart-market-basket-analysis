@@ -56,6 +56,5 @@
       "4": {"broker": 4, "spark": 4, "processed_rows_per_second": 47.73, "trigger_ms": 2095},
       "8": {"broker": 8, "spark": 8, "processed_rows_per_second": 31.26, "trigger_ms": 3199}
     }
-  },
-  "github_actions_included": false
+  }
 }

@@ -429,7 +429,6 @@
     ]
   },
   "environment": {
-    "commit": "bb6cbdd1d96f9a9d5b74f0eb43877f48ccbc2ce9",
     "config": {
       "master": "local[2]",
       "repetitions": 3,
@@ -437,7 +436,6 @@
       "shuffle_partitions": 8,
       "warmups": 1
     },
-    "dirty": true,
     "java": "17.0.20.1",
     "platform": "Windows-11-10.0.26200-SP0",
     "python": "3.13.2",
