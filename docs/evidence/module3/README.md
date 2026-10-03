@@ -12,11 +12,13 @@ compact machine-readable record is
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Complete repository tests | `43 passed in 28.01s` after the HDFS rollback test (`42` on `ff06239`) | local Docker pytest; CI Fast validation |
+| Complete repository tests | Current final-hardening gate: `51 passed in 28.33s`; historical: `43` after HDFS rollback and `42` on `ff06239` | local Docker pytest; CI Fast validation |
 | Ruff / Compose / whitespace | PASS / PASS / PASS | local gate and CI |
 | Deterministic generation | Equal logical rows across fixture batch sizes; entity-keyed seed, no batch index | `test_generation_is_invariant_to_user_batch_size` |
 | Bounded replay | Disk-backed external merge; chunk bound and early stop for declared-sorted input asserted | Module 1 hardening tests |
 | Kafka delivery accounting | attempted/acknowledged/failed callback outcomes and non-zero normal exit asserted | Module 1 hardening tests |
+| Fault injection identity | duplicates retain source `event_id`; late events use deterministic distinct IDs and older timestamps | Module 1 hardening tests |
+| Kafka offset-loss policy | `failOnDataLoss=true` by default; environment and CLI relaxation are explicit | Module 3 configuration/source tests |
 | HDFS failure behavior | Failed upload cleans staging; failed promotion restores prior target | staging tests |
 | Pivot/unpivot | Spark pivot and explicit unpivot totals both `24` on fixture | `test_department_hour_pivot_unpivot_consistency` |
 | Duplicate/poison/late scenario | input `3`, valid `2`, invalid `1`, duplicate dropped `1`; beyond-watermark event dropped; finalized `C30=C120=2` | exact-source CI artifact from run `37103621207` |
@@ -120,3 +122,8 @@ records and must not be presented as current Top-K/deduplication performance.
   aggregate-state rows.
 - Mongo writes use bounded driver-side `toLocalIterator` and bulk operations;
   Top-K bounds serving rows but this is not a distributed Mongo writer.
+- Finalized-window replacement is logically idempotent and converges under
+  Spark retry, but delete + upsert is not transactionally atomic for concurrent
+  readers. A dashboard may briefly observe an empty or partial snapshot. A
+  production design could use immutable snapshot/version IDs, an active-version
+  pointer, or a Mongo transaction where appropriate.

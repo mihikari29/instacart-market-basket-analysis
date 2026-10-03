@@ -13,6 +13,20 @@ DEFAULT_MONGO_TOP_K = 20
 DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
+def parse_bool(value: str | bool) -> bool:
+    """Parse an explicit environment/CLI boolean without truthy-string traps."""
+    if isinstance(value, bool):
+        return value
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        "Boolean value must be one of: true, false, 1, 0, yes, no, on, off"
+    )
+
+
 @dataclass(frozen=True)
 class Config:
     # Storage / Spark runtime
@@ -26,6 +40,7 @@ class Config:
     bootstrap_servers: str = "kafka:29092"
     topic: str = DEFAULT_TOPIC
     starting_offsets: str = "earliest"
+    fail_on_data_loss: bool = True
 
     # Event-time windows (Proposal §19)
     window_short: str = "30 minutes"
@@ -63,6 +78,8 @@ class Config:
             raise ValueError("mongo_top_k_per_window must be positive")
         if not self.topic or not self.bootstrap_servers:
             raise ValueError("Kafka topic and bootstrap servers are required")
+        if not isinstance(self.fail_on_data_loss, bool):
+            raise ValueError("fail_on_data_loss must be a boolean")
 
     @classmethod
     def environment(cls, **overrides):
@@ -71,6 +88,11 @@ class Config:
             "master": os.environ.get("SPARK_MASTER", cls.master),
             "bootstrap_servers": os.environ.get(
                 "KAFKA_BOOTSTRAP_SERVERS", cls.bootstrap_servers
+            ),
+            "fail_on_data_loss": parse_bool(
+                os.environ.get(
+                    "MODULE3_FAIL_ON_DATA_LOSS", str(cls.fail_on_data_loss)
+                )
             ),
             "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
             "mongo_top_k_per_window": int(

@@ -2,7 +2,8 @@
 
 Each complete finalized-window snapshot replaces any earlier version, then uses
 deterministic (window_end, product_id) upserts. Replays converge to the same
-Top-K documents without duplicates. Indexes are created idempotently.
+Top-K documents without duplicates. Delete + upsert is not transactionally
+atomic for concurrent readers. Indexes are created idempotently.
 
 TTL defaults to seven days. Set ttl_seconds=0 to explicitly disable retention.
 """

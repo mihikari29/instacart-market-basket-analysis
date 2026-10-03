@@ -49,6 +49,7 @@ data/raw/*.csv (6 files Instacart)
          - Replay sự kiện lên Kafka topic 'instacart-purchase-events' (Key = user_id)
          - Receipt tách attempted / broker-acknowledged / failed
          - Gán ingestion_time_epoch_ms tại send-time
+         - Duplicate giữ nguyên event_id; late dùng ID deterministic riêng và timestamp cũ hơn
          - Hỗ trợ mô phỏng lỗi: late data, duplicate, burst, poison pill
 ```
 
@@ -127,6 +128,11 @@ ranking Window được thực hiện trên static micro-batch DataFrame do
 DataFrame. Đây là **finalized-window trending**, không phải open-window ranking
 được tính lại ở mỗi processing trigger.
 
+Kafka source mặc định strict với `failOnDataLoss=true`, do đó missing offsets
+làm query fail thay vì bị bỏ qua âm thầm. Chỉ cấu hình rõ ràng
+`MODULE3_FAIL_ON_DATA_LOSS=false` hoặc CLI `--allow-data-loss` mới bật relaxed
+mode; `startingOffsets` và checkpoint semantics không đổi.
+
 ### 4.2. Event-time, Watermark và Trending
 
 Pipeline dùng watermark event-time **10 phút**, cửa sổ dài **120 phút**
@@ -154,6 +160,13 @@ Top-K upsert. Vì vậy rerun một bounded feed loại bỏ stale non-Top-K row
 không va chạm rank cũ. Source event trùng `event_id` được deduplicate trong
 watermark trước aggregation; invalid/poison rows được đếm qua
 `record_quality` nhưng không đi vào stateful aggregation.
+
+Snapshot replacement này logically idempotent và hội tụ đúng khi Spark retry,
+nhưng chuỗi delete + upsert **không transactionally atomic** đối với reader đồng
+thời. Dashboard có thể thoáng thấy window rỗng hoặc chưa đầy đủ trong lúc thay
+thế. Thiết kế production tương lai có thể dùng immutable snapshot/version ID với
+active-version pointer, hoặc Mongo transaction khi phù hợp; project hiện tại
+không triển khai thêm độ phức tạp đó và không tuyên bố transactional exactly-once.
 
 ### 4.4. Live End-to-End Validation
 
@@ -230,6 +243,8 @@ parallelism, không kiểm chứng broker high availability.
 
 ### 4.8. Automated Validation / CI
 
+- Final-hardening local Docker suite: **51 passed**; Ruff, Compose và whitespace
+  đều **passed**.
 - Complete repository suite on implementation commit `ff06239`: **42 passed**.
 - Complete repository suite after rollback regression `61ae930`: **43 passed**.
 - Ruff: **passed**; Docker Compose configuration và GitHub workflow YAML:
@@ -270,6 +285,8 @@ Module 3 có trạng thái **COMPLETE AND VALIDATED**. Tuy nhiên, PR #2
   thành production throughput hoặc capacity.
 - Mongo sink dùng bounded `toLocalIterator` + bulk batches trên driver; Top-K
   giới hạn output nhưng sink chưa phải distributed Mongo writer.
+- Delete + upsert khi thay finalized-window snapshot không transactionally atomic;
+  concurrent reader có thể thoáng thấy snapshot rỗng hoặc một phần.
 
 ---
 
@@ -344,6 +361,10 @@ python scripts/module3.py all --duration-seconds 60
 # Mặc định Top-20 và TTL 7 ngày; có thể đổi hoặc tắt TTL rõ ràng
 python scripts/module3.py run --mongo-top-k-per-window 50 --ttl-seconds 86400
 python scripts/module3.py run --ttl-seconds 0
+
+# Kafka offset loss là lỗi mặc định; relaxed mode phải opt-in rõ ràng
+MODULE3_FAIL_ON_DATA_LOSS=false python scripts/module3.py run --duration-seconds 60
+python scripts/module3.py run --allow-data-loss --duration-seconds 60
 ```
 Cấu hình windows/watermark/weights có thể override qua CLI flags:
 `--window-short`, `--window-long`, `--slide`, `--watermark`,
@@ -379,6 +400,7 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
 - [x] **Module 3 - Structured Streaming** *(implementation, local validation, and GitHub-hosted CI validation complete; PR #2 pending merge)*:
   - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
+  - [x] Kafka `failOnDataLoss=true` mặc định; environment/CLI opt-out rõ ràng.
   - [x] Domain validation/quality metrics + source `event_id` deduplication.
   - [x] Event-time watermark 10 phút trên `event_time_epoch_ms`.
   - [x] Một stateful 120m sliding aggregate (slide 5m) + exact conditional C30m + trend_score = 0.7·N(C30m) + 0.3·N(C120m).
@@ -387,7 +409,7 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Explicit checkpoint ID; two-process recovery measured without replay from earliest.
   - [x] Deterministic late-data demo measured watermark acceptance and dropped state rows.
   - [x] Measured throughput with real producer rate control + real Kafka 1/2/4/8 topic sweep.
-  - [x] Docker complete suite: `43 passed`; Ruff + Compose + whitespace PASS.
+  - [x] Final-hardening Docker complete suite: `51 passed`; Ruff + Compose + whitespace PASS.
   - [x] CI workflow `.github/workflows/module3-full.yml` + evidence folder `docs/evidence/module3/`.
   - [x] GitHub Actions `Module 3 streaming validation` run `37103621207`: job `streaming` **SUCCESS** on `61ae930`.
 - [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.

@@ -10,6 +10,8 @@ ALS/recommendation belongs to Module 4.
 ```text
 src/module1/             data cleaning, synthetic timestamp generator, staging, producer
 src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
+src/module3/             Spark Structured Streaming, watermarking, deduplication,
+                         finalized-window trending, Mongo serving, recovery and benchmarks
 data/raw/*.csv           original Kaggle files (archive — only read by clean.py)
 data/clean/*.parquet     batch source of truth (facts + dims)
 data/synthesized/        reproducible synthetic feeds (scatter_1w, scatter_1m, scatter_3m)
@@ -123,7 +125,7 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Complete; validated locally and on GitHub-hosted CI; PR #2 pending merge |
+| 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete; validated locally and on GitHub-hosted CI; PR #2 pending merge |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
 ## Team Onboarding & Environment Setup
@@ -156,6 +158,12 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
    `--limit-events` stops output without materializing the full feed in memory.
    The JSON receipt separates attempted, broker-acknowledged, and failed sends;
    any delivery failure produces a normal non-zero process exit.
+
+   Fault modes have separate identities: `dup` republishes the same logical
+   event with the same `event_id`, while `late` emits a separate event with an
+   older timestamp and a deterministic `<source_id>__late_<sequence>` ID. This
+   lets source deduplication remove duplicates without masking late-data and
+   watermark behavior. Poison and burst behavior are unchanged.
 
 Each HDFS interaction refresh uploads to a unique staging tree, moves the old
 target to a backup, and promotes the complete staging tree with an atomic HDFS
@@ -194,7 +202,10 @@ New source layout:
 ```text
 src/module1/             data cleaning, synthetic timestamp generator, staging, producer
 src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
+src/module3/             Structured Streaming, watermark/dedup, finalized trends,
+                         Mongo serving, recovery and benchmarks
 scripts/module2.py       canonical Docker runner
+scripts/module3*.py      Module 3 runner, smoke, and recovery orchestration
 Dockerfile.spark         pinned Spark runtime
 tests/                   staging/unit/Spark integration regressions
 ```
@@ -237,6 +248,12 @@ Kafka events
 This is finalized-window trending, not an open-window ranking recomputed every
 processing trigger.
 
+The Kafka source defaults to `failOnDataLoss=true`: unavailable requested
+offsets fail the query instead of being skipped silently. Relaxed behavior
+requires an explicit `--allow-data-loss` flag or
+`MODULE3_FAIL_ON_DATA_LOSS=false`; checkpoint and `startingOffsets` semantics
+are otherwise unchanged.
+
 ```bash
 # Validate Kafka + Mongo connectivity (no streaming)
 python scripts/module3.py validate
@@ -265,10 +282,10 @@ python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark
 python scripts/module3.py all --duration-seconds 60
 ```
 
-Validation status: the complete local Docker suite reports **43 passed** after
-the HDFS rollback regression was added; Ruff, Compose validation and whitespace
-checks pass. On implementation commit `ff06239`, GitHub Actions fast-validation
-run **37094705692** and streaming run **37094705601** succeeded with **42 tests**,
+Current final-hardening local validation reports **51 passed**; Ruff, Compose
+validation and whitespace checks pass. Historically, the suite reported 43
+tests after the HDFS rollback regression. On implementation commit `ff06239`, GitHub Actions
+fast-validation run **37094705692** and streaming run **37094705601** succeeded with **42 tests**,
 a live Kafka → Spark → MongoDB path, two-process checkpoint recovery, and the
 duplicate/poison/late-data scenario. The rollback follow-up is commit `61ae930`;
 its fast run **37103618599** and streaming run **37103621207** also succeeded.
@@ -287,6 +304,13 @@ window snapshot is replaced, removing stale rows and preventing rank conflicts
 when a bounded feed is recomputed. Evidence lives in
 [docs/evidence/module3](docs/evidence/module3/README.md) and is uploaded by
 [module3-full.yml](.github/workflows/module3-full.yml).
+
+Finalized-window replacement is logically idempotent and converges correctly
+under Spark retry, but delete + upsert is not transactionally atomic for
+concurrent readers. A dashboard may briefly observe an empty or partial snapshot
+during replacement. A production design could publish immutable snapshot/version
+IDs and atomically switch an active-version pointer, or use a Mongo transaction
+where appropriate.
 
 The producer's `--replay-speed` remains a synthetic event-time acceleration
 multiplier. Benchmarks use the separate `--target-events-per-second` control and

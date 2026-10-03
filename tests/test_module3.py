@@ -19,7 +19,7 @@ from src.module3.config import Config
 from src.module3.checkpoint import ensure_checkpoint
 from src.module3.spark import session
 from src.module3.fixtures import make_events_dataframe
-from src.module3.parse import parse_json_events, parse_json_records
+from src.module3.parse import parse_json_events, parse_json_records, read_kafka_source
 from src.module3.schemas import KAFKA_EVENT_SCHEMA
 from src.module3.trending import (
     _window_agg,
@@ -31,6 +31,38 @@ from src.module3.trending import (
 from src.module3.sink_mongo import document_identity, ensure_indexes, write_mongo
 
 pytestmark = pytest.mark.integration
+
+
+class _KafkaReader:
+    def __init__(self):
+        self.options = {}
+        self.loaded = False
+
+    def format(self, value):
+        assert value == "kafka"
+        return self
+
+    def option(self, key, value):
+        self.options[key] = value
+        return self
+
+    def load(self):
+        self.loaded = True
+        return self
+
+
+def test_kafka_source_receives_strict_and_relaxed_data_loss_options():
+    class Spark:
+        def __init__(self):
+            self.readStream = _KafkaReader()
+
+    strict = Spark()
+    assert read_kafka_source(strict, Config()) is strict.readStream
+    assert strict.readStream.options["failOnDataLoss"] == "true"
+
+    relaxed = Spark()
+    read_kafka_source(relaxed, Config(fail_on_data_loss=False))
+    assert relaxed.readStream.options["failOnDataLoss"] == "false"
 
 
 @pytest.fixture(scope="module")

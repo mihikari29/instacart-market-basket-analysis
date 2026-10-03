@@ -115,6 +115,19 @@ def build_message(row: dict, event_time_ms: int, iso_string: str | None = None) 
     }
 
 
+def build_late_event_id(source_event_id: str, injection_sequence: int) -> str:
+    """Return the stable, namespaced identity of an injected late event.
+
+    Generated source IDs use ``<order_id>_<cart_position>``.  The reserved
+    suffix keeps the injected event distinct from that source event while the
+    monotonically increasing injection sequence keeps multiple late copies
+    collision-free and reproducible for the same replay.
+    """
+    if injection_sequence < 1:
+        raise ValueError("injection_sequence must be positive")
+    return f"{source_event_id}__late_{injection_sequence}"
+
+
 def send_tracked(producer, topic: str, message: dict, accounting: DeliveryAccounting) -> None:
     """Send once and attach acknowledgement/failure callbacks."""
     accounting.attempt()
@@ -146,6 +159,7 @@ def publish_rows(
     latencies: list[int] = []
     first_event_ms = None
     lifecycle_errors: list[str] = []
+    late_injection_sequence = 0
 
     if start_delay_seconds:
         time.sleep(start_delay_seconds)
@@ -185,9 +199,13 @@ def publish_rows(
         if probability_duplicate and rng.random() < probability_duplicate:
             send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
         if probability_late and rng.random() < probability_late:
+            late_injection_sequence += 1
             late_delta_ms = int(rng.uniform(4 * 60, 25 * 60) * 1000)
             late_epoch_ms = max(0, event_time_ms - late_delta_ms)
             late_message = build_message(row, late_epoch_ms, format_iso(late_epoch_ms))
+            late_message["event_id"] = build_late_event_id(
+                message["event_id"], late_injection_sequence
+            )
             send_tracked(producer, topic, late_message, accounting)
 
     try:

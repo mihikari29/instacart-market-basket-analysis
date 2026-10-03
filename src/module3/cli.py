@@ -21,7 +21,7 @@ import platform
 import subprocess
 import uuid
 
-from .config import Config
+from .config import Config, parse_bool
 from .spark import session
 from .validate import validate_kafka, validate_mongo
 
@@ -71,6 +71,24 @@ def main(argv=None):
     parser.add_argument("--bootstrap-servers", default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", Config.bootstrap_servers))
     parser.add_argument("--topic", default=Config.topic)
     parser.add_argument("--starting-offsets", default=Config.starting_offsets)
+    data_loss = parser.add_mutually_exclusive_group()
+    data_loss.add_argument(
+        "--fail-on-data-loss",
+        dest="fail_on_data_loss",
+        action="store_true",
+        help="Fail if requested Kafka offsets are unavailable (default)",
+    )
+    data_loss.add_argument(
+        "--allow-data-loss",
+        dest="fail_on_data_loss",
+        action="store_false",
+        help="Explicitly allow Spark to skip unavailable Kafka offsets",
+    )
+    parser.set_defaults(
+        fail_on_data_loss=parse_bool(
+            os.environ.get("MODULE3_FAIL_ON_DATA_LOSS", str(Config.fail_on_data_loss))
+        )
+    )
 
     # Windows / watermark / weights
     parser.add_argument("--window-short", default=Config.window_short)
@@ -135,6 +153,7 @@ def main(argv=None):
         bootstrap_servers=args.bootstrap_servers,
         topic=args.topic,
         starting_offsets=args.starting_offsets,
+        fail_on_data_loss=args.fail_on_data_loss,
         window_short=args.window_short,
         window_long=args.window_long,
         slide=args.slide,

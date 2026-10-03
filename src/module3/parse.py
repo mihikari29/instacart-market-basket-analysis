@@ -62,16 +62,21 @@ def parse_json_events(json_df: DataFrame) -> DataFrame:
     )
 
 
-def from_kafka(spark, config: Config) -> DataFrame:
-    """Read Kafka and expose input/valid/invalid counts in query progress."""
-    raw = (
+def read_kafka_source(spark, config: Config) -> DataFrame:
+    """Build the Kafka source with explicit offset-loss semantics."""
+    return (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", config.bootstrap_servers)
         .option("subscribe", config.topic)
         .option("startingoffsets", config.starting_offsets)
-        .option("failOnDataLoss", "false")
+        .option("failOnDataLoss", str(config.fail_on_data_loss).lower())
         .load()
     )
+
+
+def from_kafka(spark, config: Config) -> DataFrame:
+    """Read Kafka and expose input/valid/invalid counts in query progress."""
+    raw = read_kafka_source(spark, config)
     parsed = parse_json_records(raw.selectExpr("CAST(value AS STRING) AS json_str"))
     observed = parsed.observe(
         "record_quality",

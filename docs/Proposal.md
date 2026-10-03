@@ -917,9 +917,18 @@ thay thế để stale non-Top-K rows và rank cũ không còn tồn tại. Top-
 dụng sau normalization/ranking trên full population. TTL mặc định là 7 ngày và
 có thể tắt rõ ràng bằng `ttl_seconds = 0`.
 
+Replacement hội tụ đúng và logically idempotent khi Spark retry, nhưng delete +
+upsert không transactionally atomic đối với concurrent reader. Dashboard có thể
+thoáng quan sát snapshot rỗng hoặc một phần trong lúc thay thế. Production design
+có thể dùng immutable snapshot/version ID, active-version pointer, hoặc Mongo
+transaction khi phù hợp; project hiện tại chấp nhận giới hạn này. Kafka source
+mặc định `failOnDataLoss=true`; việc cho phép bỏ qua unavailable offsets phải
+được opt-in rõ ràng.
+
 Mức đảm bảo trong dự án được mô tả là:
 
-**effectively exactly-once for deterministic aggregated outputs with idempotent sink design.**
+**deterministic, replay-convergent aggregated output with an idempotent sink
+design; not transactionally exactly-once serving for concurrent readers.**
 
 ---
 

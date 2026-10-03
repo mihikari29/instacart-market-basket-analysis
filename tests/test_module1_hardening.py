@@ -187,6 +187,42 @@ def test_delivery_acknowledgement_accounting_success_and_failure():
     assert "delivery failed" in failed["failure_samples"][0]
 
 
+def _publish_with_injections(injections):
+    producer = _Producer()
+    publish_rows(
+        producer,
+        _event_rows()[2:3],
+        topic="events",
+        replay_speed=0,
+        target_events_per_second=0,
+        start_delay_seconds=0,
+        injections=injections,
+    )
+    return [value for _topic, _key, value in producer.sent]
+
+
+def test_duplicate_injection_reuses_source_event_id():
+    messages = _publish_with_injections({"dup": 1.0})
+    assert len(messages) == 2
+    assert messages[0]["event_id"] == messages[1]["event_id"] == "e2"
+
+
+def test_late_injection_has_older_time_and_deterministic_distinct_id():
+    first = _publish_with_injections({"late": 1.0})
+    second = _publish_with_injections({"late": 1.0})
+    assert len(first) == len(second) == 2
+    assert first[1]["event_id"] == second[1]["event_id"] == "e2__late_1"
+    assert first[1]["event_id"] != first[0]["event_id"]
+    assert first[1]["event_time_epoch_ms"] < first[0]["event_time_epoch_ms"]
+
+
+def test_duplicate_and_late_injections_remain_distinguishable():
+    original, duplicate, late = _publish_with_injections({"dup": 1.0, "late": 1.0})
+    assert duplicate["event_id"] == original["event_id"]
+    assert late["event_id"] == "e2__late_1"
+    assert late["event_id"] != duplicate["event_id"]
+
+
 def test_producer_returns_nonzero_and_writes_receipt_on_delivery_failure(tmp_path):
     receipt = tmp_path / "receipt.json"
     with (
