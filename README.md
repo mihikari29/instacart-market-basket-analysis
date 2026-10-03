@@ -125,8 +125,8 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete; validated locally and on GitHub-hosted CI; PR #2 pending merge |
-| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
+| 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete; merged into `main`; validated locally and on GitHub-hosted CI |
+| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending / Next |
 
 ## Team Onboarding & Environment Setup
 
@@ -292,7 +292,11 @@ fast-validation run **37094705692** and streaming run **37094705601** succeeded 
 a live Kafka → Spark → MongoDB path, two-process checkpoint recovery, and the
 duplicate/poison/late-data scenario. The rollback follow-up is commit `61ae930`;
 its fast run **37103618599** and streaming run **37103621207** also succeeded.
-PR #2 targets `main` and remains open and unmerged. See the
+Final PR-head runs **37109270743** and **37109270688** succeeded on `c462618`.
+PR #2 was merged into `main` on 2026-10-03 at merge commit `0622b143`; post-merge
+Fast validation run **37119416919** and Module 3 streaming run **37119416925**
+both succeeded on that exact merge revision. The 33,819,106-event full-data run
+remains attributed to `a35170f`; it was not rerun on the merge commit. See the
 [detailed progress and measurements](docs/progress.md) and [Module 3
 evidence](docs/evidence/module3/README.md).
 

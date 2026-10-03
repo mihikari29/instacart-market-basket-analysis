@@ -1,7 +1,7 @@
 # Module 3 Evidence (Speed Layer)
 
 > Status: **implemented and validated locally with Docker Compose and on a
-> GitHub-hosted runner on 2026-10-03. PR #2 remains open against `main`.**
+> GitHub-hosted runner. PR #2 was merged into `main` on 2026-10-03.**
 
 Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The results below are
 bounded development/correctness evidence, not production capacity claims. The
@@ -9,6 +9,20 @@ compact machine-readable record is
 [`hardening-validation-2026-10-03.json`](hardening-validation-2026-10-03.json).
 The final release-gate record is
 [`final-release-validation-2026-10-03.json`](final-release-validation-2026-10-03.json).
+
+## Merged baseline
+
+- PR #2: merged
+- Merge revision: `0622b14309b3ca379752cc827cdc7a7a45919551`
+- Final PR head: `c462618048b3c0e2462486a8f145858762878feb`
+- Validated source revision: `a35170ff0f98729ad2b64b8df4c96c4bf6321201`
+- Post-merge Fast validation: run
+  [37119416919](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37119416919), SUCCESS
+- Post-merge Module 3 streaming validation: run
+  [37119416925](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37119416925), SUCCESS
+
+The 33,819,106-event full-data workflow ran on the validated source revision
+`a35170f`, not on the final PR head or merge revision.
 
 ## Correctness evidence
 
@@ -99,6 +113,10 @@ bounded run; the numbers must not be extrapolated to a production cluster.
 | Module 3 streaming validation (PR) | `61ae930` | [37103621207](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37103621207) | SUCCESS |
 | Fast validation (PR, final source) | `a35170f` | [37107841305](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107841305) | SUCCESS; 51 tests, Ruff, Compose |
 | Module 3 streaming validation (PR, final source) | `a35170f` | [37107841330](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107841330) | SUCCESS |
+| Fast validation (PR, final head) | `c462618` | [37109270743](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37109270743) | SUCCESS |
+| Module 3 streaming validation (PR, final head) | `c462618` | [37109270688](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37109270688) | SUCCESS |
+| Fast validation (post-merge push) | `0622b143` | [37119416919](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37119416919) | SUCCESS |
+| Module 3 streaming validation (post-merge push) | `0622b143` | [37119416925](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37119416925) | SUCCESS |
 
 Run `37094705601` independently built the pinned runtime on a clean hosted
 runner, regenerated a bounded Module 1 feed, ran all 42 tests, validated service

@@ -21,8 +21,8 @@ Historical fixture evidence remains in [README.md](README.md).
 | Module 3 streaming — throughput + Kafka partition benchmark | PASS as bounded development evidence; producer/consumer pair measured via `streaming_progress.jsonl` |
 | Compile / Ruff / Compose / whitespace | PASS; final 51-test local and CI gates |
 | Credentials and datasets excluded from Git | PASS; compact measured evidence only |
-| Commits and remote push | PASS; `fix/module3-hardening` published; final source `a35170f` |
-| Merge | PR #2 is open against `main`; not merged as of 2026-10-03 |
+| Commits and remote push | PASS; validated source and evidence merged into `main` at `0622b143`; exact-main Fast and Module 3 validation passed |
+| Merge | PASS; PR #2 merged into `main` at `0622b14309b3ca379752cc827cdc7a7a45919551` |
 
 This records executed acceptance gates, not a subjective 10/10 grade. Timings are
 specific to the recorded single-host resources and warm-system methodology.

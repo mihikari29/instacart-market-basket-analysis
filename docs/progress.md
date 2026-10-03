@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Module 1** | Data Ingestion, Cleaning, Synthetic Timestamps, HDFS Staging, Kafka Replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Hoàn thành & Đã kiểm chứng** |
 | **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã merge vào `main`** |
-| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành & Đã kiểm chứng — Local Docker + GitHub Actions; PR #2 đang mở, chưa merge** |
+| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành, đã kiểm chứng và đã merge vào `main`** |
 | **Module 4** | Machine Learning & Graph, Collaborative Filtering, GraphFrames, API & Dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Sẵn sàng triển khai tiếp theo* |
 
 ---
@@ -266,14 +266,28 @@ parallelism, không kiểm chứng broker high availability.
 - Final-source `Module 3 streaming validation` run `37107841330`: **SUCCESS**
   trên `a35170f`; Kafka → Spark → Mongo, recovery, duplicate/poison/late và
   throughput smoke đều pass.
+- Final-PR-head `Fast validation` run `37109270743`: **SUCCESS** trên `c462618`.
+- Final-PR-head `Module 3 streaming validation` run `37109270688`: **SUCCESS**
+  trên `c462618`.
+- Post-merge `Fast validation` run `37119416919`: **SUCCESS** trên merge revision
+  `0622b14309b3ca379752cc827cdc7a7a45919551`.
+- Post-merge `Module 3 streaming validation` run `37119416925`: **SUCCESS** trên
+  merge revision `0622b14309b3ca379752cc827cdc7a7a45919551`.
 
 CI đã tái lập bounded Kafka → Spark → MongoDB path trên một
 GitHub-hosted runner sạch, bao gồm bounded Module 1 feed generation, pinned
 Spark runtime build, tests, service connectivity, recovery, late-data/watermark
-validation, throughput smoke, evidence upload và cleanup. PR #2 có base `main`,
-head branch `fix/module3-hardening`; implementation commit chính là
-`ff062393d5fbff8a851924c0cfd32e58885b98fa`, theo sau bởi rollback fix
-`61ae930c883293fd006eb6d27f7da70aab376d8b`.
+validation, throughput smoke, evidence upload và cleanup. PR #2 đã merge vào
+`main` ngày 2026-10-03. Lineage kiểm chứng chính xác là:
+
+- `a35170ff0f98729ad2b64b8df4c96c4bf6321201`: source hardening đã chạy full-data
+  33,819,106 events và các validation Module 1–3.
+- `c462618048b3c0e2462486a8f145858762878feb`: final PR head, gồm đồng bộ tài liệu
+  và evidence; cả hai final pre-merge workflows đều thành công.
+- `0622b14309b3ca379752cc827cdc7a7a45919551`: merge commit thực tế trên `main`;
+  cả Fast validation và Module 3 streaming validation post-merge đều thành công.
+
+Full-data workflow không được chạy lại trên hai revision tài liệu/merge về sau.
 
 Lần chạy PR đầu tiên chỉ phát hiện timing issue: startup batch khoảng
 8.66 giây cộng producer delay 5 giây vượt trial allowance 12 giây. Allowance
@@ -283,8 +297,8 @@ MongoDB behavior.
 
 ### 4.9. Current Status & Limitations
 
-Module 3 có trạng thái **COMPLETE AND VALIDATED**. Tuy nhiên, PR #2
-**vẫn đang mở và chưa merge** vào `main`.
+Module 3 có trạng thái **COMPLETE, VALIDATED AND MERGED**. PR #2 đã merge vào
+`main` tại `0622b14309b3ca379752cc827cdc7a7a45919551`.
 
 - Các benchmark là bounded development measurements, không phải production
   capacity claims.
@@ -409,7 +423,7 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Spark pivot + explicit unpivot với kiểm tra tổng nhất quán.
   - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
   - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
-- [x] **Module 3 - Structured Streaming** *(implementation, local validation, and GitHub-hosted CI validation complete; PR #2 pending merge)*:
+- [x] **Module 3 - Structured Streaming** *(implementation and validation complete; PR #2 merged into `main`)*:
   - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
   - [x] Kafka `failOnDataLoss=true` mặc định; environment/CLI opt-out rõ ràng.
   - [x] Domain validation/quality metrics + source `event_id` deduplication.
