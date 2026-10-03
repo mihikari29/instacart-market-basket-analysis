@@ -1,35 +1,25 @@
-"""Module 1 - Kafka Producer: Replay synthesized purchase events onto a Kafka topic.
+"""Replay synthesized events to Kafka in chronological order with bounded RAM.
 
-Emits one JSON message per row of the chosen feed in chronological order, keyed
-by user_id (preserving per-user event ordering across partitions). Pacing is driven
-by event_time_epoch_ms vs --replay-speed; each message receives an ingestion_time_epoch_ms
-timestamp at send time.
-
-Schema (13 fields):
-  event_id, order_id, user_id, product_id, add_to_cart_order, reordered,
-  aisle_id, department_id, order_dow, order_hour_of_day,
-  event_time_epoch_ms, event_time_iso, ingestion_time_epoch_ms
-
-Usage:
-  python -m src.module1.producer --feed data/synthesized/scatter_3m --replay-speed 100000
-  python -m src.module1.producer --limit-events 50000 --replay-speed 0     # Bulk ingestion
-  python -m src.module1.producer --inject "late:0.05,dup:0.02,burst:200,poison:1"
+Unsorted Parquet feeds use a fixed-memory, disk-backed external merge. Kafka
+delivery is successful only after broker acknowledgement (``acks=all``); the
+receipt distinguishes attempted, acknowledged, and failed events.
 """
 
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass, field
 import json
-import os
-import sys
+from pathlib import Path
+from threading import Lock
 import time
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 from kafka import KafkaProducer
+
+from .event_reader import iter_ordered_events, manifest_declares_sorted
 
 warnings.filterwarnings("ignore", message=".*serializer does not implement.*")
 
@@ -38,31 +28,42 @@ try:
 except ImportError:
     NoBrokersAvailable = Exception
 
-SCHEMA_FIELDS = [
-    "event_id",
-    "order_id",
-    "user_id",
-    "product_id",
-    "add_to_cart_order",
-    "reordered",
-    "aisle_id",
-    "department_id",
-    "order_dow",
-    "order_hour_of_day",
-    "event_time_epoch_ms",
-    "event_time_iso",
-]
-
 DEFAULT_TOPIC = "instacart-purchase-events"
+KAFKA_RETRIES = 5
 
 
-def load_sorted(path: Path, limit: int | None) -> dict[str, np.ndarray]:
-    """Load an event feed sorted chronologically by event_time_epoch_ms."""
-    table = pq.read_table(path, columns=SCHEMA_FIELDS)
-    table = table.sort_by([("event_time_epoch_ms", "ascending")])
-    if limit:
-        table = table.slice(0, limit)
-    return {col_name: table[col_name].to_numpy(zero_copy_only=False) for col_name in SCHEMA_FIELDS}
+@dataclass
+class DeliveryAccounting:
+    """Thread-safe broker-delivery counters populated by Kafka callbacks."""
+
+    attempted_events: int = 0
+    acked_events: int = 0
+    failed_events: int = 0
+    failure_samples: list[str] = field(default_factory=list)
+    _lock: Lock = field(default_factory=Lock, repr=False)
+
+    def attempt(self) -> None:
+        with self._lock:
+            self.attempted_events += 1
+
+    def ack(self, *_args) -> None:
+        with self._lock:
+            self.acked_events += 1
+
+    def fail(self, error=None) -> None:
+        with self._lock:
+            self.failed_events += 1
+            if error is not None and len(self.failure_samples) < 10:
+                self.failure_samples.append(f"{type(error).__name__}: {error}")
+
+    def reconcile_unconfirmed(self, reason: str) -> None:
+        """Account for futures left unresolved after flush/close failure."""
+        with self._lock:
+            missing = self.attempted_events - self.acked_events - self.failed_events
+            if missing > 0:
+                self.failed_events += missing
+                if len(self.failure_samples) < 10:
+                    self.failure_samples.append(f"UnconfirmedDelivery: {reason} ({missing} events)")
 
 
 def build_producer(bootstrap_servers: str) -> KafkaProducer:
@@ -71,11 +72,15 @@ def build_producer(bootstrap_servers: str) -> KafkaProducer:
             bootstrap_servers=bootstrap_servers,
             value_serializer=lambda val: json.dumps(val).encode("utf-8"),
             key_serializer=lambda key: str(key).encode("utf-8"),
+            acks="all",
+            retries=KAFKA_RETRIES,
             linger_ms=5,
-            batch_size=262144,
+            batch_size=262_144,
         )
     except NoBrokersAvailable as exc:
-        raise SystemExit(f"Cannot reach Kafka at {bootstrap_servers} (is docker compose up?)") from exc
+        raise RuntimeError(
+            f"Cannot reach Kafka at {bootstrap_servers} (is docker compose up?)"
+        ) from exc
 
 
 def parse_injections(injection_spec: str | None) -> dict[str, float]:
@@ -92,157 +97,212 @@ def format_iso(epoch_ms: int) -> str:
     return pd.to_datetime(epoch_ms, unit="ms", utc=True).strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 
-def build_message(columns: dict[str, np.ndarray], index: int, event_time_ms: int, iso_string: str | None = None) -> dict:
+def build_message(row: dict, event_time_ms: int, iso_string: str | None = None) -> dict:
     return {
-        "event_id": str(columns["event_id"][index]),
-        "order_id": int(columns["order_id"][index]),
-        "user_id": int(columns["user_id"][index]),
-        "product_id": int(columns["product_id"][index]),
-        "add_to_cart_order": int(columns["add_to_cart_order"][index]),
-        "reordered": bool(columns["reordered"][index]),
-        "aisle_id": int(columns["aisle_id"][index]),
-        "department_id": int(columns["department_id"][index]),
-        "order_dow": int(columns["order_dow"][index]),
-        "order_hour_of_day": int(columns["order_hour_of_day"][index]),
+        "event_id": str(row["event_id"]),
+        "order_id": int(row["order_id"]),
+        "user_id": int(row["user_id"]),
+        "product_id": int(row["product_id"]),
+        "add_to_cart_order": int(row["add_to_cart_order"]),
+        "reordered": bool(row["reordered"]),
+        "aisle_id": int(row["aisle_id"]),
+        "department_id": int(row["department_id"]),
+        "order_dow": int(row["order_dow"]),
+        "order_hour_of_day": int(row["order_hour_of_day"]),
         "event_time_epoch_ms": event_time_ms,
-        "event_time_iso": iso_string if iso_string is not None else str(columns["event_time_iso"][index]),
+        "event_time_iso": iso_string if iso_string is not None else str(row["event_time_iso"]),
         "ingestion_time_epoch_ms": int(time.time() * 1000),
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+def send_tracked(producer, topic: str, message: dict, accounting: DeliveryAccounting) -> None:
+    """Send once and attach acknowledgement/failure callbacks."""
+    accounting.attempt()
+    try:
+        future = producer.send(topic, key=message["user_id"], value=message)
+        future.add_callback(accounting.ack)
+        future.add_errback(accounting.fail)
+    except Exception as exc:
+        accounting.fail(exc)
+
+
+def publish_rows(
+    producer,
+    rows,
+    *,
+    topic: str,
+    replay_speed: float,
+    target_events_per_second: float | None,
+    start_delay_seconds: float,
+    injections: dict[str, float],
+) -> tuple[dict, list[int]]:
+    """Publish an ordered iterator and return delivery metrics plus latency samples."""
+    probability_late = injections.get("late", 0.0)
+    probability_duplicate = injections.get("dup", 0.0)
+    burst_count = int(injections.get("burst", 0) or 0)
+    poison_remaining = int(injections.get("poison", 0) or 0)
+    rng = np.random.default_rng(1234)
+    accounting = DeliveryAccounting()
+    latencies: list[int] = []
+    first_event_ms = None
+    lifecycle_errors: list[str] = []
+
+    if start_delay_seconds:
+        time.sleep(start_delay_seconds)
+    replay_start = time.monotonic()
+
+    for index, row in enumerate(rows):
+        event_time_ms = int(row["event_time_epoch_ms"])
+        if first_event_ms is None:
+            first_event_ms = event_time_ms
+        if target_events_per_second is not None and target_events_per_second > 0:
+            target_time = replay_start + accounting.attempted_events / target_events_per_second
+            sleep_duration = target_time - time.monotonic()
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+        elif target_events_per_second is None and replay_speed > 0:
+            target_time = replay_start + max(0, event_time_ms - first_event_ms) / (
+                replay_speed * 1000.0
+            )
+            sleep_duration = target_time - time.monotonic()
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+
+        message = build_message(row, event_time_ms)
+        if poison_remaining > 0:
+            message["product_id"] = "MALFORMED"
+            poison_remaining -= 1
+        send_tracked(producer, topic, message, accounting)
+        if accounting.attempted_events % 100 == 0:
+            latencies.append(message["ingestion_time_epoch_ms"] - event_time_ms)
+        if accounting.attempted_events % 50_000 == 0:
+            rate = accounting.attempted_events / max(1e-9, time.monotonic() - replay_start)
+            print(f"  attempted={accounting.attempted_events:,} rate={rate:,.0f}/s", flush=True)
+
+        if burst_count and index % 500 == 0:
+            for _ in range(burst_count):
+                send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
+        if probability_duplicate and rng.random() < probability_duplicate:
+            send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
+        if probability_late and rng.random() < probability_late:
+            late_delta_ms = int(rng.uniform(4 * 60, 25 * 60) * 1000)
+            late_epoch_ms = max(0, event_time_ms - late_delta_ms)
+            late_message = build_message(row, late_epoch_ms, format_iso(late_epoch_ms))
+            send_tracked(producer, topic, late_message, accounting)
+
+    try:
+        producer.flush(timeout=30)
+    except Exception as exc:
+        lifecycle_errors.append(f"flush: {type(exc).__name__}: {exc}")
+    try:
+        producer.close(timeout=10)
+    except Exception as exc:
+        lifecycle_errors.append(f"close: {type(exc).__name__}: {exc}")
+
+    if lifecycle_errors:
+        accounting.reconcile_unconfirmed("; ".join(lifecycle_errors))
+    else:
+        accounting.reconcile_unconfirmed("callback not completed after clean close")
+    elapsed = time.monotonic() - replay_start
+    receipt = {
+        "attempted_events": accounting.attempted_events,
+        "acked_events": accounting.acked_events,
+        "failed_events": accounting.failed_events,
+        "failure_samples": accounting.failure_samples,
+        "lifecycle_errors": lifecycle_errors,
+        "elapsed_seconds": elapsed,
+        "achieved_events_per_second": accounting.acked_events / max(1e-9, elapsed),
+        "configured_retries": KAFKA_RETRIES,
+    }
+    return receipt, latencies
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--feed", default=str(Path("data/synthesized/scatter_3m")))
     parser.add_argument("--bootstrap", default="localhost:9092")
     parser.add_argument("--topic", default=DEFAULT_TOPIC)
-    parser.add_argument("--replay-speed", type=float, default=1.0,
-                        help="Wall-time multiplier (0 = bulk streaming without pacing)")
-    parser.add_argument(
-        "--target-events-per-second",
-        type=float,
-        default=None,
-        help="Explicit send-rate limit; overrides replay-speed (0 = unbounded bulk send)",
-    )
+    parser.add_argument("--replay-speed", type=float, default=1.0)
+    parser.add_argument("--target-events-per-second", type=float, default=None)
     parser.add_argument("--limit-events", type=int, default=None)
-    parser.add_argument("--start-delay-seconds", type=float, default=0.0,
-                        help="Delay before the first send (useful for stream orchestration)")
-    parser.add_argument("--receipt", type=Path, default=None,
-                        help="Optional JSON file for measured producer results")
-    parser.add_argument("--inject", default=None,
-                        help="Fault injection spec: late:<p>,dup:<p>,burst:<n>,poison:<n>")
-    args = parser.parse_args()
+    parser.add_argument("--start-delay-seconds", type=float, default=0.0)
+    parser.add_argument("--receipt", type=Path, default=None)
+    parser.add_argument("--inject", default=None)
+    parser.add_argument(
+        "--input-order",
+        choices=("auto", "sorted", "unsorted"),
+        default="auto",
+        help="Use 'sorted' only when the feed is ordered by the documented event key",
+    )
+    parser.add_argument("--sort-chunk-rows", type=int, default=65_536)
+    parser.add_argument("--sort-merge-fan-in", type=int, default=32)
+    args = parser.parse_args(argv)
     if args.target_events_per_second is not None and args.target_events_per_second < 0:
         parser.error("--target-events-per-second must be non-negative")
     if args.start_delay_seconds < 0:
         parser.error("--start-delay-seconds must be non-negative")
+    if args.limit_events is not None and args.limit_events < 1:
+        parser.error("--limit-events must be positive")
 
     feed_path = Path(args.feed)
     event_path = feed_path if feed_path.name == "events.parquet" else feed_path / "events.parquet"
-    load_start = time.perf_counter()
-    columns = load_sorted(event_path, args.limit_events)
-    total_events = len(columns["event_id"])
-    print(f"[load ] {event_path.name}: {total_events:,} rows in {time.perf_counter() - load_start:.1f}s", flush=True)
-
+    declared_sorted = manifest_declares_sorted(event_path)
+    input_sorted = args.input_order == "sorted" or (
+        args.input_order == "auto" and declared_sorted
+    )
+    reader_stats: dict = {}
+    rows = iter_ordered_events(
+        event_path,
+        limit=args.limit_events,
+        input_sorted=input_sorted,
+        chunk_rows=args.sort_chunk_rows,
+        merge_fan_in=args.sort_merge_fan_in,
+        stats=reader_stats,
+    )
     injections = parse_injections(args.inject)
-    prob_late = injections.get("late", 0.0)
-    prob_dup = injections.get("dup", 0.0)
-    burst_count = int(injections.get("burst", 0) or 0)
-    poison_count = int(injections.get("poison", 0) or 0)
 
-    rng = np.random.default_rng(1234)
-    producer = build_producer(args.bootstrap)
-    first_event_ms = columns["event_time_epoch_ms"][0]
-    if args.start_delay_seconds > 0:
-        time.sleep(args.start_delay_seconds)
-    replay_start = time.monotonic()
-    sent_count = 0
-    last_report_count = 0
-    latencies: list[int] = []
-
-    for idx in range(total_events):
-        event_time_ms = int(columns["event_time_epoch_ms"][idx])
-        if args.target_events_per_second is not None and args.target_events_per_second > 0:
-            target_time = replay_start + sent_count / args.target_events_per_second
-            sleep_duration = target_time - time.monotonic()
-            if sleep_duration > 0:
-                time.sleep(sleep_duration)
-        elif args.target_events_per_second is None and args.replay_speed > 0:
-            target_time = replay_start + max(0, event_time_ms - first_event_ms) / (args.replay_speed * 1000.0)
-            sleep_duration = target_time - time.monotonic()
-            if sleep_duration > 0:
-                time.sleep(sleep_duration)
-
-        message = build_message(columns, idx, event_time_ms)
-        if poison_count and (sent_count % max(1, total_events // poison_count) == 0):
-            message["product_id"] = "MALFORMED"
-
-        producer.send(args.topic, key=message["user_id"], value=message)
-        sent_count += 1
-        if sent_count % 100 == 0:
-            latencies.append(message["ingestion_time_epoch_ms"] - event_time_ms)
-
-        if sent_count - last_report_count >= 50000:
-            last_report_count = sent_count
-            current_rate = sent_count / max(1e-9, time.monotonic() - replay_start)
-            print(f"  sent={sent_count:,} rate={current_rate:,.0f}/s", flush=True)
-
-        # Fault Injections
-        if burst_count and idx % 500 == 0:
-            for _ in range(burst_count):
-                burst_msg = build_message(columns, idx, event_time_ms)
-                producer.send(args.topic, key=burst_msg["user_id"], value=burst_msg)
-                sent_count += 1
-
-        if prob_dup and rng.random() < prob_dup:
-            dup_msg = build_message(columns, idx, event_time_ms)
-            producer.send(args.topic, key=dup_msg["user_id"], value=dup_msg)
-            sent_count += 1
-
-        if prob_late and rng.random() < prob_late:
-            late_delta_ms = int(rng.uniform(4 * 60, 25 * 60) * 1000)
-            late_epoch_ms = max(0, event_time_ms - late_delta_ms)
-            late_msg = build_message(columns, idx, late_epoch_ms, format_iso(late_epoch_ms))
-            producer.send(args.topic, key=late_msg["user_id"], value=late_msg)
-            sent_count += 1
-
-    producer.flush()
     try:
-        producer.close(timeout=10)
-    except Exception:
-        pass
+        producer = build_producer(args.bootstrap)
+        delivery, latencies = publish_rows(
+            producer,
+            rows,
+            topic=args.topic,
+            replay_speed=args.replay_speed,
+            target_events_per_second=args.target_events_per_second,
+            start_delay_seconds=args.start_delay_seconds,
+            injections=injections,
+        )
+    except Exception as exc:
+        print(f"[error] {type(exc).__name__}: {exc}", flush=True)
+        return 1
 
-    elapsed = time.monotonic() - replay_start
-    achieved_rate = sent_count / max(1e-9, elapsed)
-    print(f"[done ] topic={args.topic} key=user_id sent={sent_count:,} "
-          f"elapsed={elapsed:.1f}s rate={achieved_rate:,.0f}/s", flush=True)
+    receipt = {
+        "topic": args.topic,
+        "feed": str(event_path),
+        "requested_events": args.limit_events,
+        **delivery,
+        "target_events_per_second": args.target_events_per_second,
+        "replay_speed_multiplier": args.replay_speed,
+        "injections": injections,
+        "reader": reader_stats,
+    }
+    print(
+        f"[done ] topic={args.topic} attempted={receipt['attempted_events']:,} "
+        f"acked={receipt['acked_events']:,} failed={receipt['failed_events']:,} "
+        f"elapsed={receipt['elapsed_seconds']:.1f}s "
+        f"acked_rate={receipt['achieved_events_per_second']:,.0f}/s",
+        flush=True,
+    )
     if latencies:
-        latencies_arr = np.asarray(latencies, dtype="int64")
-        p50, p99 = np.percentile(latencies_arr, [50, 99])
+        p50, p99 = np.percentile(np.asarray(latencies, dtype="int64"), [50, 99])
         print(f"  ingestion - event_time (ms): p50={p50:.0f} p99={p99:.0f}", flush=True)
     if args.receipt is not None:
         args.receipt.parent.mkdir(parents=True, exist_ok=True)
         args.receipt.write_text(
-            json.dumps(
-                {
-                    "topic": args.topic,
-                    "feed": str(event_path),
-                    "requested_events": args.limit_events,
-                    "sent_events": sent_count,
-                    "elapsed_seconds": elapsed,
-                    "achieved_events_per_second": achieved_rate,
-                    "target_events_per_second": args.target_events_per_second,
-                    "replay_speed_multiplier": args.replay_speed,
-                    "injections": injections,
-                },
-                indent=2,
-                sort_keys=True,
-            )
-            + "\n",
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-    print("[exit ] hard-exit (kafka-python cleanup)", flush=True)
-    sys.stdout.flush()
-    os._exit(0)
+    return 1 if receipt["failed_events"] or receipt["lifecycle_errors"] else 0
 
 
 if __name__ == "__main__":

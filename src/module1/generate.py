@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import numpy as np
@@ -53,16 +54,49 @@ def load_clean(clean_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
     )
 
 
-def order_time_parts(rng: np.random.Generator | None, order_ids: pd.Series, mode: str) -> tuple[np.ndarray, np.ndarray]:
+def _namespace_seed(seed: int, namespace: str) -> np.uint64:
+    """Return a stable 64-bit namespace seed (never use Python's salted hash)."""
+    digest = hashlib.blake2b(f"{seed}:{namespace}".encode(), digest_size=8).digest()
+    return np.uint64(int.from_bytes(digest, "little"))
+
+
+def stable_uniform(
+    seed: int,
+    namespace: str,
+    primary_ids: pd.Series | np.ndarray,
+    secondary_ids: pd.Series | np.ndarray | None = None,
+) -> np.ndarray:
+    """Vectorized SplitMix64 values in [0, 1), keyed by stable entity ids.
+
+    Values depend only on the configured seed, a fixed namespace, and entity
+    identifiers. They are therefore invariant to input order and user batching.
+    """
+    values = np.asarray(primary_ids, dtype="uint64") ^ _namespace_seed(seed, namespace)
+    if secondary_ids is not None:
+        secondary = np.asarray(secondary_ids, dtype="uint64")
+        with np.errstate(over="ignore"):
+            secondary = secondary + np.uint64(0x9E3779B97F4A7C15)
+            secondary = (secondary ^ (secondary >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+            secondary = (secondary ^ (secondary >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+            values ^= secondary ^ (secondary >> np.uint64(31))
+    with np.errstate(over="ignore"):
+        values = values + np.uint64(0x9E3779B97F4A7C15)
+        values = (values ^ (values >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+        values = (values ^ (values >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+        values ^= values >> np.uint64(31)
+    return (values >> np.uint64(11)).astype("float64") * (1.0 / (1 << 53))
+
+
+def order_time_parts(order_ids: pd.Series, mode: str, seed: int) -> tuple[np.ndarray, np.ndarray]:
     if mode == "hash":
         minute = (order_ids.astype("int64") * 10**6 + 1) % 60
         return minute.to_numpy(), np.zeros(len(order_ids), dtype="int64")
-    total = len(order_ids)
-    assert rng is not None
-    return rng.integers(0, 60, size=total), rng.integers(0, 60, size=total)
+    minute = np.floor(stable_uniform(seed, "order-minute", order_ids) * 60).astype("int64")
+    second = np.floor(stable_uniform(seed, "order-second", order_ids) * 60).astype("int64")
+    return minute, second
 
 
-def prepare_orders(orders: pd.DataFrame, config: SyntheticConfig, rng: np.random.Generator) -> pd.DataFrame:
+def prepare_orders(orders: pd.DataFrame, config: SyntheticConfig) -> pd.DataFrame:
     """Compute per-order absolute base timestamp: synthetic date + hour + minute + second."""
     stream = orders[orders["eval_set"].isin(["prior", "train"])].copy()
     if config.limit_users:
@@ -71,13 +105,17 @@ def prepare_orders(orders: pd.DataFrame, config: SyntheticConfig, rng: np.random
     stream = stream.sort_values(["user_id", "order_number"]).reset_index(drop=True)
 
     first_dow = stream.groupby("user_id", sort=True)["order_dow"].first()
-    anchor_days = first_dow + rng.integers(0, config.scatter_window_weeks, size=len(first_dow)) * 7
+    anchor_weeks = np.floor(
+        stable_uniform(config.seed, "user-anchor-week", first_dow.index.to_numpy())
+        * config.scatter_window_weeks
+    ).astype("int64")
+    anchor_days = first_dow + anchor_weeks * 7
 
     stream["day_offset"] = (
         stream["user_id"].map(anchor_days)
         + stream.groupby("user_id")["days_since_prior_order"].cumsum().astype("int64")
     )
-    minute, second = order_time_parts(rng, stream["order_id"], config.time_mode)
+    minute, second = order_time_parts(stream["order_id"], config.time_mode, config.seed)
     stream["base_ms"] = (
         BASE_EPOCH_MS
         + stream["day_offset"] * DAY_MS
@@ -124,7 +162,6 @@ def expand_events(
     order_products: pd.DataFrame,
     products: pd.DataFrame,
     config: SyntheticConfig,
-    rng: np.random.Generator,
 ) -> pd.DataFrame:
     events = (
         order_products.merge(
@@ -136,7 +173,20 @@ def expand_events(
         .reset_index(drop=True)
     )
 
-    delta_seconds = config.delta.sample(rng, len(events))
+    uniform = stable_uniform(
+        config.seed,
+        "event-item-gap",
+        events["order_id"],
+        events["add_to_cart_order"],
+    )
+    if config.delta.kind == "uniform":
+        delta_seconds = config.delta.lo_s + uniform * (config.delta.hi_s - config.delta.lo_s)
+    else:
+        delta_seconds = np.clip(
+            -config.delta.mean_s * np.log1p(-uniform),
+            config.delta.lo_s,
+            config.delta.hi_s,
+        )
     delta_seconds[events["add_to_cart_order"].to_numpy() == 1] = 0.0
     events["delta_s"] = delta_seconds
 
@@ -271,11 +321,10 @@ def main() -> int:
     print(f"[config] {json.dumps(config.to_dict(), default=str)}", flush=True)
     total_batches = (len(user_ids) + args.batch_users - 1) // args.batch_users
     for batch_idx, start_idx in enumerate(range(0, len(user_ids), args.batch_users)):
-        batch_rng = np.random.default_rng(np.random.SeedSequence([config.seed, batch_idx]))
         current_user_ids = user_ids[start_idx : start_idx + args.batch_users]
-        batch_stream = prepare_orders(scope[scope["user_id"].isin(current_user_ids)], config, batch_rng)
+        batch_stream = prepare_orders(scope[scope["user_id"].isin(current_user_ids)], config)
         batch_order_products = order_products.merge(batch_stream[["order_id"]], on="order_id")
-        events_df = expand_events(batch_stream, batch_order_products, products, config, batch_rng)
+        events_df = expand_events(batch_stream, batch_order_products, products, config)
         writer.add(finalize(events_df))
         del events_df, batch_stream, batch_order_products
         print(f"  batch {batch_idx + 1}/{total_batches}: events so far={writer.events_count:,}", flush=True)
@@ -286,6 +335,15 @@ def main() -> int:
     stats = {
         "config": config.to_dict(),
         "batch_users": args.batch_users,
+        "determinism": {
+            "strategy": "entity-keyed-splitmix64",
+            "keys": {
+                "anchor_week": "user_id",
+                "order_clock": "order_id",
+                "item_gap": "order_id+add_to_cart_order",
+            },
+            "batch_size_invariant": True,
+        },
         "output": str(writer.path),
         "events": writer.events_count,
         "users": len(user_ids),

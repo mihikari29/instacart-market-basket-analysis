@@ -69,18 +69,28 @@ def _ensure_output(path: Path) -> None:
     )
     _run(
         [
-            "docker",
-            "compose",
-            "--profile",
-            "tools",
-            "run",
-            "--rm",
-            "--no-deps",
-            "--entrypoint",
-            "sh",
-            "module3",
-            "-c",
-            command,
+            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
+            "--entrypoint", "sh", "module3", "-c", command,
+        ]
+    )
+
+
+def _archive_checkpoint(checkpoint: Path, archived: Path) -> None:
+    try:
+        checkpoint.rename(archived)
+        return
+    except PermissionError:
+        pass
+    checkpoint_container = Path("/workspace") / checkpoint.relative_to(ROOT)
+    archived_container = Path("/workspace") / archived.relative_to(ROOT)
+    command = (
+        f"mv {shlex.quote(str(checkpoint_container))} {shlex.quote(str(archived_container))} && "
+        f"chown -R {os.getuid()}:{os.getgid()} {shlex.quote(str(archived_container.parent))}"
+    )
+    _run(
+        [
+            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
+            "--entrypoint", "sh", "module3", "-c", command,
         ]
     )
 
@@ -91,6 +101,7 @@ def main(argv=None) -> int:
     parser.add_argument("--duration-seconds", type=int, default=120)
     parser.add_argument("--feed", type=Path, default=Path("data/synthesized/module3_dev"))
     parser.add_argument("--output", type=Path, default=Path("results/module3/smoke"))
+    parser.add_argument("--top-k", type=int, default=20)
     args = parser.parse_args(argv)
     if args.events < 1 or args.duration_seconds < 20:
         raise ValueError("Smoke requires positive events and at least 20 seconds")
@@ -104,7 +115,7 @@ def main(argv=None) -> int:
     if checkpoint.exists():
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         archived_checkpoint = checkpoint.with_name(f"{checkpoint_id}.previous-{suffix}")
-        checkpoint.rename(archived_checkpoint)
+        _archive_checkpoint(checkpoint, archived_checkpoint)
 
     _run(
         [
@@ -157,8 +168,10 @@ def main(argv=None) -> int:
     metadata_result = _compose_python(["-c", metadata_code], capture=True)
     topic_after = json.loads(metadata_result.stdout.strip().splitlines()[-1])
     kafka_delta = topic_after["total_records"] - topic_before["total_records"]
-    if kafka_delta != receipt["sent_events"]:
-        raise RuntimeError(f"Kafka delta {kafka_delta} != producer sent {receipt['sent_events']}")
+    if receipt["failed_events"] != 0 or kafka_delta != receipt["acked_events"]:
+        raise RuntimeError(
+            f"Kafka delta {kafka_delta} != producer acked {receipt['acked_events']}: {receipt}"
+        )
 
     stream_started = datetime.now(timezone.utc)
     stream_result = _run(
@@ -174,6 +187,8 @@ def main(argv=None) -> int:
             str(args.duration_seconds),
             "--output",
             str(args.output),
+            "--mongo-top-k-per-window",
+            str(args.top_k),
         ],
         capture=True,
     )
@@ -186,9 +201,9 @@ def main(argv=None) -> int:
     ]
     total_input = sum(int(row.get("numInputRows") or 0) for row in progress)
     non_empty = [row for row in progress if (row.get("numInputRows") or 0) > 0]
-    if total_input != receipt["sent_events"] or not non_empty:
+    if total_input != receipt["acked_events"] or not non_empty:
         raise RuntimeError(
-            f"Spark input mismatch: expected={receipt['sent_events']} observed={total_input}"
+            f"Spark input mismatch: expected={receipt['acked_events']} observed={total_input}"
         )
 
     mongo_code = f"""
@@ -214,6 +229,12 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
         {{'$limit': 1}},
     ]))
     invalid_scores = col.count_documents({{'$and': [query, {{'$or': [{{'trend_score': {{'$lt': 0}}}}, {{'trend_score': {{'$gt': 1}}}}]}}]}})
+    over_top_k = list(col.aggregate([
+        {{'$match': query}},
+        {{'$group': {{'_id': '$window_end', 'n': {{'$sum': 1}}}}}},
+        {{'$match': {{'n': {{'$gt': {args.top_k}}}}}}},
+        {{'$limit': 1}},
+    ]))
     result = {{
         'documents_written': col.count_documents(query),
         'sample': sample,
@@ -221,6 +242,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
         'duplicate_window_products': duplicates,
         'duplicate_window_ranks': rank_duplicates,
         'invalid_scores': invalid_scores,
+        'windows_over_top_k': over_top_k,
     }}
     print(json.dumps(result, default=str))
 """
@@ -232,6 +254,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
         or mongo["duplicate_window_products"]
         or mongo["duplicate_window_ranks"]
         or mongo["invalid_scores"]
+        or mongo["windows_over_top_k"]
     ):
         raise RuntimeError(f"Mongo smoke verification failed: {mongo}")
 

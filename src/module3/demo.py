@@ -58,6 +58,18 @@ def _dropped(progress: dict) -> int:
     )
 
 
+def _duplicates(progress: dict) -> int:
+    return sum(
+        int((operator.get("customMetrics") or {}).get("numDroppedDuplicateRows") or 0)
+        for operator in progress.get("stateOperators") or []
+    )
+
+
+def _invalid(progress: dict) -> int:
+    quality = (progress.get("observedMetrics") or {}).get("record_quality") or {}
+    return int(quality.get("invalid_records") or 0)
+
+
 def _wait_for(query, predicate, description: str, after_batch: int = -1, timeout: float = 40) -> dict:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -75,6 +87,7 @@ def _progress_evidence(progress: dict) -> dict:
         "batchId": progress.get("batchId"),
         "numInputRows": progress.get("numInputRows"),
         "eventTime": progress.get("eventTime"),
+        "observedMetrics": progress.get("observedMetrics") or {},
         "stateOperators": [
             {
                 key: operator.get(key)
@@ -83,6 +96,7 @@ def _progress_evidence(progress: dict) -> dict:
                     "numRowsUpdated",
                     "numRowsRemoved",
                     "numRowsDroppedByWatermark",
+                    "customMetrics",
                 )
             }
             for operator in progress.get("stateOperators") or []
@@ -118,6 +132,10 @@ def run_late_data_demo(
 
     events = {
         "on_time": _event("late-demo-on-time", 4242, on_time_at),
+        "duplicate": _event("late-demo-on-time", 4242, on_time_at),
+        "poison": _event("late-demo-poison", 4242, on_time_at) | {
+            "product_id": "MALFORMED"
+        },
         "within_watermark": _event("late-demo-within", 4242, within_at),
         "watermark_advance": _event("late-demo-advance", 9999, advance_at),
         "beyond_watermark": _event("late-demo-dropped", 4242, too_late_at),
@@ -127,11 +145,19 @@ def run_late_data_demo(
         evidence = {}
 
         previous = _latest_batch(query)
-        produce_json_events(config.bootstrap_servers, topic, [events["on_time"]])
+        produce_json_events(
+            config.bootstrap_servers,
+            topic,
+            [events["on_time"], events["duplicate"], events["poison"]],
+        )
         progress = _wait_for(
             query,
-            lambda item: item.get("numInputRows", 0) >= 1,
-            "on-time event batch",
+            lambda item: (
+                item.get("numInputRows", 0) >= 3
+                and _duplicates(item) >= 1
+                and _invalid(item) >= 1
+            ),
+            "on-time, duplicate, and poison event batch",
             after_batch=previous,
         )
         evidence["on_time"] = _progress_evidence(progress)
@@ -226,6 +252,8 @@ def run_late_data_demo(
         "conclusion": {
             "within_watermark_accepted": True,
             "beyond_watermark_dropped": True,
+            "duplicate_event_id_dropped": True,
+            "poison_event_counted_invalid": True,
             "accepted_count": 2,
         },
     }

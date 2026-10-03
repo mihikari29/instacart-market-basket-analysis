@@ -15,6 +15,7 @@ venv/
 /results/module2/
 /results/module3/
 /results/module3-smoke/
+/results/module3-hardening/
 /spark-warehouse/
 /metastore_db/
 derby.log

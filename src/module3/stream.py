@@ -14,7 +14,7 @@ from pyspark.sql.streaming import StreamingQuery
 from .config import Config
 from .parse import from_kafka
 from .sink_mongo import write_mongo
-from .trending import build_window_counts, rank_trending_batch
+from .trending import build_window_counts, rank_trending_batch, select_top_k
 from .checkpoint import ensure_checkpoint
 
 
@@ -42,6 +42,7 @@ def _progress_logger(query: StreamingQuery, output_dir: Path, stop_event) -> Thr
                     "numRowsUpdated": operator.get("numRowsUpdated"),
                     "numRowsRemoved": operator.get("numRowsRemoved"),
                     "numRowsDroppedByWatermark": operator.get("numRowsDroppedByWatermark"),
+                    "customMetrics": operator.get("customMetrics") or {},
                 }
             )
         return {
@@ -57,6 +58,7 @@ def _progress_logger(query: StreamingQuery, output_dir: Path, stop_event) -> Thr
                 "getBatch": duration.get("getBatch"),
             },
             "eventTime": event_time,
+            "observedMetrics": progress.get("observedMetrics") or {},
             "stateOperators": state_operators,
             "sources": progress.get("sources") or [],
             "sink": progress.get("sink") or {},
@@ -104,10 +106,14 @@ def run_stream(
     counts = build_window_counts(events, config)
     checkpoint_identity = checkpoint_id or run_id
     checkpoint = ensure_checkpoint(output_dir.parent, checkpoint_identity)
+    sink_log = output_dir / "sink_batches.jsonl"
 
     def _foreach(batch_df, batch_id):
         ranked = rank_trending_batch(batch_df, config)
-        return write_mongo(ranked, batch_id, config)
+        top_k = select_top_k(ranked, config)
+        result = write_mongo(top_k, batch_id, config)
+        with sink_log.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(result, default=str, sort_keys=True) + "\n")
 
     writer = (
         counts.writeStream
@@ -134,7 +140,11 @@ def run_stream(
         "slide": config.slide,
         "watermark": config.watermark,
         "topic": config.topic,
+        "serving_semantics": "finalized-event-time-windows",
+        "mongo_top_k_per_window": config.mongo_top_k_per_window,
+        "ttl_seconds": config.ttl_seconds,
         "progress_log": str(output_dir / PROGRESS_LOG_NAME),
+        "sink_log": str(sink_log),
     }
 
     stop_event = __import__("threading").Event()

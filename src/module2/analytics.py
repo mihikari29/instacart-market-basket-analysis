@@ -40,8 +40,43 @@ def metrics(tables):
     return enriched, product, department, users
 
 
+def department_hour_pivot_unpivot(enriched):
+    """Produce a wide teaching/report view and its normalized analytical form."""
+    hour_columns = [str(hour) for hour in range(24)]
+    pivoted = (
+        enriched.groupBy("department_id")
+        .pivot("order_hour_of_day", list(range(24)))
+        .count()
+        .fillna(0)
+    )
+    unpivoted = (
+        pivoted.unpivot(
+            ids="department_id",
+            values=hour_columns,
+            variableColumnName="order_hour_of_day",
+            valueColumnName="purchase_count",
+        )
+        .withColumn("order_hour_of_day", F.col("order_hour_of_day").cast("int"))
+        .withColumn("purchase_count", F.col("purchase_count").cast("long"))
+    )
+    return pivoted, unpivoted
+
+
 def analyze(spark, tables, counts, min_support=100):
     enriched, product, department, users = metrics(tables)
+    department_hour_pivot, department_hour_unpivot = department_hour_pivot_unpivot(enriched)
+    pivot_total = sum(
+        int(row[column])
+        for row in department_hour_pivot.collect()
+        for column in (str(hour) for hour in range(24))
+    )
+    unpivot_total = int(
+        department_hour_unpivot.agg(F.sum("purchase_count").alias("total")).first().total
+    )
+    if pivot_total != unpivot_total:
+        raise ValueError(
+            f"Department-hour pivot/unpivot total mismatch: {pivot_total} != {unpivot_total}"
+        )
     tables["prior"].createOrReplaceTempView("prior_facts")
     # SparkSQL is also exercised directly, including a nested basket aggregation.
     purchase = (
@@ -85,10 +120,15 @@ def analyze(spark, tables, counts, min_support=100):
         "departments": rows(department.join(tables["departments"], "department_id"), "department_id"),
         "orders_by_dow": rows(tables["orders"].groupBy("order_dow").count(), "order_dow"),
         "orders_by_hour": rows(tables["orders"].groupBy("order_hour_of_day").count(), "order_hour_of_day"),
-        "department_hour_pivot": rows(
-            enriched.groupBy("department_id").pivot("order_hour_of_day", list(range(24))).count().fillna(0),
-            "department_id",
+        "department_hour_pivot": rows(department_hour_pivot, "department_id"),
+        "department_hour_unpivot": rows(
+            department_hour_unpivot, "department_id", "order_hour_of_day"
         ),
+        "pivot_unpivot_validation": {
+            "pivot_total": pivot_total,
+            "unpivot_total": unpivot_total,
+            "consistent": True,
+        },
     }
     # Calendar-day range, not seven preceding observations (dates can be sparse).
     events = tables["interactions"].join(
@@ -105,6 +145,7 @@ def analyze(spark, tables, counts, min_support=100):
         "department_metrics": department,
         "user_features": users,
         "department_daily_trends": trends,
+        "department_hour_metrics": department_hour_unpivot,
     }
 
 

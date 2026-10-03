@@ -1,38 +1,69 @@
-"""Kafka source -> typed streaming DataFrame.
-
-Poison-pill guard: src.module1.producer --inject poison:<n> corrupts product_id
-to the string "MALFORMED". Applying the explicit JSON schema yields NULL for
-invalid numeric fields, which are dropped before event-time processing.
-"""
+"""Kafka JSON parsing, domain validation, and streaming quality metrics."""
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
+
 from .config import Config
 from .schemas import KAFKA_EVENT_SCHEMA
 
 
-def parse_json_events(json_df: DataFrame) -> DataFrame:
-    """Parse a DataFrame containing ``json_str`` into validated event rows.
-
-    Keeping this separate from the Kafka source makes malformed payload
-    behavior testable without a broker. ``from_json`` applies the frozen event
-    schema, so non-numeric ids/timestamps become null and are safely rejected.
-    """
-    parsed = (
-        json_df.select(F.from_json(F.col("json_str"), KAFKA_EVENT_SCHEMA).alias("event"))
-        .select("event.*")
-        .where(F.col("product_id").isNotNull() & F.col("event_time_epoch_ms").isNotNull())
-        .withColumn("event_time", F.timestamp_millis(F.col("event_time_epoch_ms")))
+def parse_json_records(json_df: DataFrame) -> DataFrame:
+    """Parse every payload and label invalid rows with explicit reasons."""
+    parsed = json_df.select(
+        F.col("json_str").alias("raw_payload"),
+        F.from_json(F.col("json_str"), KAFKA_EVENT_SCHEMA).alias("event"),
+    ).select("raw_payload", "event.*")
+    parsed = parsed.withColumn("event_time", F.timestamp_millis(F.col("event_time_epoch_ms")))
+    parsed = parsed.withColumn(
+        "_event_time_iso", F.expr("try_cast(event_time_iso as timestamp)")
     )
-    return parsed
+
+    reasons = [
+        F.when(F.col("event_id").isNull() | (F.length(F.trim("event_id")) == 0), "event_id"),
+        F.when(F.col("user_id").isNull() | (F.col("user_id") <= 0), "user_id"),
+        F.when(F.col("order_id").isNull() | (F.col("order_id") <= 0), "order_id"),
+        F.when(F.col("product_id").isNull() | (F.col("product_id") <= 0), "product_id"),
+        F.when(
+            F.col("add_to_cart_order").isNull() | (F.col("add_to_cart_order") <= 0),
+            "add_to_cart_order",
+        ),
+        F.when(
+            F.col("order_dow").isNull() | ~F.col("order_dow").between(0, 6),
+            "order_dow",
+        ),
+        F.when(
+            F.col("order_hour_of_day").isNull()
+            | ~F.col("order_hour_of_day").between(0, 23),
+            "order_hour_of_day",
+        ),
+        F.when(
+            F.col("event_time_epoch_ms").isNull()
+            | (F.col("event_time_epoch_ms") <= 0)
+            | F.col("event_time").isNull(),
+            "event_time_epoch_ms",
+        ),
+        F.when(
+            F.col("event_time_iso").isNull() | F.col("_event_time_iso").isNull(),
+            "event_time_iso",
+        ),
+    ]
+    invalid_reason = F.concat_ws(",", *reasons)
+    return (
+        parsed.withColumn("invalid_reason", invalid_reason)
+        .withColumn("is_valid", F.length("invalid_reason") == 0)
+        .drop("_event_time_iso")
+    )
+
+
+def parse_json_events(json_df: DataFrame) -> DataFrame:
+    """Return only valid typed events; useful for static fixture tests."""
+    return parse_json_records(json_df).where("is_valid").drop(
+        "raw_payload", "invalid_reason", "is_valid"
+    )
 
 
 def from_kafka(spark, config: Config) -> DataFrame:
-    """Read Kafka stream, parse JSON, return typed event rows with event_time.
-
-    Poison-pill rows collapse to NULL under the explicit JSON schema and are
-    filtered out before watermarking; they cannot pollute trending counts.
-    """
+    """Read Kafka and expose input/valid/invalid counts in query progress."""
     raw = (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", config.bootstrap_servers)
@@ -41,4 +72,13 @@ def from_kafka(spark, config: Config) -> DataFrame:
         .option("failOnDataLoss", "false")
         .load()
     )
-    return parse_json_events(raw.selectExpr("CAST(value AS STRING) AS json_str"))
+    parsed = parse_json_records(raw.selectExpr("CAST(value AS STRING) AS json_str"))
+    observed = parsed.observe(
+        "record_quality",
+        F.count(F.lit(1)).alias("input_records"),
+        F.sum(F.col("is_valid").cast("long")).alias("valid_records"),
+        F.sum((~F.col("is_valid")).cast("long")).alias("invalid_records"),
+    )
+    return observed.where("is_valid").drop(
+        "raw_payload", "invalid_reason", "is_valid"
+    )

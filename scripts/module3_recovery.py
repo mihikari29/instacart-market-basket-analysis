@@ -78,18 +78,28 @@ def _ensure_output(path: Path) -> None:
     )
     _run(
         [
-            "docker",
-            "compose",
-            "--profile",
-            "tools",
-            "run",
-            "--rm",
-            "--no-deps",
-            "--entrypoint",
-            "sh",
-            "module3",
-            "-c",
-            command,
+            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
+            "--entrypoint", "sh", "module3", "-c", command,
+        ]
+    )
+
+
+def _archive_checkpoint(checkpoint: Path, archived: Path) -> None:
+    try:
+        checkpoint.rename(archived)
+        return
+    except PermissionError:
+        pass
+    checkpoint_container = Path("/workspace") / checkpoint.relative_to(ROOT)
+    archived_container = Path("/workspace") / archived.relative_to(ROOT)
+    command = (
+        f"mv {shlex.quote(str(checkpoint_container))} {shlex.quote(str(archived_container))} && "
+        f"chown -R {os.getuid()}:{os.getgid()} {shlex.quote(str(archived_container.parent))}"
+    )
+    _run(
+        [
+            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
+            "--entrypoint", "sh", "module3", "-c", command,
         ]
     )
 
@@ -111,7 +121,7 @@ def main(argv=None) -> int:
     if checkpoint.exists():
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         archived_checkpoint = checkpoint.with_name(f"{checkpoint_id}.previous-{suffix}")
-        checkpoint.rename(archived_checkpoint)
+        _archive_checkpoint(checkpoint, archived_checkpoint)
 
     _run(
         [

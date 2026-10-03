@@ -2,15 +2,18 @@ name: Module 3 streaming validation
 on:
   push:
     branches:
+      - main
       - module3-speed-layer
       - fix/module3-hardening
     paths:
       - 'src/module3/**'
       - 'src/module1/producer.py'
+      - 'src/module1/event_reader.py'
       - 'src/module1/generate.py'
       - 'src/module1/config.py'
       - 'scripts/module3*.py'
       - 'tests/test_module3.py'
+      - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
       - 'Dockerfile.spark'
       - 'requirements*.txt'
@@ -22,9 +25,11 @@ on:
     paths:
       - 'src/module3/**'
       - 'src/module1/producer.py'
+      - 'src/module1/event_reader.py'
       - 'src/module1/generate.py'
       - 'scripts/module3*.py'
       - 'tests/test_module3.py'
+      - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
       - 'Dockerfile.spark'
       - 'requirements*.txt'
@@ -59,7 +64,7 @@ jobs:
       - name: Build pinned Spark runtime and run streaming tests
         run: |
           docker compose build spark-master
-          docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q tests/test_module3.py
+          docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q
       - name: Start services (Spark, Kafka, Mongo)
         run: |
           docker compose up -d --wait spark-master spark-worker kafka mongodb

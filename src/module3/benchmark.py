@@ -71,6 +71,25 @@ def summarize_progress(progress_path: Path) -> dict:
     }
 
 
+def summarize_sink(sink_path: Path) -> dict:
+    rows = []
+    if sink_path.exists():
+        for line in sink_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                rows.append(json.loads(line))
+    non_empty = [row for row in rows if row.get("rows", 0) > 0]
+    return {
+        "batches": len(rows),
+        "non_empty_batches": len(non_empty),
+        "documents_written": sum(row.get("rows", 0) for row in non_empty),
+        "max_rows_per_window": max(
+            (row.get("max_rows_per_window", 0) for row in non_empty), default=0
+        ),
+        "duration_ms_median": _median(row.get("duration_ms") for row in non_empty),
+        "duration_ms_max": max((row.get("duration_ms", 0) for row in non_empty), default=0),
+    }
+
+
 def _producer_command(
     config: Config,
     feed: Path,
@@ -166,10 +185,14 @@ def _run_trial(
     producer_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     after = topic_metadata(config.bootstrap_servers, topic)
     progress = summarize_progress(trial_dir / PROGRESS_LOG_NAME)
+    sink = summarize_sink(trial_dir / "sink_batches.jsonl")
     kafka_delta = after["total_records"] - before["total_records"]
-    if kafka_delta != producer_receipt["sent_events"]:
+    if producer_receipt["failed_events"] != 0:
+        raise RuntimeError(f"Producer delivery failed: {producer_receipt}")
+    if kafka_delta != producer_receipt["acked_events"]:
         raise RuntimeError(
-            f"Kafka offset delta {kafka_delta} != producer sent {producer_receipt['sent_events']}"
+            f"Kafka offset delta {kafka_delta} != producer acked "
+            f"{producer_receipt['acked_events']}"
         )
     if progress["total_input_rows"] <= 0:
         raise RuntimeError(f"Spark processed no input rows: {progress}")
@@ -179,6 +202,7 @@ def _run_trial(
         "kafka_records_added": kafka_delta,
         "producer": producer_receipt,
         "progress_summary": progress,
+        "sink_summary": sink,
         "stream": stream_info,
     }
 

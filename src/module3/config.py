@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import os
 
 DEFAULT_TOPIC = "instacart-purchase-events"
+DEFAULT_MONGO_TOP_K = 20
+DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,8 @@ class Config:
     mongodb_uri: str = "mongodb://mongodb:27017/instacart"
     mongo_database: str = "instacart"
     mongo_collection: str = "realtime_trending"
-    ttl_seconds: int = 0  # Q-B: disabled by default; bật bằng flag --ttl-seconds 86400 để demo W4
+    mongo_top_k_per_window: int = DEFAULT_MONGO_TOP_K
+    ttl_seconds: int = DEFAULT_TTL_SECONDS
     checkpoint_dir: str = "checkpoint"
 
     def __post_init__(self):
@@ -56,15 +59,24 @@ class Config:
             raise ValueError("Trend weights must sum to 1.0")
         if self.ttl_seconds < 0:
             raise ValueError("ttl_seconds must be non-negative (0 disables TTL)")
+        if self.mongo_top_k_per_window <= 0:
+            raise ValueError("mongo_top_k_per_window must be positive")
         if not self.topic or not self.bootstrap_servers:
             raise ValueError("Kafka topic and bootstrap servers are required")
 
     @classmethod
     def environment(cls, **overrides):
-        return cls(
-            root=os.environ.get("MODULE3_ROOT", cls.root),
-            master=os.environ.get("SPARK_MASTER", cls.master),
-            bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", cls.bootstrap_servers),
-            mongodb_uri=os.environ.get("MONGODB_URI", cls.mongodb_uri),
-            **overrides,
-        )
+        values = {
+            "root": os.environ.get("MODULE3_ROOT", cls.root),
+            "master": os.environ.get("SPARK_MASTER", cls.master),
+            "bootstrap_servers": os.environ.get(
+                "KAFKA_BOOTSTRAP_SERVERS", cls.bootstrap_servers
+            ),
+            "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
+            "mongo_top_k_per_window": int(
+                os.environ.get("MONGO_TOP_K_PER_WINDOW", cls.mongo_top_k_per_window)
+            ),
+            "ttl_seconds": int(os.environ.get("MONGO_TTL_SECONDS", cls.ttl_seconds)),
+        }
+        values.update(overrides)
+        return cls(**values)

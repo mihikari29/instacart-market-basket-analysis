@@ -42,7 +42,19 @@ def create_topic(bootstrap_servers: str, topic: str, partitions: int, reset: boo
     finally:
         admin.close()
 
-    metadata = topic_metadata(bootstrap_servers, topic)
+    deadline = time.monotonic() + 20
+    metadata = None
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            metadata = topic_metadata(bootstrap_servers, topic)
+            if metadata["partitions"] == partitions:
+                break
+        except RuntimeError as exc:
+            last_error = exc
+        time.sleep(0.25)
+    if metadata is None:
+        raise RuntimeError(f"Topic {topic} metadata did not become available") from last_error
     if metadata["partitions"] != partitions:
         raise RuntimeError(
             f"Topic {topic} has {metadata['partitions']} partitions; expected {partitions}"

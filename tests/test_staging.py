@@ -5,7 +5,6 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
-import numpy as np
 from src.module1.partition_events import partition_events
 from src.module1.clean import clean_orders
 from src.module1.stage_hdfs import stage_interactions
@@ -26,10 +25,10 @@ def test_generator_widens_narrow_time_columns():
             "days_since_prior_order": [0.0],
         }
     )
-    result = prepare_orders(orders, SyntheticConfig(time_mode="hash"), np.random.default_rng(42))
+    result = prepare_orders(orders, SyntheticConfig(time_mode="hash"))
     minute = (3421083 * 10**6 + 1) % 60
     assert (int(result.iloc[0].base_ms) - BASE_EPOCH_MS) % DAY_MS == 23 * 3600000 + minute * 60000
-    assert order_time_parts(None, orders.order_id, "hash")[0].tolist() == [minute]
+    assert order_time_parts(orders.order_id, "hash", 42)[0].tolist() == [minute]
 
 
 def source(path, dates=("2024-01-01", "2024-01-02") * 3):
@@ -91,7 +90,10 @@ def test_staging_refresh_scope_and_failed_upload(tmp_path):
     with patch("src.module1.stage_hdfs.webhdfs_upload", side_effect=RuntimeError("network")):
         with pytest.raises(RuntimeError):
             stage_interactions(client, tmp_path, "http://localhost:9870", "root")
-    client.delete.assert_not_called()
+    assert client.delete.call_count == 1
+    failed_path = client.delete.call_args.args[0]
+    assert failed_path.startswith("/instacart/curated/interactions.__staging_")
+    assert client.delete.call_args.kwargs == {"recursive": True}
     client.rename.assert_not_called()
 
 
@@ -249,9 +251,8 @@ def test_generator_enforces_and_validates_monotonicity():
     })
 
     conf = SyntheticConfig(time_mode="uniform")
-    rng = np.random.default_rng(42)
-    stream = prepare_orders(orders, conf, rng)
-    ev = expand_events(stream, ops, products, conf, rng)
+    stream = prepare_orders(orders, conf)
+    ev = expand_events(stream, ops, products, conf)
     final = finalize(ev)
 
     assert monotonic_violations(final) == 0

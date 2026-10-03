@@ -85,8 +85,18 @@ def main(argv=None):
     parser.add_argument("--mongodb-uri", default=os.environ.get("MONGODB_URI", Config.mongodb_uri))
     parser.add_argument("--mongo-database", default=Config.mongo_database)
     parser.add_argument("--mongo-collection", default=Config.mongo_collection)
-    parser.add_argument("--ttl-seconds", type=int, default=Config.ttl_seconds,
-                        help="Mongo TTL on updated_at (0 disables). Set 86400 to demo W4 eventual-consistency cleanup.")
+    parser.add_argument(
+        "--mongo-top-k-per-window",
+        type=int,
+        default=int(os.environ.get("MONGO_TOP_K_PER_WINDOW", Config.mongo_top_k_per_window)),
+        help="Rows retained per finalized event-time window after full ranking",
+    )
+    parser.add_argument(
+        "--ttl-seconds",
+        type=int,
+        default=int(os.environ.get("MONGO_TTL_SECONDS", Config.ttl_seconds)),
+        help="Mongo TTL on updated_at (default 7 days; 0 explicitly disables retention)",
+    )
 
     # Run / benchmark durations
     parser.add_argument("--duration-seconds", type=int, default=60,
@@ -135,6 +145,7 @@ def main(argv=None):
         mongodb_uri=args.mongodb_uri,
         mongo_database=args.mongo_database,
         mongo_collection=args.mongo_collection,
+        mongo_top_k_per_window=args.mongo_top_k_per_window,
         ttl_seconds=args.ttl_seconds,
     )
 

@@ -125,6 +125,18 @@ def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str,
         client.delete(target_path, recursive=True)
         client.rename(staging_path, target_path)
         print(f"[done] {target_path}: source/local rows = {receipt['source_rows']:,}")
+    except Exception:
+        # Never mask the upload/validation failure. The production target has
+        # not been touched at this point in the normal failure path.
+        try:
+            client.delete(staging_path, recursive=True)
+            print(f"[clean] removed failed staging path {staging_path}", flush=True)
+        except Exception as cleanup_error:
+            print(
+                f"[warn ] could not remove failed staging path {staging_path}: {cleanup_error}",
+                flush=True,
+            )
+        raise
     finally:
         shutil.rmtree(temp_dir)
 

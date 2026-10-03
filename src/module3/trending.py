@@ -46,9 +46,20 @@ def _normalize(df: DataFrame, count_col: str) -> DataFrame:
 
 
 def build_window_counts(events_df: DataFrame, config: Config) -> DataFrame:
-    """Build the single stateful aggregation used by the production stream."""
+    """Deduplicate by event_id, then build the production stateful aggregation.
+
+    One event-time watermark bounds both deduplication state and window state.
+    Static fixtures use equivalent deterministic event-id deduplication.
+    """
     watermarked = events_df.withWatermark("event_time", config.watermark)
-    windowed = watermarked.withColumn(
+    if "event_id" not in events_df.columns:
+        raise ValueError("event_id is required for source-event deduplication")
+    deduplicated = (
+        watermarked.dropDuplicatesWithinWatermark(["event_id"])
+        if events_df.isStreaming
+        else watermarked.dropDuplicates(["event_id"])
+    )
+    windowed = deduplicated.withColumn(
         "_window", F.window("event_time", config.window_long, config.slide)
     )
     return (
@@ -101,8 +112,14 @@ def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
     )
 
 
+def select_top_k(ranked_df: DataFrame, config: Config) -> DataFrame:
+    """Apply the serving bound only after full-population normalization/ranking."""
+    return ranked_df.where(F.col("trend_rank") <= config.mongo_top_k_per_window)
+
+
 def build_trending(events_df: DataFrame, config: Config) -> DataFrame:
-    """Static fixture convenience; production ranks inside ``foreachBatch``."""
+    """Static serving convenience; production ranks inside ``foreachBatch``."""
     if events_df.isStreaming:
         raise ValueError("Use build_window_counts for streaming DataFrames")
-    return rank_trending_batch(build_window_counts(events_df, config), config)
+    ranked = rank_trending_batch(build_window_counts(events_df, config), config)
+    return select_top_k(ranked, config)
