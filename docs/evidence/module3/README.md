@@ -1,11 +1,9 @@
 # Module 3 Evidence (Speed Layer)
 
-> Status: **Implemented and validated locally with Docker Compose on 2026-10-02.**
+> Status: **Implemented and validated locally with Docker Compose and independently validated on a GitHub-hosted runner on 2026-10-03.**
 
 Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The host Python/Java
-installations are not used for Spark execution. The checked-in CI workflow
-repeats a bounded version of the live validations below. Its current execution
-status is reported by the pull-request checks rather than this local snapshot.
+installations are not used for Spark execution.
 
 ## Local validation results
 
@@ -25,6 +23,25 @@ status is reported by the pull-request checks rather than this local snapshot.
 Generated `results/module3/` data is intentionally gitignored because Spark
 event logs and checkpoints are large. A compact checked-in measurement summary
 is in [`local-validation-2026-10-02.json`](local-validation-2026-10-02.json).
+
+## GitHub Actions validation
+
+| Item | Result |
+|---|---|
+| Workflow | Module 3 streaming validation |
+| Run ID | `37079034707` |
+| Job | `streaming` |
+| Result | **SUCCESS** |
+| PR | #2 Harden Module 3 Structured Streaming |
+| Head commit | `3c5c932d5d532f8f9ab0b10b9b9a47a769d6772e` |
+| Implementation commit | `9311b522d03f21ff197de8bf6566f8840969f6d1` |
+
+On a clean GitHub-hosted runner, CI independently generated a bounded Module 1
+feed, built the pinned Spark runtime, ran the tests, validated service
+connectivity, exercised the real Kafka → Spark → MongoDB path, verified
+checkpoint recovery and late-data/watermark behavior, and ran a short measured
+throughput smoke. A companion push-triggered workflow also succeeded. PR #2
+remains open and unmerged.
 
 ## Architecture validated
 
@@ -67,8 +84,8 @@ These are small development measurements, not production capacity claims.
 
 ## Limitations
 
-- GitHub Actions results are intentionally not represented in this local
-  evidence snapshot; use the pull-request checks for current CI status.
+- The GitHub-hosted workflow is a bounded functional validation and should not
+  be interpreted as a production-scale capacity benchmark.
 - The single Kafka broker validates consumer partition parallelism, not broker
   high availability.
 - Kafka duplicate injection represents duplicate input and increments counts

@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Module 1** | Data Ingestion, Cleaning, Synthetic Timestamps, HDFS Staging, Kafka Replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Hoàn thành & Đã kiểm chứng** |
 | **Module 2** | Spark Batch Layer, Historical Analytics, MongoDB Serving, Join/Pruning/Cache Benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Hoàn thành & Đã merge vào `main`** |
-| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Đã implement + local Docker validation; CI status theo PR checks** |
+| **Module 3** | Speed Layer, Event-Time Stream Processing, Watermark, Realtime Trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Hoàn thành & Đã kiểm chứng — Local Docker + GitHub Actions; PR #2 đang mở, chưa merge** |
 | **Module 4** | Machine Learning & Graph, Collaborative Filtering, GraphFrames, API & Dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Sẵn sàng triển khai tiếp theo* |
 
 ---
@@ -96,9 +96,160 @@ Thực thi các phép biến đổi và phân tích nâng cao:
 
 ---
 
-## 4. Hướng dẫn Thực thi & Tái lập (Runbook)
+## 4. Module 3 — Spark Structured Streaming Speed Layer
 
-### 4.1. Khởi động Cụm dịch vụ qua Docker Compose
+### 4.1. Kiến trúc Streaming cuối cùng
+
+```text
+Module 1 producer
+  -> Kafka topic instacart-purchase-events
+  -> Spark Structured Streaming
+  -> event-time + watermark
+  -> one stateful 120m sliding aggregation + exact conditional C30
+  -> foreachBatch static normalization/ranking
+  -> MongoDB realtime_trending
+```
+
+Runtime dùng Spark 3.5.5 và connector
+`spark-sql-kafka-0-10_2.12:3.5.5`. Kafka kết nối qua `localhost:9092` từ
+host và `kafka:29092` trong Docker. Min-max normalization và analytical
+ranking Window được thực hiện trên static micro-batch DataFrame do
+`foreachBatch` cung cấp, thay vì áp dụng trực tiếp lên streaming
+DataFrame.
+
+### 4.2. Event-time, Watermark và Trending
+
+Pipeline dùng watermark event-time **10 phút**, cửa sổ dài **120 phút**
+và slide **5 phút**. Trong cùng một stateful aggregation, `C120` là
+tổng lượt mua trong cửa sổ, còn `C30` đếm có điều kiện các sự kiện
+thuộc 30 phút cuối. Điểm xu hướng là:
+
+`trend_score = 0.7 × norm(C30) + 0.3 × norm(C120)`
+
+Kết quả được xếp theo `trend_score` giảm dần; khi bằng điểm,
+`product_id` tăng dần là tie-break để rank luôn deterministic.
+
+### 4.3. MongoDB Serving & Idempotency
+
+Collection `realtime_trending` lưu contract gồm `window_start`, `window_end`,
+`product_id`, `purchase_count_30m`, `purchase_count_120m`, `trend_score`,
+`trend_rank` và `updated_at`. Mỗi document có `_id` deterministic từ
+`window_end + product_id` và được upsert idempotent. MongoDB duy trì unique
+index `(window_end, product_id)` và index `(window_end, trend_rank)`; TTL trên
+`updated_at` là tùy chọn và mặc định tắt (`ttl_seconds = 0`).
+
+Idempotent output chỉ ngăn document trùng cho cùng window/product. Kafka
+input trùng không được source-deduplicate và vẫn làm tăng streaming counts;
+source-event deduplication nằm ngoài yêu cầu hiện tại của Proposal.
+
+### 4.4. Live End-to-End Validation
+
+| Chỉ số | Kết quả |
+|---|---:|
+| Events produced | 50,000 |
+| Events processed | 50,000 |
+| Producer rate | 13,021.60 events/s |
+| Spark processed rate | 4,351.61 rows/s |
+| Trigger execution | 11,489 ms |
+| Mongo documents | 1,111,592 |
+| Missing required fields | 0 |
+| Invalid trend scores | 0 |
+| Duplicate `(window_end, product_id)` keys | 0 |
+| Duplicate ranks within a window | 0 |
+
+Finalized-window sink batch được đo **82,434 ms** (`addBatch` của input
+batch là **10,450 ms**). Output fan-out lớn vì mỗi source event có thể
+tham gia nhiều cửa sổ trượt 5 phút. Đây là phép đo development có
+giới hạn, không phải tuyên bố production capacity.
+
+### 4.5. Checkpoint & Fault-Tolerance Validation
+
+Kịch bản dùng checkpoint ID `recovery-smoke` đã chứng minh recovery qua
+**hai Spark process tách biệt**. Process thứ nhất đọc 3 records; sau đó
+2 records mới được ghi thêm vào Kafka. Process thứ hai dùng đúng
+checkpoint đã chỉ đọc 2 records mới: query ID không đổi, batch
+number tiếp tục và Kafka không replay từ earliest. MongoDB có 96 scenario
+documents và 0 duplicate keys.
+
+### 4.6. Late Data & Watermark Validation
+
+Sự kiện on-time và sự kiện lúc `00:15` đều được chấp nhận khi
+watermark là `00:10`. Sau khi watermark tiến đến `02:50`, sự kiện gửi
+sau đó với event-time `00:18` bị loại. Spark báo cáo **24 dropped
+sliding-window memberships**; kết quả được chọn vẫn là `C30 = 2`,
+`C120 = 2`.
+
+### 4.7. Performance Benchmarks
+
+Mỗi workload có 1 warm-up và 3 measured trials.
+
+| Producer target | Achieved producer rate | Spark processed rows/s | Trigger ms |
+|---:|---:|---:|---:|
+| 100/s | 100.74/s | 40.55 | 2,383 |
+| 500/s | 497.97/s | 46.86 | 2,123 |
+| unbounded bulk | 5,695.47/s | 47.48 | 2,106 |
+
+Mỗi arm partition dùng topic Kafka tạm thời thực, xác minh broker metadata,
+1 warm-up và 3 measured trials.
+
+| Kafka partitions | Spark observed | Processed rows/s | Trigger ms |
+|---:|---:|---:|---:|
+| 1 | 1 | 51.57 | 1,939 |
+| 2 | 2 | 60.86 | 1,643 |
+| 4 | 4 | 47.73 | 2,095 |
+| 8 | 8 | 31.26 | 3,199 |
+
+Trong bounded workload nhỏ này, kết quả cao nhất ở 2 partitions và giảm
+ở 4/8 partitions; không thể suy ra rằng thêm partition luôn tăng hiệu năng.
+Scheduling và state-management overhead có thể chi phối workload nhỏ. Cấu
+hình chỉ có một Kafka broker nên thử nghiệm đo consumer partition
+parallelism, không kiểm chứng broker high availability.
+
+### 4.8. Automated Validation / CI
+
+- Module 3 tests: **10 passed**.
+- Complete repository suite: **30 passed**.
+- Ruff: **passed**; Docker Compose configuration và GitHub workflow YAML:
+  **valid**.
+- GitHub Actions workflow `Module 3 streaming validation`, run `37079034707`,
+  job `streaming`: **SUCCESS**.
+- Companion push-triggered workflow: **SUCCESS**.
+
+CI đã tái lập bounded Kafka → Spark → MongoDB path trên một
+GitHub-hosted runner sạch, bao gồm bounded Module 1 feed generation, pinned
+Spark runtime build, tests, service connectivity, recovery, late-data/watermark
+validation, throughput smoke, evidence upload và cleanup. Run được thực hiện
+trên PR #2 với head commit
+`3c5c932d5d532f8f9ab0b10b9b9a47a769d6772e`; implementation/release commit là
+`9311b522d03f21ff197de8bf6566f8840969f6d1`.
+
+Lần chạy PR đầu tiên chỉ phát hiện timing issue: startup batch khoảng
+8.66 giây cộng producer delay 5 giây vượt trial allowance 12 giây. Allowance
+được điều chỉnh từ **12 lên 30 giây** cho CI; không thay đổi
+architecture, streaming semantics, business logic, window/watermark, scoring hay
+MongoDB behavior.
+
+### 4.9. Current Status & Limitations
+
+Module 3 có trạng thái **COMPLETE AND VALIDATED**. Tuy nhiên, PR #2
+**vẫn đang mở và chưa merge** vào `module3-speed-layer` hay `main`.
+
+- Các benchmark là bounded development measurements, không phải production
+  capacity claims.
+- Deployment dùng một Kafka broker; partition benchmark không chứng minh
+  broker high availability.
+- Duplicate Kafka input không được source-deduplicate và sẽ làm tăng
+  streaming counts nhiều lần.
+- MongoDB idempotent upsert ngăn duplicate output cho cùng window/product,
+  nhưng không deduplicate source events.
+- Source-event deduplication nằm ngoài yêu cầu Proposal hiện tại.
+- TTL là tùy chọn và mặc định tắt.
+
+---
+
+## 5. Hướng dẫn Thực thi & Tái lập (Runbook)
+
+### 5.1. Khởi động Cụm dịch vụ qua Docker Compose
 Docker Compose quản lý toàn bộ hệ sinh thái:
 ```bash
 docker compose up -d namenode datanode kafka mongodb spark-master spark-worker
@@ -108,7 +259,7 @@ docker compose up -d namenode datanode kafka mongodb spark-master spark-worker
 - **Spark Master UI:** `http://localhost:8080` (Worker: 2 cores, 2 GB RAM)
 - **MongoDB:** `mongodb://localhost:27017`
 
-### 4.2. Chạy Pipeline Ingestion & Staging (Module 1)
+### 5.2. Chạy Pipeline Ingestion & Staging (Module 1)
 Có thể chạy nhanh toàn bộ pipeline qua script runner hoặc chạy từng bước riêng biệt:
 ```bash
 # Cách 1: Chạy trọn gói toàn bộ pipeline Module 1 (Clean -> Generate -> Stage)
@@ -123,7 +274,7 @@ python -m src.module1.stage_hdfs
 python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
 ```
 
-### 4.3. Chạy Spark Batch Analytics & Benchmark (Module 2)
+### 5.3. Chạy Spark Batch Analytics & Benchmark (Module 2)
 Chạy toàn bộ hoặc từng phần của Module 2 qua container driver chuẩn:
 ```bash
 # Chạy toàn bộ (Handoff validation + Analytics + MongoDB Export + 3 Benchmarks)
@@ -137,7 +288,7 @@ python scripts/module2.py benchmark-partitions
 python scripts/module2.py benchmark-cache
 ```
 
-### 4.4. Chạy Spark Structured Streaming (Module 3)
+### 5.4. Chạy Spark Structured Streaming (Module 3)
 Module 3 tiêu thụ Kafka topic `instacart-purchase-events`, áp dụng watermark
 10 phút trên `event_time_epoch_ms`, và dùng một stateful aggregate 120 phút
 (slide 5 phút) với count 30 phút được tính có điều kiện. Normalize/rank chỉ chạy
@@ -169,7 +320,7 @@ Cấu hình windows/watermark/weights có thể override qua CLI flags:
 `--window-short`, `--window-long`, `--slide`, `--watermark`,
 `--weight-short`, `--weight-long`, `--trigger-interval`.
 
-### 4.5. Kiểm thử Đơn vị (Unit Tests)
+### 5.5. Kiểm thử Đơn vị (Unit Tests)
 ```bash
 # Chạy bộ unit test trên môi trường phát triển
 python -m pytest
@@ -180,7 +331,7 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
 
 ---
 
-## 5. Danh mục Bàn giao & Checklist Nghiệm thu
+## 6. Danh mục Bàn giao & Checklist Nghiệm thu
 
 - [x] **Module 1 - Ingestion & Storage:**
   - [x] Đọc và làm sạch 6 file CSV gốc với explicit schema.
@@ -195,7 +346,7 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Tính toán Batch Metrics và xuất bản sang MongoDB.
   - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
   - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
-- [x] **Module 3 - Structured Streaming** *(implementation and local validation complete; current CI status is reported by PR checks)*:
+- [x] **Module 3 - Structured Streaming** *(implementation, local validation, and GitHub-hosted CI validation complete; PR #2 pending merge)*:
   - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
   - [x] Event-time watermark 10 phút trên `event_time_epoch_ms`.
   - [x] Một stateful 120m sliding aggregate (slide 5m) + exact conditional C30m + trend_score = 0.7·N(C30m) + 0.3·N(C120m).
@@ -206,5 +357,5 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Measured throughput with real producer rate control + real Kafka 1/2/4/8 topic sweep.
   - [x] Docker test suite: Module 3 `10 passed`; complete repository `30 passed`.
   - [x] CI workflow `.github/workflows/module3-full.yml` + evidence folder `docs/evidence/module3/`.
-  - [x] GitHub-hosted workflow is configured; current execution status is reported by PR checks.
+  - [x] GitHub Actions `Module 3 streaming validation` run `37079034707`: job `streaming` **SUCCESS**.
 - [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.

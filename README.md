@@ -120,7 +120,7 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 |---|---|---|---|
 | 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
-| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Implemented and locally validated; current CI status is reported by the pull-request checks |
+| 3 | Real-time streaming: Kafka → windowed trending → dashboard | Kafka topic `instacart-purchase-events` | Complete; validated locally and on GitHub-hosted CI; PR #2 pending merge |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Pending |
 
 ## Team Onboarding & Environment Setup
@@ -231,6 +231,14 @@ python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark
 # All benchmarks in one go
 python scripts/module3.py all --duration-seconds 60
 ```
+
+Validation status: local Docker passed; Module 3 tests reported **10 passed**
+and the complete repository suite reported **30 passed**. GitHub Actions
+`Module 3 streaming validation` run **37079034707** completed the `streaming`
+job with **SUCCESS**, including a live 50k Kafka → Spark → MongoDB path.
+The two-process checkpoint restart and deterministic late-data test also
+passed. PR #2 remains open and unmerged. See the [detailed progress and
+measurements](docs/progress.md) and [Module 3 evidence](docs/evidence/module3/README.md).
 
 Output goes to `results/module3/<run_id>/` (summary.json, analytics
 streaming_progress.jsonl, event log) and into MongoDB collection
