@@ -31,7 +31,8 @@ data/raw/*.csv (6 files Instacart)
   │      - Ghi ra data/clean/*.parquet
   │
   ├──> python -m src.module1.generate
-  │      - Seeded RNG anchor week (deterministic & reproducible)
+  │      - Entity-keyed SplitMix64 theo user/order/cart position
+  │      - Cùng source + seed cho output logic giống nhau với mọi --batch-users
   │      - Cumulative days & session-level exponential item deltas
   │      - Monotonicity guard: bảo toàn thứ tự thời gian cho từng user
   │      - Ghi ra data/synthesized/scatter_{1w,1m,3m}/events.parquet
@@ -41,10 +42,12 @@ data/raw/*.csv (6 files Instacart)
   │      - Tải curated Parquet lên /instacart/curated/
   │      - Phân vùng tương tác thành 456 partition ngày (/instacart/curated/interactions/synthetic_year=.../synthetic_month=.../synthetic_day=...)
   │      - Xuất metadata và hóa đơn kiểm chứng: _sources.json, _handoff.json
+  │      - Staging + backup/restore: lỗi upload/promotion giữ nguyên target cũ
   │
   └──> python -m src.module1.producer
-         - Đọc events.parquet, sort theo event_time_epoch_ms
+         - External merge sort trên disk, giới hạn bộ nhớ theo chunk/fan-in
          - Replay sự kiện lên Kafka topic 'instacart-purchase-events' (Key = user_id)
+         - Receipt tách attempted / broker-acknowledged / failed
          - Gán ingestion_time_epoch_ms tại send-time
          - Hỗ trợ mô phỏng lỗi: late data, duplicate, burst, poison pill
 ```
@@ -77,7 +80,9 @@ Module 2 đọc dữ liệu từ HDFS (`/instacart/curated/`) và kiểm tra ngh
 Thực thi các phép biến đổi và phân tích nâng cao:
 1. **User Features:** Tính toán `order_count`, `purchase_count`, `unique_products`, `avg_basket_size`, `reorder_rate` cho từng user và lưu vào `/instacart/features/user_features`.
 2. **Product & Department Metrics:** Tính tỷ lệ mua lại (reorder rate) có kiểm soát ngưỡng hỗ trợ (`min_support`), tổng số lượt mua, phân phối theo ngày trong tuần và khung giờ trong ngày.
-3. **Department-Hour Pivot:** Phân tích ma trận mật độ mua sắm giữa 21 phòng ban và 24 khung giờ.
+3. **Department-Hour Pivot/Unpivot:** Tạo ma trận rộng 21 phòng ban × 24 giờ,
+   chuyển lại dạng dài bằng Spark `DataFrame.unpivot`, và fail-fast nếu tổng
+   `purchase_count` giữa hai biểu diễn không bằng nhau.
 4. **Xuất kết quả sang MongoDB:** Đẩy kết quả batch xuống 2 collection: `batch_product_metrics` và `department_metrics` (phục vụ API và Dashboard).
 
 ### 3.3. Thử nghiệm Tối ưu hóa Hiệu năng (Performance Benchmarks)
@@ -104,10 +109,14 @@ Thực thi các phép biến đổi và phân tích nâng cao:
 Module 1 producer
   -> Kafka topic instacart-purchase-events
   -> Spark Structured Streaming
-  -> event-time + watermark
+  -> schema/domain validation + record_quality metrics
+  -> event-time watermark
+  -> event_id deduplication within watermark
   -> one stateful 120m sliding aggregation + exact conditional C30
-  -> foreachBatch static normalization/ranking
-  -> MongoDB realtime_trending
+  -> append-mode finalized window
+  -> foreachBatch full-population normalization + deterministic ranking
+  -> configurable Top-K
+  -> replace complete finalized snapshot + idempotent MongoDB upsert
 ```
 
 Runtime dùng Spark 3.5.5 và connector
@@ -115,7 +124,8 @@ Runtime dùng Spark 3.5.5 và connector
 host và `kafka:29092` trong Docker. Min-max normalization và analytical
 ranking Window được thực hiện trên static micro-batch DataFrame do
 `foreachBatch` cung cấp, thay vì áp dụng trực tiếp lên streaming
-DataFrame.
+DataFrame. Đây là **finalized-window trending**, không phải open-window ranking
+được tính lại ở mỗi processing trigger.
 
 ### 4.2. Event-time, Watermark và Trending
 
@@ -135,32 +145,43 @@ Collection `realtime_trending` lưu contract gồm `window_start`, `window_end`,
 `product_id`, `purchase_count_30m`, `purchase_count_120m`, `trend_score`,
 `trend_rank` và `updated_at`. Mỗi document có `_id` deterministic từ
 `window_end + product_id` và được upsert idempotent. MongoDB duy trì unique
-index `(window_end, product_id)` và index `(window_end, trend_rank)`; TTL trên
-`updated_at` là tùy chọn và mặc định tắt (`ttl_seconds = 0`).
+index `(window_end, product_id)` và `(window_end, trend_rank)`. Mặc định giữ
+Top-20 sau khi normalize/rank toàn bộ population và áp dụng TTL 7 ngày
+(`ttl_seconds = 604800`; giá trị `0` mới tắt retention).
 
-Idempotent output chỉ ngăn document trùng cho cùng window/product. Kafka
-input trùng không được source-deduplicate và vẫn làm tăng streaming counts;
-source-event deduplication nằm ngoài yêu cầu hiện tại của Proposal.
+Mỗi complete finalized-window snapshot được xóa theo `window_end` trước khi
+Top-K upsert. Vì vậy rerun một bounded feed loại bỏ stale non-Top-K rows và
+không va chạm rank cũ. Source event trùng `event_id` được deduplicate trong
+watermark trước aggregation; invalid/poison rows được đếm qua
+`record_quality` nhưng không đi vào stateful aggregation.
 
 ### 4.4. Live End-to-End Validation
 
 | Chỉ số | Kết quả |
 |---|---:|
-| Events produced | 50,000 |
-| Events processed | 50,000 |
-| Producer rate | 13,021.60 events/s |
-| Spark processed rate | 4,351.61 rows/s |
-| Trigger execution | 11,489 ms |
-| Mongo documents | 1,111,592 |
+| Attempted / acknowledged / failed | 50,000 / 50,000 / 0 |
+| Kafka partitions | 4 |
+| Producer rate | 10,821.22 events/s |
+| Spark input / processed | 50,000 / 50,000 |
+| Spark inputRowsPerSecond | 0.0 (feed was present before query start) |
+| Spark processedRowsPerSecond | 3,203.90 rows/s |
+| Input trigger execution | 15,605 ms |
+| Peak aggregation / dedup state rows | 1,174,010 / 50,000 |
+| Rows dropped by watermark in this on-time run | 0 |
+| Finalized Mongo documents / windows | 580,342 / 35,701 |
+| Maximum rows per window | 20 (configured Top-K = 20) |
 | Missing required fields | 0 |
 | Invalid trend scores | 0 |
 | Duplicate `(window_end, product_id)` keys | 0 |
 | Duplicate ranks within a window | 0 |
 
-Finalized-window sink batch được đo **82,434 ms** (`addBatch` của input
-batch là **10,450 ms**). Output fan-out lớn vì mỗi source event có thể
+Finalized-window sink batch được đo **62,021.821 ms** (`addBatch` của input
+batch là **14,098 ms**). Output fan-out lớn vì mỗi source event có thể
 tham gia nhiều cửa sổ trượt 5 phút. Đây là phép đo development có
-giới hạn, không phải tuyên bố production capacity.
+giới hạn trên WSL2, một Kafka broker và hai Spark cores, không phải tuyên bố
+production capacity. Artifact mang commit chính xác
+`61ae930c883293fd006eb6d27f7da70aab376d8b` và source digest
+`3fb1c0240e873cb0700320a236caef73761b9f9ccbfbf2713d8a1fae264da8b4`.
 
 ### 4.5. Checkpoint & Fault-Tolerance Validation
 
@@ -168,16 +189,18 @@ Kịch bản dùng checkpoint ID `recovery-smoke` đã chứng minh recovery qua
 **hai Spark process tách biệt**. Process thứ nhất đọc 3 records; sau đó
 2 records mới được ghi thêm vào Kafka. Process thứ hai dùng đúng
 checkpoint đã chỉ đọc 2 records mới: query ID không đổi, batch
-number tiếp tục và Kafka không replay từ earliest. MongoDB có 96 scenario
-documents và 0 duplicate keys.
+number tiếp tục và Kafka không replay từ earliest. CI exact-source run
+`37103621207` có 109 scenario documents và 0 duplicate keys; số document phụ
+thuộc các finalized sliding windows, không ảnh hưởng recovery assertion.
 
 ### 4.6. Late Data & Watermark Validation
 
-Sự kiện on-time và sự kiện lúc `00:15` đều được chấp nhận khi
-watermark là `00:10`. Sau khi watermark tiến đến `02:50`, sự kiện gửi
-sau đó với event-time `00:18` bị loại. Spark báo cáo **24 dropped
-sliding-window memberships**; kết quả được chọn vẫn là `C30 = 2`,
-`C120 = 2`.
+Batch đầu nhận 3 Kafka records: 2 valid, 1 poison/invalid; trong 2 valid
+records có 1 duplicate `event_id`, nên Spark báo `numDroppedDuplicateRows = 1`.
+Sự kiện lúc `00:15` được chấp nhận khi watermark là `00:10`. Sau khi watermark
+tiến đến `02:50`, sự kiện gửi sau đó với event-time `00:18` bị loại tại dedup
+state (`numRowsDroppedByWatermark = 1`). Kết quả finalized được chọn vẫn là
+`C30 = 2`, `C120 = 2`.
 
 ### 4.7. Performance Benchmarks
 
@@ -207,21 +230,24 @@ parallelism, không kiểm chứng broker high availability.
 
 ### 4.8. Automated Validation / CI
 
-- Module 3 tests: **10 passed**.
-- Complete repository suite: **30 passed**.
+- Complete repository suite on implementation commit `ff06239`: **42 passed**.
+- Complete repository suite after rollback regression `61ae930`: **43 passed**.
 - Ruff: **passed**; Docker Compose configuration và GitHub workflow YAML:
   **valid**.
-- GitHub Actions workflow `Module 3 streaming validation`, run `37079034707`,
-  job `streaming`: **SUCCESS**.
-- Companion push-triggered workflow: **SUCCESS**.
+- GitHub Actions `Fast validation` run `37094705692`: **SUCCESS** on `ff06239`.
+- GitHub Actions `Module 3 streaming validation` run `37094705601`, job
+  `streaming`: **SUCCESS** on `ff06239`.
+- GitHub Actions `Fast validation` run `37103618599`: **SUCCESS** on `61ae930`.
+- GitHub Actions `Module 3 streaming validation` run `37103621207`: **SUCCESS**
+  on `61ae930`.
 
 CI đã tái lập bounded Kafka → Spark → MongoDB path trên một
 GitHub-hosted runner sạch, bao gồm bounded Module 1 feed generation, pinned
 Spark runtime build, tests, service connectivity, recovery, late-data/watermark
-validation, throughput smoke, evidence upload và cleanup. Run được thực hiện
-trên PR #2 với head commit
-`3c5c932d5d532f8f9ab0b10b9b9a47a769d6772e`; implementation/release commit là
-`9311b522d03f21ff197de8bf6566f8840969f6d1`.
+validation, throughput smoke, evidence upload và cleanup. PR #2 có base `main`,
+head branch `fix/module3-hardening`; implementation commit chính là
+`ff062393d5fbff8a851924c0cfd32e58885b98fa`, theo sau bởi rollback fix
+`61ae930c883293fd006eb6d27f7da70aab376d8b`.
 
 Lần chạy PR đầu tiên chỉ phát hiện timing issue: startup batch khoảng
 8.66 giây cộng producer delay 5 giây vượt trial allowance 12 giây. Allowance
@@ -232,18 +258,18 @@ MongoDB behavior.
 ### 4.9. Current Status & Limitations
 
 Module 3 có trạng thái **COMPLETE AND VALIDATED**. Tuy nhiên, PR #2
-**vẫn đang mở và chưa merge** vào `module3-speed-layer` hay `main`.
+**vẫn đang mở và chưa merge** vào `main`.
 
 - Các benchmark là bounded development measurements, không phải production
   capacity claims.
 - Deployment dùng một Kafka broker; partition benchmark không chứng minh
   broker high availability.
-- Duplicate Kafka input không được source-deduplicate và sẽ làm tăng
-  streaming counts nhiều lần.
-- MongoDB idempotent upsert ngăn duplicate output cho cùng window/product,
-  nhưng không deduplicate source events.
-- Source-event deduplication nằm ngoài yêu cầu Proposal hiện tại.
-- TTL là tùy chọn và mặc định tắt.
+- Đây là finalized-window output; hệ thống không cung cấp open-window ranking
+  thay đổi ở mỗi trigger.
+- Sliding windows tạo state/output fan-out lớn; kết quả 50k không ngoại suy
+  thành production throughput hoặc capacity.
+- Mongo sink dùng bounded `toLocalIterator` + bulk batches trên driver; Top-K
+  giới hạn output nhưng sink chưa phải distributed Mongo writer.
 
 ---
 
@@ -290,9 +316,11 @@ python scripts/module2.py benchmark-cache
 
 ### 5.4. Chạy Spark Structured Streaming (Module 3)
 Module 3 tiêu thụ Kafka topic `instacart-purchase-events`, áp dụng watermark
-10 phút trên `event_time_epoch_ms`, và dùng một stateful aggregate 120 phút
-(slide 5 phút) với count 30 phút được tính có điều kiện. Normalize/rank chỉ chạy
-trên static DataFrame trong `foreachBatch`, sau đó upsert idempotent vào MongoDB
+10 phút trên `event_time_epoch_ms`, quan sát và loại invalid rows, deduplicate
+`event_id`, rồi dùng một stateful aggregate 120 phút (slide 5 phút) với count 30
+phút được tính có điều kiện. Append mode chỉ phát finalized windows;
+normalize/rank full population chạy trên static DataFrame trong `foreachBatch`,
+sau đó mới Top-K, replace snapshot và upsert idempotent vào MongoDB
 `realtime_trending` (Proposal §17–22):
 ```bash
 # Validate Kafka + Mongo connectivity (không stream)
@@ -313,8 +341,9 @@ python scripts/module3.py benchmark-throughput --duration-seconds 15 --benchmark
 python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark-events 100
 python scripts/module3.py all --duration-seconds 60
 
-# Tuỳ chọn: bật TTL 24h trên realtime_trending.updated_at để demo W4
-python scripts/module3.py run --ttl-seconds 86400
+# Mặc định Top-20 và TTL 7 ngày; có thể đổi hoặc tắt TTL rõ ràng
+python scripts/module3.py run --mongo-top-k-per-window 50 --ttl-seconds 86400
+python scripts/module3.py run --ttl-seconds 0
 ```
 Cấu hình windows/watermark/weights có thể override qua CLI flags:
 `--window-short`, `--window-long`, `--slide`, `--watermark`,
@@ -336,26 +365,29 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
 - [x] **Module 1 - Ingestion & Storage:**
   - [x] Đọc và làm sạch 6 file CSV gốc với explicit schema.
   - [x] Khử NaN, tái cấu trúc gap 30 ngày bảo toàn Day-Of-Week.
-  - [x] Tạo synthetic timestamp có tính đơn điệu chặt chẽ theo user (`0 violations`).
+  - [x] Entity-keyed deterministic generation, bất biến theo `--batch-users`, và timestamp đơn điệu chặt chẽ theo user.
   - [x] Phân vùng tương tác thành 456 partition ngày trên HDFS.
-  - [x] Kafka producer hỗ trợ pacing và mô phỏng lỗi (fault injection).
+  - [x] HDFS staging backup/restore giữ target cũ khi upload/promotion lỗi.
+  - [x] Kafka producer external-merge bounded-memory, broker-ack receipt, pacing và fault injection.
 - [x] **Module 2 - Spark Batch Processing:**
   - [x] Khởi tạo container Spark 3.5.5 kết nối HDFS và MongoDB.
   - [x] Xác thực toàn vẹn dữ liệu đầu vào và hóa đơn staging (`_sources.json`, `_handoff.json`).
   - [x] Tính toán User Features và lưu trữ tại `/instacart/features/user_features`.
   - [x] Tính toán Batch Metrics và xuất bản sang MongoDB.
+  - [x] Spark pivot + explicit unpivot với kiểm tra tổng nhất quán.
   - [x] Benchmark Join (BHJ vs SMJ), Partition Pruning, In-Memory Caching.
   - [x] Kiểm thử tự động trên CI/CD GitHub Actions và lưu trữ Evidence đầy đủ.
 - [x] **Module 3 - Structured Streaming** *(implementation, local validation, and GitHub-hosted CI validation complete; PR #2 pending merge)*:
   - [x] Kafka source `instacart-purchase-events` parse JSON + poison-pill guard.
+  - [x] Domain validation/quality metrics + source `event_id` deduplication.
   - [x] Event-time watermark 10 phút trên `event_time_epoch_ms`.
   - [x] Một stateful 120m sliding aggregate (slide 5m) + exact conditional C30m + trend_score = 0.7·N(C30m) + 0.3·N(C120m).
-  - [x] `foreachBatch` upsert idempotent vào MongoDB `realtime_trending` (key `window_end__product_id`).
-  - [x] Indexes `(window_end, product_id)` unique + `(window_end, trend_rank)`; TTL tuỳ chọn (mặc định 0).
+  - [x] Full-population normalize/rank, sau đó Top-K; replace snapshot + idempotent upsert MongoDB.
+  - [x] Unique indexes theo window/product và window/rank; TTL mặc định 7 ngày.
   - [x] Explicit checkpoint ID; two-process recovery measured without replay from earliest.
   - [x] Deterministic late-data demo measured watermark acceptance and dropped state rows.
   - [x] Measured throughput with real producer rate control + real Kafka 1/2/4/8 topic sweep.
-  - [x] Docker test suite: Module 3 `10 passed`; complete repository `30 passed`.
+  - [x] Docker complete suite: `43 passed`; Ruff + Compose + whitespace PASS.
   - [x] CI workflow `.github/workflows/module3-full.yml` + evidence folder `docs/evidence/module3/`.
-  - [x] GitHub Actions `Module 3 streaming validation` run `37079034707`: job `streaming` **SUCCESS**.
+  - [x] GitHub Actions `Module 3 streaming validation` run `37103621207`: job `streaming` **SUCCESS** on `61ae930`.
 - [ ] **Module 4 - ML & Serving:** Sẵn sàng đọc features từ HDFS và ground truth `order_products__train`.

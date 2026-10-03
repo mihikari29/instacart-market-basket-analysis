@@ -78,6 +78,9 @@ python -m src.module1.generate --list-scenarios
   mean 30 s, clip [5,120]; median session ≈ 3.5 min, matches ContentSquare mobile)
   or `uniform [15,50]`; `time_mode` `uniform` (U(0,59)) or `hash` (RNG-free).
 - **Presets**: `default`, `mobile-fast` (20 s), `desktop-browse` (40 s), `uniform`, `deterministic`.
+- **Reproducibility**: random-looking values use entity-keyed SplitMix64 inputs
+  (`user_id`, `order_id`, and `order_id + cart position`), so the logical feed is
+  identical for the same source and seed regardless of `--batch-users`.
 - **Invariant**: per-user monotonicity always enforced → **0 violations** across all 33.8 M events.
 
 ## Scenario feeds (historical runs)
@@ -148,6 +151,17 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
    python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 20000 --replay-speed 50000 --inject "late:0.05,dup:0.02"
    ```
 
+   Unsorted Parquet input is replayed chronologically through a disk-backed
+   external merge. Memory is bounded by the configured chunk/fan-in sizes, and
+   `--limit-events` stops output without materializing the full feed in memory.
+   The JSON receipt separates attempted, broker-acknowledged, and failed sends;
+   any delivery failure produces a normal non-zero process exit.
+
+Each HDFS interaction refresh uploads to a unique staging tree, moves the old
+target to a backup, and promotes the complete staging tree with an atomic HDFS
+rename. Upload/promotion failure removes staging and restores the prior target;
+a successful promotion removes the backup.
+
 4. **Các cổng dịch vụ đã ánh xạ sẵn:**
    - **Kafka Broker:** `localhost:9092` (Topic: `instacart-purchase-events`)
    - **HDFS NameNode WebHDFS:** `http://localhost:9870`
@@ -157,9 +171,10 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 ## Module 2 — Spark batch layer
 
 Module 2 now includes handoff validation, prior-only historical analytics and user
-features, MongoDB batch snapshots, forced Sort-Merge/Broadcast Hash Join trials,
-partition pruning and aggregate caching experiments. All benchmark arms retain
-plans, checksums, repetitions, medians and Spark input/shuffle metrics.
+features, MongoDB batch snapshots, an explicit department/hour pivot and Spark
+`unpivot` with equal-total validation, forced Sort-Merge/Broadcast Hash Join
+trials, partition pruning and aggregate caching experiments. All benchmark arms
+retain plans, checksums, repetitions, medians and Spark input/shuffle metrics.
 
 After regenerating and staging data with the corrected Module 1 pipeline:
 
@@ -198,11 +213,29 @@ temporary; this validation does not install a permanent cluster on your computer
 ## Module 3 — Speed layer (Spark Structured Streaming)
 
 Consumes `instacart-purchase-events` (Module 1 producer), applies a 10-minute
-event-time watermark, and uses one stateful 120-minute sliding aggregation
-(5-minute slide). The 30-minute count is calculated conditionally inside that
-same window. Finalized rows are normalized and ranked on the static
-`foreachBatch` DataFrame, then idempotently upserted into MongoDB
-`realtime_trending` (Proposal §17–22).
+event-time watermark, rejects malformed/domain-invalid rows with observable
+quality counters, deduplicates `event_id` within the watermark, and uses one
+stateful 120-minute sliding aggregation (5-minute slide). The 30-minute count is
+calculated conditionally inside that same window. Append mode emits only
+finalized windows; the complete product population is then normalized and
+deterministically ranked on the static `foreachBatch` DataFrame. Configurable
+Top-K filtering happens only after ranking, followed by snapshot replacement and
+idempotent MongoDB upserts into `realtime_trending` (Proposal §17–22).
+
+```text
+Kafka events
+  -> schema/domain validation + quality metrics
+  -> event-time watermark
+  -> event-ID deduplication
+  -> one 120-minute sliding aggregation (C30 + C120)
+  -> finalized window (append mode)
+  -> full-population normalization + deterministic ranking
+  -> Top-K
+  -> MongoDB finalized trend snapshot
+```
+
+This is finalized-window trending, not an open-window ranking recomputed every
+processing trigger.
 
 ```bash
 # Validate Kafka + Mongo connectivity (no streaming)
@@ -232,31 +265,49 @@ python scripts/module3.py benchmark-partitions --duration-seconds 15 --benchmark
 python scripts/module3.py all --duration-seconds 60
 ```
 
-Validation status: local Docker passed; Module 3 tests reported **10 passed**
-and the complete repository suite reported **30 passed**. GitHub Actions
-`Module 3 streaming validation` run **37079034707** completed the `streaming`
-job with **SUCCESS**, including a live 50k Kafka → Spark → MongoDB path.
-The two-process checkpoint restart and deterministic late-data test also
-passed. PR #2 remains open and unmerged. See the [detailed progress and
-measurements](docs/progress.md) and [Module 3 evidence](docs/evidence/module3/README.md).
+Validation status: the complete local Docker suite reports **43 passed** after
+the HDFS rollback regression was added; Ruff, Compose validation and whitespace
+checks pass. On implementation commit `ff06239`, GitHub Actions fast-validation
+run **37094705692** and streaming run **37094705601** succeeded with **42 tests**,
+a live Kafka → Spark → MongoDB path, two-process checkpoint recovery, and the
+duplicate/poison/late-data scenario. The rollback follow-up is commit `61ae930`;
+its fast run **37103618599** and streaming run **37103621207** also succeeded.
+PR #2 targets `main` and remains open and unmerged. See the
+[detailed progress and measurements](docs/progress.md) and [Module 3
+evidence](docs/evidence/module3/README.md).
 
 Output goes to `results/module3/<run_id>/` (summary.json, analytics
 streaming_progress.jsonl, event log) and into MongoDB collection
 `realtime_trending` with indexes `(window_end, product_id)` unique and
-`(window_end, trend_rank)`. TTL on `updated_at` is **disabled by default**
-(`ttl_seconds = 0`); pass `--ttl-seconds 86400` to demo W4 automatic
-window cleanup. Evidence lives in [docs/evidence/module3](docs/evidence/module3/README.md)
-and is uploaded by [module3-full.yml](.github/workflows/module3-full.yml).
+`(window_end, trend_rank)` unique. The default retention is seven days
+(`ttl_seconds = 604800`); pass `--ttl-seconds 0` to explicitly disable TTL.
+The default serving bound is Top-20 per finalized window and can be changed with
+`--mongo-top-k-per-window`. Before replay-safe upserts, each complete finalized
+window snapshot is replaced, removing stale rows and preventing rank conflicts
+when a bounded feed is recomputed. Evidence lives in
+[docs/evidence/module3](docs/evidence/module3/README.md) and is uploaded by
+[module3-full.yml](.github/workflows/module3-full.yml).
 
 The producer's `--replay-speed` remains a synthetic event-time acceleration
 multiplier. Benchmarks use the separate `--target-events-per-second` control and
-record achieved wall-clock send rate. Kafka duplicate injection is not input
-deduplication: repeated source events count repeatedly; Mongo idempotency only
-prevents duplicate output documents for the same window/product.
+record achieved wall-clock send rate. Repeated Kafka records with the same
+`event_id` contribute once while retained by the event-time deduplication state.
+Invalid records are counted in `record_quality` and do not enter aggregation.
 
-`tests/test_module3.py` covers JSON/schema failures, fixture immutability,
-30/120-minute counts, normalization, deterministic rank ties, weights, and
-checkpoint identity. It is marked `integration` because it requires PySpark.
+`tests/test_module3.py` covers JSON/domain failures, poison records,
+deduplication, fixture immutability, 30/120-minute counts, full-population
+normalization, deterministic rank ties, post-ranking Top-K, Mongo snapshot
+idempotency/index/TTL behavior, weights, and checkpoint identity. It is marked
+`integration` because it requires PySpark.
+
+## CI strategy
+
+- `Fast validation` runs Compose validation, Ruff and the complete fixture/Spark
+  test suite on pull requests and pushes to active module branches and `main`.
+- `Module 2 full-data validation` remains manually dispatchable, runs weekly,
+  and retains its canonical full-data path.
+- `Module 3 streaming validation` runs bounded live Kafka/Spark/Mongo,
+  checkpoint-recovery, late-data and throughput checks for relevant changes.
 
 ## Next step: Module 4
 

@@ -16,12 +16,13 @@ Historical fixture evidence remains in [README.md](README.md).
 | Equivalent partition filters | PASS; 177,912 events; 97.73% lower task input bytes |
 | Caching | PASS; materialization reported separately; InMemoryTableScan verified |
 | Automated suite | PASS; 15 tests in 16.94 seconds in Docker (Module 3 streaming tests gated by `integration` marker; Kafka/Mongo live integration requires services) |
-| Module 3 streaming — Kafka connectivity + window/watermark/late/trending | Implementation complete; live-cluster CI on `module3-speed-layer` branch |
-| Module 3 streaming — throughput + Kafka partition benchmark | Same as above; producer/consumer pair measured via `streaming_progress.jsonl` |
-| Compile / Ruff / Compose / whitespace | PASS; final documentation update rechecked |
+| Module 3 streaming — validation/dedup/window/watermark/late/trending | PASS; PR #2 branch `fix/module3-hardening`, live CI run 37094705601 on `ff06239` |
+| Module 3 streaming — finalized Top-K snapshot / TTL / recovery | PASS; tests, local 50k smoke and full CI run 37103621207 on `61ae930` |
+| Module 3 streaming — throughput + Kafka partition benchmark | PASS as bounded development evidence; producer/consumer pair measured via `streaming_progress.jsonl` |
+| Compile / Ruff / Compose / whitespace | PASS; 43-test local gate after HDFS rollback regression |
 | Credentials and datasets excluded from Git | PASS; compact measured evidence only |
-| Commits and remote push | PASS; feature branch published; full-run source bf8aeda |
-| Merge | Not automatic; review feature branch through a pull request |
+| Commits and remote push | PASS; `fix/module3-hardening` published; hardening `ff06239`, rollback fix `61ae930` |
+| Merge | PR #2 is open against `main`; not merged as of 2026-10-03 |
 
 This records executed acceptance gates, not a subjective 10/10 grade. Timings are
 specific to the recorded single-host resources and warm-system methodology.

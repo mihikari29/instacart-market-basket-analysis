@@ -2,6 +2,8 @@
 
 This is the historical local fixture report. The later [full-data report](full/README.md)
 closes the Docker/HDFS and full-data gates below; code has also been pushed to GitHub.
+Current Module 3 hardening evidence, including the exact-revision bounded 50k
+measurement, is indexed in [module3/README.md](module3/README.md).
 
 Run: 20260925T154536_9ad62d33. Status: passed.
 

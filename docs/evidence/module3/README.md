@@ -1,96 +1,122 @@
 # Module 3 Evidence (Speed Layer)
 
-> Status: **Implemented and validated locally with Docker Compose and independently validated on a GitHub-hosted runner on 2026-10-03.**
+> Status: **implemented and validated locally with Docker Compose and on a
+> GitHub-hosted runner on 2026-10-03. PR #2 remains open against `main`.**
 
-Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The host Python/Java
-installations are not used for Spark execution.
+Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The results below are
+bounded development/correctness evidence, not production capacity claims. The
+compact machine-readable record is
+[`hardening-validation-2026-10-03.json`](hardening-validation-2026-10-03.json).
 
-## Local validation results
+## Correctness evidence
 
-| Gate | Measured result | Local artifact |
+| Gate | Result | Evidence |
 |---|---|---|
-| Module 3 tests | `10 passed in 11.91s` | Docker pytest output |
-| Complete repository tests | `30 passed in 24.62s` | Docker pytest output |
-| Kafka connectivity | host listener `localhost:9092`; Docker listener `kafka:29092`; canonical topic has 4 partitions | `results/module3/validate/` |
-| Spark Kafka connector | `spark-sql-kafka-0-10_2.12:3.5.5` loaded by a live query | `results/module3/smoke/` |
-| Live end-to-end smoke | 50,000 produced and 50,000 processed; 1,111,592 finalized Mongo documents | `results/module3/smoke/smoke_evidence.json` |
-| Watermark / late data | within-watermark event accepted; beyond-watermark event dropped; selected output count remained 2 | `results/module3/late/*/late_data_evidence.json` |
-| Checkpoint recovery | first process read 3 rows; second process with the same checkpoint read only 2 new rows; query ID unchanged | `results/module3/recovery/recovery_evidence.json` |
-| Duration zero | remained active until interactive Ctrl+C, then stopped with exit code 0 | `results/module3/duration-zero/` |
-| Throughput | 100/s, 500/s, and bulk producer arms; 1 warm-up + 3 measured trials each | `results/module3/benchmark-throughput/*/summary.json` |
-| Kafka partitions | broker and Spark both observed actual 1/2/4/8 partition topics; 1 warm-up + 3 runs each | `results/module3/benchmark-partitions/*/summary.json` |
+| Complete repository tests | `43 passed in 28.01s` after the HDFS rollback test (`42` on `ff06239`) | local Docker pytest; CI Fast validation |
+| Ruff / Compose / whitespace | PASS / PASS / PASS | local gate and CI |
+| Deterministic generation | Equal logical rows across fixture batch sizes; entity-keyed seed, no batch index | `test_generation_is_invariant_to_user_batch_size` |
+| Bounded replay | Disk-backed external merge; chunk bound and early stop for declared-sorted input asserted | Module 1 hardening tests |
+| Kafka delivery accounting | attempted/acknowledged/failed callback outcomes and non-zero normal exit asserted | Module 1 hardening tests |
+| HDFS failure behavior | Failed upload cleans staging; failed promotion restores prior target | staging tests |
+| Pivot/unpivot | Spark pivot and explicit unpivot totals both `24` on fixture | `test_department_hour_pivot_unpivot_consistency` |
+| Duplicate/poison/late scenario | input `3`, valid `2`, invalid `1`, duplicate dropped `1`; beyond-watermark event dropped; finalized `C30=C120=2` | exact-source CI artifact from run `37103621207` |
+| Full-population ranking / Top-K | Top-K is asserted after normalization/ranking; deterministic product-ID tie-break | Module 3 tests |
+| Mongo snapshot/idempotency | Complete finalized windows replace stale rows; replay converges without duplicate product/rank keys | Module 3 tests and 50k smoke |
+| TTL | Seven-day default; index reconfiguration tested; `0` explicitly disables | Module 3 tests |
+| Checkpoint recovery | process 1 read `3`; process 2 read only `2` new rows; same query ID; continued batches; no earliest replay | local and CI recovery evidence |
 
-Generated `results/module3/` data is intentionally gitignored because Spark
-event logs and checkpoints are large. A compact checked-in measurement summary
-is in [`local-validation-2026-10-02.json`](local-validation-2026-10-02.json).
+The production streaming topology is:
+
+```text
+Kafka events
+  -> schema/domain validation + record_quality metrics
+  -> event-time watermark
+  -> event_id deduplication within watermark
+  -> one stateful 120-minute sliding aggregation (C30 + C120)
+  -> append-mode finalized window
+  -> full-population normalization + deterministic ranking
+  -> configurable Top-K
+  -> replace complete Mongo finalized-window snapshot + idempotent upserts
+```
+
+Append mode is intentional. Ranking needs the complete product population for a
+finalized window; this is not an open-window ranking recomputed every trigger.
+
+## Local bounded 50k measurement
+
+Command:
+
+```bash
+python3 scripts/module3_smoke.py --events 50000 --duration-seconds 120 \
+  --feed data/synthesized/hardening_500 \
+  --output results/module3-hardening/smoke-50k-final-61ae930 --top-k 20
+```
+
+| Metadata | Value |
+|---|---|
+| Classification | LOCAL / BOUNDED / DEVELOPMENT |
+| Revision | `61ae930c883293fd006eb6d27f7da70aab376d8b` |
+| Source digest | `3fb1c0240e873cb0700320a236caef73761b9f9ccbfbf2713d8a1fae264da8b4` |
+| Timestamp | `2026-10-03T06:37:19Z` |
+| Platform | WSL2 Linux, Spark 3.5.5, Java 17.0.14, Python 3.10.12 |
+| Resources | standalone Spark, 2 cores, 8 shuffle partitions, one Kafka broker, 4 topic partitions |
+| Windows | C30=30m, C120=120m, slide=5m, watermark=10m |
+| Serving | Top-20, TTL 604800 seconds |
+
+| Metric | Result |
+|---|---:|
+| Kafka attempted / acknowledged / failed | 50,000 / 50,000 / 0 |
+| Producer elapsed / acknowledged rate | 4.621 s / 10,821.22 events/s |
+| Reader strategy | external merge; 65,536-row chunks; 2 initial runs |
+| Spark total input / valid / invalid | 50,000 / 50,000 / 0 |
+| Input rows/s | 0.0 (events existed before query start) |
+| Processed rows/s | 3,203.90 |
+| Input trigger / addBatch | 15,605 ms / 14,098 ms |
+| Peak aggregate / dedup state rows | 1,174,010 / 50,000 |
+| Watermark drops in this on-time workload | 0 |
+| Finalized sink batch | 62,021.821 ms |
+| Finalized windows / Mongo documents | 35,701 / 580,342 |
+| Maximum documents per window | 20 |
+| Replaced stale documents | 580,342 |
+| Duplicate window/product keys / ranks | 0 / 0 |
+| Invalid scores / windows above Top-K | 0 / 0 |
+
+Each source event may contribute to as many as 24 overlapping five-minute
+windows. That state/output fan-out and the single-machine sink dominate this
+bounded run; the numbers must not be extrapolated to a production cluster.
 
 ## GitHub Actions validation
 
-| Item | Result |
-|---|---|
-| Workflow | Module 3 streaming validation |
-| Run ID | `37079034707` |
-| Job | `streaming` |
-| Result | **SUCCESS** |
-| PR | #2 Harden Module 3 Structured Streaming |
-| Head commit | `3c5c932d5d532f8f9ab0b10b9b9a47a769d6772e` |
-| Implementation commit | `9311b522d03f21ff197de8bf6566f8840969f6d1` |
+| Workflow | Revision | Run | Result |
+|---|---|---|---|
+| Fast validation (push) | `ff06239` | [37094705692](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37094705692) | SUCCESS; 42 tests, Ruff, Compose |
+| Module 3 streaming validation (push) | `ff06239` | [37094705601](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37094705601) | SUCCESS |
+| Fast validation (push) | `61ae930` | [37103618599](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37103618599) | SUCCESS; 43 tests |
+| Module 3 streaming validation (PR) | `61ae930` | [37103621207](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37103621207) | SUCCESS |
 
-On a clean GitHub-hosted runner, CI independently generated a bounded Module 1
-feed, built the pinned Spark runtime, ran the tests, validated service
-connectivity, exercised the real Kafka → Spark → MongoDB path, verified
-checkpoint recovery and late-data/watermark behavior, and ran a short measured
-throughput smoke. A companion push-triggered workflow also succeeded. PR #2
-remains open and unmerged.
+Run `37094705601` independently built the pinned runtime on a clean hosted
+runner, regenerated a bounded Module 1 feed, ran all 42 tests, validated service
+connectivity, executed real Kafka → Spark → MongoDB, verified checkpoint recovery
+and the duplicate/poison/late-data scenario, ran a short throughput smoke,
+uploaded evidence, and cleaned up services. The later `61ae930` change is scoped
+to HDFS target rollback plus its regression test; run `37103621207` repeated the
+complete streaming workflow successfully on that exact revision.
 
-## Architecture validated
+## Historical evidence
 
-The streaming plan contains one stateful 120-minute sliding aggregation with a
-5-minute slide and 10-minute watermark. `purchase_count_30m` is calculated by
-conditionally counting events in `[window_end - 30 minutes, window_end)`.
-Append mode emits finalized windows. Min/max normalization and deterministic
-`row_number` ranking run only on the static DataFrame provided by
-`foreachBatch`.
-
-Progress JSONL records each `batchId` once and includes input/processing rates,
-`durationMs`, watermark, state totals/updates/removals/drops, source offsets,
-and sink metadata.
-
-## Measured summaries
-
-The 50,000-event smoke producer achieved 13,021.60 events/s. Spark consumed all
-records in one data batch at 4,351.61 processed rows/s with an 11,489 ms trigger.
-The subsequent finalized-window sink batch took 82,434 ms; this large fan-out is
-expected because each source row can contribute to 24 five-minute windows.
-
-Throughput trial medians:
-
-| Producer target | Measured producer rate | Spark processed rows/s | Trigger ms |
-|---:|---:|---:|---:|
-| 100/s | 100.74/s | 40.55 | 2,383 |
-| 500/s | 497.97/s | 46.86 | 2,123 |
-| unbounded bulk | 5,695.47/s | 47.48 | 2,106 |
-
-Partition trial medians:
-
-| Actual partitions | Spark-observed partitions | Processed rows/s | Trigger ms |
-|---:|---:|---:|---:|
-| 1 | 1 | 51.57 | 1,939 |
-| 2 | 2 | 60.86 | 1,643 |
-| 4 | 4 | 47.73 | 2,095 |
-| 8 | 8 | 31.26 | 3,199 |
-
-These are small development measurements, not production capacity claims.
+[`local-validation-2026-10-02.json`](local-validation-2026-10-02.json) and older
+`results/module3/` measurements predate the hardening pass. They remain historical
+records and must not be presented as current Top-K/deduplication performance.
 
 ## Limitations
 
-- The GitHub-hosted workflow is a bounded functional validation and should not
-  be interpreted as a production-scale capacity benchmark.
-- The single Kafka broker validates consumer partition parallelism, not broker
-  high availability.
-- Kafka duplicate injection represents duplicate input and increments counts
-  more than once. Mongo idempotent upsert prevents duplicate output documents;
-  it does not deduplicate source events. The Proposal does not require source
-  event deduplication.
-- TTL remains disabled by default. Pass `--ttl-seconds 86400` only when the
-  optional cleanup behavior is desired.
+- All live runs are bounded development checks on a single machine or hosted
+  runner, not production-scale benchmarks.
+- One Kafka broker validates functional partition parallelism, not broker high
+  availability.
+- Output is intentionally finalized-window trending, not an open-window live
+  leaderboard.
+- Sliding windows amplify state and output; the 50k run reached 1,174,010
+  aggregate-state rows.
+- Mongo writes use bounded driver-side `toLocalIterator` and bulk operations;
+  Top-K bounds serving rows but this is not a distributed Mongo writer.
