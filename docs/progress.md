@@ -100,6 +100,13 @@ Thực thi các phép biến đổi và phân tích nâng cao:
 
 *Xem chi tiết kế hoạch thực thi, số liệu đo lường và logs tại:* [`docs/evidence/full/`](evidence/full/README.md).
 
+Current hardening full-data workflow
+[`37107843181`](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107843181)
+đã **SUCCESS** trên revision `a35170f`: 51 tests, 33,819,106 source/local/HDFS
+events, 456 partitions, pivot/unpivot cùng tổng 32,434,489, toàn bộ benchmark và
+Mongo publication đều pass. Số benchmark hiện tại được ghi trong full evidence;
+historical run cũ vẫn được giữ và gắn nhãn riêng.
+
 ---
 
 ## 4. Module 3 — Spark Structured Streaming Speed Layer
@@ -255,6 +262,10 @@ parallelism, không kiểm chứng broker high availability.
 - GitHub Actions `Fast validation` run `37103618599`: **SUCCESS** on `61ae930`.
 - GitHub Actions `Module 3 streaming validation` run `37103621207`: **SUCCESS**
   on `61ae930`.
+- Final-source `Fast validation` run `37107841305`: **SUCCESS**, 51 tests.
+- Final-source `Module 3 streaming validation` run `37107841330`: **SUCCESS**
+  trên `a35170f`; Kafka → Spark → Mongo, recovery, duplicate/poison/late và
+  throughput smoke đều pass.
 
 CI đã tái lập bounded Kafka → Spark → MongoDB path trên một
 GitHub-hosted runner sạch, bao gồm bounded Module 1 feed generation, pinned

@@ -87,8 +87,8 @@ python -m src.module1.generate --list-scenarios
 
 ## Scenario feeds (historical runs)
 
-The regenerated full-validation feed uses batch_users=2000 and has a peak of
-212,714 events/day across 456 days; seed, batching and manifest are recorded in
+The current hardening full-validation feed uses batch_users=2000 and has a peak of
+210,195 events/day across 456 days; seed, batching and manifest are recorded in
 [full evidence](docs/evidence/full/README.md). The earlier figures below describe
 the previous generated feeds.
 
@@ -215,9 +215,10 @@ partitions. A cap-30 sorting defect also affected regenerated order gaps. Regene
 cleaned data and feeds, then restage using the corrected code. Existing uploads
 without validation receipts are not accepted as a valid Module 2 handoff.
 
-Full execution passed on a GitHub-hosted Linux runner using real Docker, standalone
-Spark, HDFS and MongoDB: **33,819,106 source/local/HDFS events**, 456 daily
-partitions, and **15 passing tests**. See [full measured evidence](docs/evidence/full/README.md)
+Current full execution passed in GitHub Actions run **37107843181** on hardening
+revision `a35170f`, using real Docker, standalone Spark, HDFS and MongoDB:
+**33,819,106 source/local/HDFS events**, 456 daily partitions, and **51 passing
+tests**. See [full measured evidence](docs/evidence/full/README.md)
 and [execution guide](docs/progress.md). The hosted services are
 temporary; this validation does not install a permanent cluster on your computer.
 
@@ -283,7 +284,9 @@ python scripts/module3.py all --duration-seconds 60
 ```
 
 Current final-hardening local validation reports **51 passed**; Ruff, Compose
-validation and whitespace checks pass. Historically, the suite reported 43
+validation and whitespace checks pass. Fast validation run **37107841305** and
+Module 3 streaming run **37107841330** succeeded for source revision `a35170f`.
+Historically, the suite reported 43
 tests after the HDFS rollback regression. On implementation commit `ff06239`, GitHub Actions
 fast-validation run **37094705692** and streaming run **37094705601** succeeded with **42 tests**,
 a live Kafka → Spark → MongoDB path, two-process checkpoint recovery, and the

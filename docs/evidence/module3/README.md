@@ -7,6 +7,8 @@ Module 3 uses the pinned Spark 3.5.5 / Java 17 image. The results below are
 bounded development/correctness evidence, not production capacity claims. The
 compact machine-readable record is
 [`hardening-validation-2026-10-03.json`](hardening-validation-2026-10-03.json).
+The final release-gate record is
+[`final-release-validation-2026-10-03.json`](final-release-validation-2026-10-03.json).
 
 ## Correctness evidence
 
@@ -95,6 +97,8 @@ bounded run; the numbers must not be extrapolated to a production cluster.
 | Module 3 streaming validation (push) | `ff06239` | [37094705601](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37094705601) | SUCCESS |
 | Fast validation (push) | `61ae930` | [37103618599](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37103618599) | SUCCESS; 43 tests |
 | Module 3 streaming validation (PR) | `61ae930` | [37103621207](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37103621207) | SUCCESS |
+| Fast validation (PR, final source) | `a35170f` | [37107841305](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107841305) | SUCCESS; 51 tests, Ruff, Compose |
+| Module 3 streaming validation (PR, final source) | `a35170f` | [37107841330](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107841330) | SUCCESS |
 
 Run `37094705601` independently built the pinned runtime on a clean hosted
 runner, regenerated a bounded Module 1 feed, ran all 42 tests, validated service

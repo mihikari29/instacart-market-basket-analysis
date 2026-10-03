@@ -1,4 +1,50 @@
-# Full-data execution: passed
+# Full-data executions
+
+## Current hardening validation: passed
+
+[GitHub Actions run 37107843181](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37107843181)
+completed successfully on 2026-10-03 against current hardening source revision
+`a35170ff0f98729ad2b64b8df4c96c4bf6321201`.
+
+Classification: **FULL PUBLIC DATASET / GITHUB-HOSTED VALIDATION**.
+
+The workflow fetched and verified the public dataset, regenerated the complete
+entity-keyed feed with `seed=42`, `scatter_weeks=13`, and `batch_users=2000`, ran
+the pinned Docker test suite (**51 passed in 30.72s**), staged the source through
+atomic HDFS promotion, executed all Module 2 analytics and benchmarks, verified
+Mongo publication, uploaded evidence, and cleaned up services.
+
+- Source counts: 3,421,083 orders; 32,434,489 prior facts; 1,384,617 train facts;
+  49,688 products; 206,209 users.
+- Source = local partitioned feed = HDFS Spark read = **33,819,106 events** across
+  **456 partitions / 456 files**; exact fact/event reconciliation and partition
+  integrity passed; monotonicity violations were zero.
+- `_sources.json`, `_handoff.json`, source/event SHA reconciliation, prior-only
+  analytics, train preservation, Spark SQL, pivot/unpivot, BHJ/SMJ, pruning,
+  caching, and Mongo batch publication all passed.
+- Pivot and unpivot totals both equal **32,434,489**. Mongo contained 49,677
+  product documents and 21 department documents for the current run.
+
+Current benchmark environment: GitHub-hosted Ubuntu 24.04, Spark 3.5.5, Java
+17.0.14, Python 3.10.12, standalone Spark with two cores and one 1 GiB executor,
+32 shuffle partitions, one warm-up and three measured repetitions.
+
+| Experiment / arm | Current median seconds |
+|---|---:|
+| Join: Sort-Merge | 17.581934 |
+| Join: Broadcast Hash | 2.304046 |
+| Scan: all dates | 3.497363 |
+| Scan: date-column filter | 1.666808 |
+| Scan: partition-column filter | 0.074906 |
+| Aggregate: uncached | 2.110284 |
+| Cache materialization | 2.175583 |
+| Aggregate: cached reuse | 0.088085 |
+
+The current compact machine-readable record is
+[`current-hardening-2026-10-03.json`](current-hardening-2026-10-03.json). Full
+raw run artifacts are retained by GitHub Actions for 14 days.
+
+## Historical full-data validation: passed
 
 [GitHub Actions run 36162730659](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/36162730659) completed successfully on
 2026-09-25 at 17:04 UTC (2026-09-26 in Asia/Saigon). Executed source commit:
