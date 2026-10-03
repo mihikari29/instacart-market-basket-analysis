@@ -139,33 +139,39 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 
 | # | module | reads | status |
 |---|---|---|---|
-| 1 | Ingestion & transfer: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
+| 1 | Ingestion & Storage: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
 | 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete and validated |
 | 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Next; not yet implemented |
 
 ## Team Onboarding & Environment Setup
 
-Đồng đội khi nhận repository có thể chạy ngay toàn bộ môi trường mà **không cần cài đặt thủ công Java, Hadoop hay Kafka**:
+After cloning the repository, team members can start the complete environment
+without manually installing Java, Hadoop, or Kafka:
 
-1. **Khởi động dịch vụ hạ tầng:**
+1. **Start the infrastructure services:**
    ```bash
    docker compose up -d
    ```
-   *(Sử dụng trực tiếp các official images có sẵn trên Docker Hub: `apache/kafka:3.7.0`, `bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8`, `bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8` — **không cần publish image riêng**).*
+   *(This uses the official images available from Docker Hub directly:
+   `apache/kafka:3.7.0`,
+   `bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8`, and
+   `bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8`; no project-specific image
+   publication is required.)*
 
-2. **Dựng HDFS Data Lake (cho Module 2 & 4):**
+2. **Build the HDFS data lake for Modules 2 and 4:**
    ```bash
    python -m src.module1.stage_hdfs
    ```
-   *(Kiểm tra cây thư mục HDFS: `python -m src.module1.stage_hdfs --tree-only`)*.
+   *(Inspect the HDFS directory tree with
+   `python -m src.module1.stage_hdfs --tree-only`.)*
 
-3. **Phát dữ liệu lên Kafka (cho Module 3 Streaming):**
+3. **Publish data to Kafka for Module 3 streaming:**
    ```bash
-   # Phát thử 50k events nhanh
+   # Publish a quick 50k-event sample
    python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 50000 --replay-speed 0
 
-   # Hoặc phát mô phỏng có lỗi trễ để test watermark
+   # Or simulate late data to test watermark behavior
    python -m src.module1.producer --feed data/synthesized/scatter_3m --limit-events 20000 --replay-speed 50000 --inject "late:0.05,dup:0.02"
    ```
 
@@ -186,10 +192,10 @@ target to a backup, and promotes the complete staging tree with an atomic HDFS
 rename. Upload/promotion failure removes staging and restores the prior target;
 a successful promotion removes the backup.
 
-4. **Các cổng dịch vụ đã ánh xạ sẵn:**
+4. **Use the preconfigured service ports:**
    - **Kafka Broker:** `localhost:9092` (Topic: `instacart-purchase-events`)
    - **HDFS NameNode WebHDFS:** `http://localhost:9870`
-   - **HDFS IPC (Spark defaultFS):** `hdfs://localhost:8020` (hoặc `hdfs://namenode:8020` trong container)
+   - **HDFS IPC (Spark defaultFS):** `hdfs://localhost:8020` (or `hdfs://namenode:8020` inside a container)
    - **HDFS DataNode WebHDFS:** `http://localhost:9864`
 
 ## Module 2 — Spark batch layer
@@ -346,6 +352,19 @@ idempotency/index/TTL behavior, weights, and checkpoint identity. It is marked
   including checkpoint recovery, duplicate handling, late data and watermarking.
 - Performance measurements are bounded experimental results, not production
   capacity claims.
+
+## Known limitations
+
+- Synthetic event time supports reproducible replay but does not represent
+  original Instacart purchase dates.
+- Validation used single-host development environments and one Kafka broker;
+  the recorded measurements do not establish production or cluster-scale
+  capacity.
+- Finalized-window output does not provide a continuously updated open-window
+  leaderboard.
+- MongoDB snapshot replacement is logically idempotent but not transactionally
+  atomic for concurrent readers.
+- Module 4 has not yet been implemented.
 
 ## Next step: Module 4
 

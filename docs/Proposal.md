@@ -1,85 +1,82 @@
-# PROPOSAL DỰ ÁN
-## Môn: Lưu trữ và Xử lý Dữ liệu lớn (IT4931)
+# PROJECT PROPOSAL
+## Course: Big Data Storage and Processing (IT4931)
 
-# Xây dựng hệ thống Big Data phân tích hành vi mua sắm và gợi ý sản phẩm thích ứng xu hướng theo kiến trúc Lambda sử dụng Apache Kafka, Spark, HDFS và NoSQL
-
-**Tên tiếng Anh:**  
-**A Lambda-Based Big Data System for Purchase Behavior Analytics and Trend-Aware Product Recommendation**
+# A Lambda-Based Big Data System for Purchase Behavior Analytics and Trend-Aware Product Recommendation Using Apache Kafka, Spark, HDFS, and NoSQL
 
 ---
 
-# 1. Bối cảnh và vấn đề
+# 1. Context and Problem
 
-Trong các hệ thống thương mại điện tử, gợi ý sản phẩm thường dựa trên hành vi lịch sử dài hạn của người dùng. Cách tiếp cận này có thể tạo ra các gợi ý ổn định theo sở thích cá nhân, nhưng có một hạn chế quan trọng: mô hình lịch sử phản ứng chậm trước những thay đổi ngắn hạn như sản phẩm đang tăng nhanh về mức độ phổ biến hoặc xu hướng mua mới xuất hiện.
+Product recommendations in e-commerce systems commonly depend on users' long-term historical behavior. This approach can produce stable recommendations that reflect individual preferences, but it has an important limitation: a historical model reacts slowly to short-term changes such as rapidly increasing product popularity or emerging purchase trends.
 
-Dự án đề xuất xây dựng một hệ thống Big Data end-to-end theo **Lambda Architecture**, kết hợp hai loại tín hiệu:
+This project proposes an end-to-end Big Data system based on **Lambda Architecture** that combines two signals:
 
-- **Long-term preference:** sở thích dài hạn của người dùng được học từ lịch sử mua hàng bằng mô hình ALS trong Spark MLlib.
-- **Short-term trend:** xu hướng sản phẩm gần thời gian thực được tính từ luồng purchase event được replay qua Kafka và xử lý bằng Spark Structured Streaming.
+- **Long-term preference:** learned from purchase history with an ALS model in Spark MLlib.
+- **Short-term trend:** calculated near real time from a purchase-event stream replayed through Kafka and processed by Spark Structured Streaming.
 
-Kết quả của hai nhánh được hợp nhất tại Serving Layer để tạo ra danh sách gợi ý cuối cùng vừa phản ánh sở thích cá nhân, vừa thích ứng với xu hướng ngắn hạn.
+The two branches are combined in the Serving Layer to produce final recommendations that reflect both personal preferences and short-term trends.
 
-Dữ liệu sử dụng là **Instacart Market Basket Analysis**. Dataset là dữ liệu lịch sử, không chứa timestamp tuyệt đối cho từng purchase event. Vì vậy, dự án sẽ tạo **synthetic timestamp** theo cách deterministic và reproducible để mô phỏng event stream. Timestamp này chỉ phục vụ mục đích replay và streaming, không được xem là timestamp thực tế của Instacart.
+The project uses the **Instacart Market Basket Analysis** dataset. This historical dataset does not contain an absolute timestamp for each purchase event. The project therefore creates **synthetic timestamps** deterministically and reproducibly to simulate an event stream. These timestamps are used only for replay and streaming and must not be interpreted as actual Instacart timestamps.
 
 ---
 
-# 2. Mục tiêu dự án
+# 2. Project Objectives
 
-Dự án hướng tới xây dựng một pipeline Big Data hoàn chỉnh từ ingestion đến serving, đồng thời chứng minh đầy đủ các nội dung kỹ thuật của học phần.
+The project aims to build a complete Big Data pipeline from ingestion through serving while demonstrating the technical topics required by the course.
 
-Các mục tiêu chính:
+Primary objectives:
 
-1. Lưu trữ và quản lý dữ liệu lớn trên HDFS.
-2. Thiết kế pipeline ingestion từ dataset gốc sang HDFS và Kafka.
-3. Thực hiện batch processing bằng Spark SQL/DataFrame với:
+1. Store and manage large-scale data in HDFS.
+2. Design an ingestion pipeline from the source dataset to HDFS and Kafka.
+3. Perform batch processing with Spark SQL/DataFrame operations, including:
    - complex aggregations;
    - advanced transformations;
    - window functions;
    - pivot/unpivot;
    - broadcast join;
    - sort-merge join.
-4. Thực hiện performance optimization và benchmark:
+4. Perform performance optimization and benchmarking, including:
    - partition pruning;
    - caching;
    - broadcast join;
-   - bucketing nếu phù hợp;
-   - phân tích physical execution plan.
-5. Xây dựng stream processing bằng Spark Structured Streaming:
+   - bucketing where appropriate;
+   - physical execution-plan analysis.
+5. Build stream processing with Spark Structured Streaming, including:
    - event-time processing;
    - window aggregation;
    - watermark;
    - late data;
    - checkpoint;
    - idempotent sink.
-6. Xây dựng mô hình ALS recommendation bằng Spark MLlib.
-7. Đánh giá recommendation bằng Precision@K và Recall@K.
-8. Xây dựng Product Co-purchase Graph bằng GraphFrames.
-9. Thiết kế Serving Layer kết hợp ALS recommendation và realtime trending.
-10. Lưu kết quả phục vụ truy vấn bằng NoSQL.
-11. Xây dựng dashboard để trình bày:
-   - batch analytics;
-   - realtime trending;
-   - recommendation;
-   - performance benchmark.
-12. Container hóa và triển khai các thành phần chính bằng Docker/Kubernetes ở mức phù hợp với đồ án sinh viên.
+6. Build an ALS recommendation model with Spark MLlib.
+7. Evaluate recommendations with Precision@K and Recall@K.
+8. Build a Product Co-purchase Graph with GraphFrames.
+9. Design a Serving Layer that combines ALS recommendations with realtime trending.
+10. Store query-serving results in NoSQL.
+11. Build a dashboard for:
+    - batch analytics;
+    - realtime trending;
+    - recommendation;
+    - performance benchmarks.
+12. Containerize and deploy the primary components with Docker/Kubernetes at a scope appropriate for a student project.
 
 ---
 
-# 3. Phạm vi dự án
+# 3. Project Scope
 
 ## 3.1. Must-have
 
-Các thành phần bắt buộc phải hoàn thành:
+The following components are required:
 
 - HDFS raw/curated storage.
-- Kafka producer và topic purchase event.
+- Kafka producer and purchase-event topic.
 - Spark batch pipeline.
 - Spark Structured Streaming.
-- Event-time window và watermark.
+- Event-time window and watermark.
 - Batch analytics.
 - Performance experiments.
 - ALS recommendation.
-- Precision@K và Recall@K.
+- Precision@K and Recall@K.
 - MongoDB serving store.
 - Trend-aware final ranking.
 - Dashboard.
@@ -91,116 +88,116 @@ Các thành phần bắt buộc phải hoàn thành:
 - Product Co-purchase Graph.
 - Weighted degree.
 - PageRank.
-- REST API bằng FastAPI.
-- Demo late data.
-- Benchmark Kafka partitions.
-- Thêm MAP@K hoặc NDCG@K.
+- REST API with FastAPI.
+- Late-data demonstration.
+- Kafka partition benchmark.
+- MAP@K or NDCG@K.
 
 ## 3.3. Optional
 
 - Connected Components.
-- Bucketing benchmark nếu môi trường hỗ trợ ổn định.
+- Bucketing benchmark if the environment supports it reliably.
 - Cloud deployment.
-- Dashboard nâng cao.
-- Graph score được đưa vào FinalScore.
+- Advanced dashboard.
+- Graph score incorporated into `FinalScore`.
 
 ---
 
 # 4. Dataset
 
-## 4.1. Dataset được lựa chọn
+## 4.1. Selected dataset
 
 **Instacart Market Basket Analysis**
 
-Các đặc điểm chính:
+Primary characteristics:
 
-- khoảng 3,4 triệu đơn hàng;
-- khoảng 206.000 người dùng;
-- hơn 32 triệu lượt mua sản phẩm;
-- khoảng 50.000 sản phẩm.
+- approximately 3.4 million orders;
+- approximately 206,000 users;
+- more than 32 million product purchases;
+- approximately 50,000 products.
 
-Dataset phù hợp với dự án vì:
+The dataset is appropriate because:
 
-- quy mô đủ lớn để các kỹ thuật Spark optimization có ý nghĩa;
-- có cấu trúc fact/dimension rõ ràng;
-- có nhiều tương tác lặp lại theo user-product;
-- có `reordered` để hỗ trợ phân tích hành vi mua lại;
-- phù hợp với collaborative filtering;
-- có thể xây dựng product co-purchase graph.
+- its scale is large enough for Spark optimization techniques to be meaningful;
+- it has a clear fact/dimension structure;
+- it contains repeated user-product interactions;
+- the `reordered` field supports repeat-purchase analysis;
+- it is suitable for collaborative filtering;
+- it supports construction of a product co-purchase graph.
 
-## 4.2. Các file sử dụng
+## 4.2. Source files
 
 ### `orders.csv`
 
-| Field | Spark Type | Ý nghĩa |
+| Field | Spark Type | Meaning |
 |---|---|---|
-| `order_id` | Long | Định danh đơn hàng |
-| `user_id` | Long | Định danh người dùng |
-| `eval_set` | String | Tập prior/train/test |
-| `order_number` | Integer | Thứ tự đơn hàng của user |
-| `order_dow` | Integer | Ngày trong tuần |
-| `order_hour_of_day` | Integer | Giờ đặt hàng |
-| `days_since_prior_order` | Double | Khoảng cách với đơn trước |
+| `order_id` | Long | Order identifier |
+| `user_id` | Long | User identifier |
+| `eval_set` | String | Prior/train/test set |
+| `order_number` | Integer | User's order sequence number |
+| `order_dow` | Integer | Day of week |
+| `order_hour_of_day` | Integer | Hour when the order was placed |
+| `days_since_prior_order` | Double | Interval since the previous order |
 
 ### `order_products__prior.csv`
 
-| Field | Spark Type | Ý nghĩa |
+| Field | Spark Type | Meaning |
 |---|---|---|
-| `order_id` | Long | Định danh order |
-| `product_id` | Integer | Định danh sản phẩm |
-| `add_to_cart_order` | Integer | Thứ tự thêm vào basket |
-| `reordered` | Integer/Boolean | Đã từng mua trước đó hay chưa |
+| `order_id` | Long | Order identifier |
+| `product_id` | Integer | Product identifier |
+| `add_to_cart_order` | Integer | Position at which the item was added to the basket |
+| `reordered` | Integer/Boolean | Whether the product had been purchased previously |
 
 ### `order_products__train.csv`
 
-Schema giống `order_products__prior.csv`, được dùng làm ground truth để đánh giá mô hình recommendation.
+The schema matches `order_products__prior.csv`. This file is used as ground truth for recommendation-model evaluation.
 
 ### `products.csv`
 
-| Field | Spark Type | Ý nghĩa |
+| Field | Spark Type | Meaning |
 |---|---|---|
-| `product_id` | Integer | Định danh sản phẩm |
-| `product_name` | String | Tên sản phẩm |
-| `aisle_id` | Integer | Nhóm aisle |
-| `department_id` | Integer | Nhóm department |
+| `product_id` | Integer | Product identifier |
+| `product_name` | String | Product name |
+| `aisle_id` | Integer | Aisle group |
+| `department_id` | Integer | Department group |
 
 ### `aisles.csv`
 
-| Field | Spark Type | Ý nghĩa |
+| Field | Spark Type | Meaning |
 |---|---|---|
-| `aisle_id` | Integer | Định danh aisle |
-| `aisle` | String | Tên aisle |
+| `aisle_id` | Integer | Aisle identifier |
+| `aisle` | String | Aisle name |
 
 ### `departments.csv`
 
-| Field | Spark Type | Ý nghĩa |
+| Field | Spark Type | Meaning |
 |---|---|---|
-| `department_id` | Integer | Định danh department |
-| `department` | String | Tên department |
+| `department_id` | Integer | Department identifier |
+| `department` | String | Department name |
 
-## 4.3. Lưu ý dữ liệu
+## 4.3. Data limitations
 
-Dataset không cung cấp:
+The dataset does not provide:
 
-- timestamp tuyệt đối;
-- giá sản phẩm;
-- doanh thu;
-- brand chuẩn hóa;
-- click/view event.
+- absolute timestamps;
+- product prices;
+- revenue;
+- normalized brands;
+- click/view events.
 
-Vì vậy dự án không sử dụng các chỉ số cần những trường này, trừ trường hợp dữ liệu được tổng hợp rõ ràng và được ghi chú là synthetic.
+The project therefore does not use metrics that require these fields unless the data is explicitly synthesized and identified as synthetic.
 
 ---
 
-# 5. Kiến trúc hệ thống
+# 5. System Architecture
 
-Dự án sử dụng **Lambda Architecture** gồm ba lớp chính:
+The project uses **Lambda Architecture** with three primary layers:
 
-- **Batch Layer:** xử lý toàn bộ lịch sử.
-- **Speed Layer:** xử lý event stream gần thời gian thực.
-- **Serving Layer:** hợp nhất output của hai nhánh.
+- **Batch Layer:** processes the complete history.
+- **Speed Layer:** processes the event stream near real time.
+- **Serving Layer:** combines the outputs of both branches.
 
-## 5.1. Sơ đồ kiến trúc
+## 5.1. Architecture diagram
 
 ```text
                          INSTACART CSV
@@ -248,7 +245,7 @@ Dự án sử dụng **Lambda Architecture** gồm ba lớp chính:
 
 ---
 
-# 6. Data Flow và Data Lineage
+# 6. Data Flow and Data Lineage
 
 ```text
 orders.csv
@@ -294,11 +291,11 @@ batch_metrics       │            │
 
 ---
 
-# 7. MODULE 1 — Data Ingestion & Storage Foundation
+# 7. MODULE 1 — Ingestion & Storage
 
 ## 7.1. Input
 
-Module 1 đọc toàn bộ 6 file:
+Module 1 reads all six files:
 
 ```text
 orders.csv
@@ -323,39 +320,39 @@ Raw CSV
 → Kafka event generation
 ```
 
-## 7.3. Data Quality Checks
+## 7.3. Data quality checks
 
-Kiểm tra tối thiểu:
+At minimum, validate that:
 
-- `order_id` unique trong `orders`;
-- `product_id` unique trong `products`;
+- `order_id` is unique in `orders`;
+- `product_id` is unique in `products`;
 - `order_dow ∈ [0,6]`;
 - `order_hour_of_day ∈ [0,23]`;
-- `add_to_cart_order` tăng từ 1 đến N trong từng order;
-- foreign key hợp lệ giữa product, aisle, department;
-- không đảo thứ tự order theo user.
+- `add_to_cart_order` increases from 1 to N within each order;
+- foreign keys between product, aisle, and department are valid;
+- per-user order sequence is not reversed.
 
 ---
 
 # 8. Synthetic Timestamp Generation
 
-Dataset không có timestamp tuyệt đối nên cần tạo synthetic timestamp.
+The dataset has no absolute timestamps, so the project must create synthetic timestamps.
 
-## 8.1. Mục tiêu
+## 8.1. Objectives
 
-Phương pháp phải:
+The method must be:
 
 - deterministic;
 - reproducible;
-- bảo toàn thứ tự order;
-- giữ consistency với `order_dow`;
-- sử dụng `order_hour_of_day`;
-- tạo event time riêng cho từng item;
-- có thể replay qua Kafka.
+- order-preserving;
+- consistent with `order_dow`;
+- based on `order_hour_of_day`;
+- capable of creating a distinct event time for each item;
+- replayable through Kafka.
 
 ## 8.2. Anchor date
 
-Sử dụng seeded RNG (reproducible given same SEED + batch_users):
+Use a seeded RNG (reproducible given the same SEED + batch_users):
 
 ```text
 SCATTER_WEEKS = 13
@@ -365,10 +362,11 @@ anchor_week(user)
 = rng.integers(0, SCATTER_WEEKS)
 ```
 
+```text
 anchor_day = anchor_week * 7 + first_order_dow
+```
 
-Ngày anchor được chọn sao cho weekday khớp `order_dow` của order đầu tiên.
-Reproducible bằng cách chạy lại cùng SEED và `batch_users` (ghi trong `manifest.json`).
+The anchor date is selected so its weekday matches the first order's `order_dow`. Reproduction requires the same SEED and `batch_users`, which are recorded in `manifest.json`.
 
 ## 8.3. Order date
 
@@ -378,22 +376,20 @@ order_date(i)
 + cumulative_sum(days_since_prior_order)
 ```
 
-## 8.4. Synthetic reconstruction cho gap bị cap ở 30
+## 8.4. Synthetic reconstruction for gaps capped at 30
 
-Với các gap bị cap bằng 30 (khoảng thời gian thực tế có thể lớn hơn 30 ngày), thuật toán tái cấu trúc synthetic gap tối thiểu trong khoảng 30–36 ngày sao cho khớp với day-of-week (minimum weekday-consistent synthetic gap):
+For gaps capped at 30, where the actual interval may exceed 30 days, reconstruct the minimum synthetic gap in the range 30–36 days that matches the day of week:
 
 ```text
 gap_synthetic
 = 30 + ((next_dow - prev_dow - 2) mod 7)
 ```
 
-nhằm đảm bảo tính nhất quán giữa synthetic calendar dates và weekday (`order_dow`) trong dữ liệu.
+This maintains consistency between synthetic calendar dates and the source weekday (`order_dow`).
 
 ## 8.5. Item-level event time
 
-Item đầu tiên có base time trong `order_hour_of_day`.
-
-Các item tiếp theo:
+The first item receives a base time within `order_hour_of_day`. For subsequent items:
 
 ```text
 event_time(k)
@@ -403,7 +399,7 @@ delta_i ~ Exp(mean ≈ 30s)
 delta_i clipped to [5s,120s]
 ```
 
-## 8.6. Monotonicity Guard
+## 8.6. Monotonicity guard
 
 ```text
 event_time(next)
@@ -413,7 +409,7 @@ event_time(next)
 )
 ```
 
-Điều này đảm bảo chronology theo user không bị đảo.
+This prevents reversal of per-user chronology.
 
 ---
 
@@ -425,17 +421,17 @@ event_time(next)
 instacart-purchase-events
 ```
 
-## 9.2. Kafka Key
+## 9.2. Kafka key
 
 ```text
 user_id
 ```
 
-Lý do:
+Rationale:
 
-- bảo toàn ordering cho toàn bộ event của cùng user;
-- phù hợp với chronology invariant;
-- giúp partition theo user ổn định.
+- preserve ordering for all events from one user;
+- conform to the chronology invariant;
+- provide stable user-based partitioning.
 
 ## 9.3. Serialization
 
@@ -443,7 +439,7 @@ Lý do:
 UTF-8 JSON
 ```
 
-## 9.4. Kafka Event Schema
+## 9.4. Kafka event schema
 
 ```json
 {
@@ -463,23 +459,23 @@ UTF-8 JSON
 }
 ```
 
-### Giải thích field
+### Field definitions
 
-| Field | Ý nghĩa |
+| Field | Meaning |
 |---|---|
-| `event_id` | ID duy nhất của item event |
-| `order_id` | Order gốc |
+| `event_id` | Unique item-event identifier |
+| `order_id` | Source order |
 | `user_id` | User |
 | `product_id` | Product |
-| `add_to_cart_order` | Thứ tự item trong basket |
-| `reordered` | Có phải mua lại |
+| `add_to_cart_order` | Item position in the basket |
+| `reordered` | Whether the product was purchased previously |
 | `aisle_id` | Aisle |
 | `department_id` | Department |
-| `order_dow` | Weekday gốc |
-| `order_hour_of_day` | Hour gốc |
+| `order_dow` | Source weekday |
+| `order_hour_of_day` | Source hour |
 | `event_time_epoch_ms` | Synthetic event time |
-| `event_time_iso` | Synthetic event time dạng ISO |
-| `ingestion_time_epoch_ms` | Thời điểm Kafka producer phát event |
+| `event_time_iso` | Synthetic event time in ISO format |
+| `ingestion_time_epoch_ms` | Time when the Kafka producer published the event |
 
 ---
 
@@ -517,11 +513,11 @@ UTF-8 JSON
     └── als/
 ```
 
-Partition theo ngày/tháng synthetic giúp hỗ trợ partition pruning và historical filtering.
+Synthetic day/month partitioning supports partition pruning and historical filtering.
 
 ---
 
-# 11. Output Module 1
+# 11. Module 1 Outputs
 
 ## 11.1. `orders_curated`
 
@@ -541,42 +537,9 @@ Partition theo ngày/tháng synthetic giúp hỗ trợ partition pruning và his
 - Storage: HDFS
 - Consumer: Module 4
 
-## 11.4. `product_dimension`
-
-- Format: Parquet
-- Storage: HDFS
-- Consumer: Module 2, Module 4
-
-## 11.5. `curated_interactions`
-
-Schema chính:
-
-```text
-order_id
-user_id
-product_id
-add_to_cart_order
-reordered
-aisle_id
-department_id
-order_number
-event_time
-synthetic_date
-```
-
-- Format: Parquet
-- Storage: HDFS
-- Consumer: Module 2, Module 4
-
-## 11.6. `purchase_event`
-
-- Format: JSON
-- Topic: Kafka `instacart-purchase-events`
-- Consumer: Module 3
-
 ---
 
-# 12. MODULE 2 — Batch Processing Layer
+# 12. MODULE 2 — Batch Layer
 
 ## 12.1. Input
 
@@ -589,11 +552,11 @@ aisles
 departments
 ```
 
-## 12.2. Complex Aggregations
+## 12.2. Complex aggregations
 
 ### Window functions
 
-Ví dụ:
+Example:
 
 ```text
 purchase_count(product, day)
@@ -602,7 +565,7 @@ rolling_7day_purchase_count
 
 ### Pivot
 
-Ví dụ:
+Example:
 
 ```text
 department × order_hour_of_day
@@ -610,7 +573,7 @@ department × order_hour_of_day
 
 ### Custom aggregation
 
-Tính:
+Calculate:
 
 ```text
 reorder_rate
@@ -632,7 +595,7 @@ reorder_rate
 
 # 13. Advanced Transformations
 
-Pipeline ví dụ:
+Example pipeline:
 
 ```text
 interaction
@@ -643,7 +606,7 @@ interaction
 → user/product aggregate features
 ```
 
-Nếu sử dụng UDF trên `product_name`, chỉ xem đây là text feature engineering, không xem là brand extraction chính thức.
+If a UDF is applied to `product_name`, it is treated only as text feature engineering and not as official brand extraction.
 
 ---
 
@@ -657,9 +620,9 @@ JOIN broadcast(aisles)
 JOIN broadcast(departments)
 ```
 
-Dimension nhỏ hơn fact table nên phù hợp broadcast.
+The dimensions are smaller than the fact table and are therefore suitable for broadcast.
 
-Metric:
+Metrics:
 
 - runtime;
 - shuffle read;
@@ -674,15 +637,15 @@ JOIN order_products_prior_curated
 ON order_id
 ```
 
-Hai bảng lớn tạo ra trường hợp sort-merge join tự nhiên.
+The two large tables naturally produce a sort-merge join case.
 
-Có thể tắt auto broadcast khi benchmark:
+Automatic broadcast can be disabled for benchmarking:
 
 ```text
 spark.sql.autoBroadcastJoinThreshold = -1
 ```
 
-Physical plan được kiểm tra bằng:
+Inspect the physical plan with:
 
 ```text
 df.explain("formatted")
@@ -692,38 +655,38 @@ df.explain("formatted")
 
 # 15. Performance Optimization
 
-## 15.1. Experiment 1 — Broadcast vs Sort-Merge
+## 15.1. Experiment 1 — Broadcast vs. Sort-Merge
 
 - Baseline: Sort-Merge Join
 - Optimization: Broadcast small dimension
-- Metric:
+- Metrics:
   - execution time;
   - shuffle bytes;
   - physical plan.
 
 ## 15.2. Experiment 2 — Partition Pruning
 
-- Baseline: scan toàn bộ interactions.
-- Optimization: filter theo synthetic date partition.
-- Metric:
+- Baseline: scan all interactions.
+- Optimization: filter by synthetic date partition.
+- Metrics:
   - files scanned;
   - bytes read;
   - runtime.
 
 ## 15.3. Experiment 3 — Caching
 
-- Baseline: recompute DataFrame dùng lại nhiều lần.
+- Baseline: recompute a repeatedly used DataFrame.
 - Optimization: persist/cache.
-- Metric:
+- Metrics:
   - first execution;
   - repeated execution.
 
 ## 15.4. Experiment 4 — Streaming Throughput
 
 - Input: Kafka event stream.
-- Baseline: producer rate thấp.
-- Experiment: tăng rate.
-- Metric:
+- Baseline: low producer rate.
+- Experiment: increase the rate.
+- Metrics:
   - inputRowsPerSecond;
   - processedRowsPerSecond;
   - trigger duration.
@@ -731,20 +694,20 @@ df.explain("formatted")
 ## 15.5. Experiment 5 — Kafka Partitions
 
 - 1, 2, 4, 8 partitions.
-- Metric:
+- Metrics:
   - throughput;
   - consumer parallelism;
   - processing latency.
 
 ## 15.6. Experiment 6 — Spark Executor Configuration
 
-So sánh một số cấu hình executor.
+Compare multiple executor configurations.
 
-Kết quả cụ thể chỉ được ghi sau khi thực nghiệm.
+Record concrete results only after experimentation.
 
 ---
 
-# 16. Output Module 2
+# 16. Module 2 Outputs
 
 ## 16.1. `batch_product_metrics`
 
@@ -790,7 +753,7 @@ reorder_rate
 
 ---
 
-# 17. MODULE 3 — Streaming Processing Layer
+# 17. MODULE 3 — Speed Layer / Structured Streaming
 
 ## 17.1. Input
 
@@ -816,17 +779,15 @@ Kafka
 → replace finalized MongoDB snapshot + idempotent upsert
 ```
 
-Ranking chỉ được tính khi window đã finalized. Thiết kế này không xuất
-open-window leaderboard ở mỗi processing trigger, vì normalization cần toàn bộ
-product population của cùng `window_end`.
+Ranking is calculated only after a window is finalized. The design does not publish an open-window leaderboard at each processing trigger because normalization requires the complete product population for the same `window_end`.
 
 ---
 
 # 18. Trending Definition
 
-Dự án chỉ có purchase event, không sử dụng view hoặc click.
+The project contains purchase events only; it does not use view or click events.
 
-Đề xuất Trending Score:
+Proposed Trending Score:
 
 ```math
 T(p,t)
@@ -836,21 +797,21 @@ T(p,t)
 0.3 × N(C_120m(p,t))
 ```
 
-Trong đó:
+Where:
 
-- `C_30m`: số purchase event của product trong 30 phút gần nhất;
-- `C_120m`: số purchase event trong 120 phút;
-- `N(.)`: normalization trong cùng window.
+- `C_30m`: number of purchase events for the product in the most recent 30 minutes;
+- `C_120m`: number of purchase events in 120 minutes;
+- `N(.)`: normalization within the same window.
 
-Ý nghĩa:
+Interpretation:
 
-- 30 phút giúp phản ứng nhanh;
-- 120 phút làm mượt nhiễu;
-- trọng số là baseline và có thể điều chỉnh trong thực nghiệm.
+- 30 minutes provides fast response;
+- 120 minutes smooths noise;
+- the weights are a baseline and may be adjusted experimentally.
 
 ---
 
-# 19. Window và Watermark
+# 19. Window and Watermark
 
 Baseline:
 
@@ -861,15 +822,15 @@ Slide:         5 minutes
 Watermark:     10 minutes
 ```
 
-Các giá trị trên là cấu hình ban đầu, không phải giá trị tối ưu đã được chứng minh.
+These values are initial configurations, not empirically proven optima.
 
-Event-time sử dụng synthetic event time.
+Event time uses synthetic event time.
 
 ---
 
 # 20. Late Data
 
-Kịch bản demo:
+Demonstration scenario:
 
 ```text
 Event A:
@@ -889,50 +850,39 @@ late by 20 minutes
 
 ---
 
-# 21. Exactly-Once và Idempotency
+# 21. Exactly-Once and Idempotency
 
-Không tuyên bố external sink luôn exactly-once.
+The project does not claim that the external sink is always exactly-once.
 
-Spark sử dụng:
+Spark uses:
 
 - Kafka offsets;
-- checkpoint;
+- checkpoints;
 - state metadata.
 
-MongoDB sink dùng deterministic key:
+The MongoDB sink uses the deterministic key:
 
 ```text
 (window_end, product_id)
 ```
 
-và:
+and:
 
 ```text
 upsert = true
 ```
 
-Nếu micro-batch bị retry, cùng logical result sẽ ghi đè cùng document thay vì tạo duplicate.
-Trước upsert, toàn bộ snapshot của các finalized `window_end` trong batch được
-thay thế để stale non-Top-K rows và rank cũ không còn tồn tại. Top-K chỉ được áp
-dụng sau normalization/ranking trên full population. TTL mặc định là 7 ngày và
-có thể tắt rõ ràng bằng `ttl_seconds = 0`.
+If a micro-batch is retried, the same logical result overwrites the same document instead of creating a duplicate. Before upsert, the complete snapshot for every finalized `window_end` in the batch is replaced so stale non-Top-K rows and old ranks do not remain. Top-K is applied only after normalization and ranking over the full population. The default TTL is seven days and can be disabled explicitly with `ttl_seconds = 0`.
 
-Replacement hội tụ đúng và logically idempotent khi Spark retry, nhưng delete +
-upsert không transactionally atomic đối với concurrent reader. Dashboard có thể
-thoáng quan sát snapshot rỗng hoặc một phần trong lúc thay thế. Production design
-có thể dùng immutable snapshot/version ID, active-version pointer, hoặc Mongo
-transaction khi phù hợp; project hiện tại chấp nhận giới hạn này. Kafka source
-mặc định `failOnDataLoss=true`; việc cho phép bỏ qua unavailable offsets phải
-được opt-in rõ ràng.
+Replacement converges correctly and is logically idempotent under Spark retries, but delete plus upsert is not transactionally atomic for concurrent readers. A dashboard may briefly observe an empty or partial snapshot during replacement. A production design could use immutable snapshot/version IDs, an active-version pointer, or a MongoDB transaction where appropriate; the current project accepts this limitation. The Kafka source defaults to `failOnDataLoss=true`; permission to skip unavailable offsets must be an explicit opt-in.
 
-Mức đảm bảo trong dự án được mô tả là:
+The project's guarantee is described as:
 
-**deterministic, replay-convergent aggregated output with an idempotent sink
-design; not transactionally exactly-once serving for concurrent readers.**
+**deterministic, replay-convergent aggregated output with an idempotent sink design; not transactionally exactly-once serving for concurrent readers.**
 
 ---
 
-# 22. Output Module 3
+# 22. Module 3 Output
 
 ## `realtime_trending`
 
@@ -957,9 +907,9 @@ updated_at
 
 ## 23.1. Train/Test Strategy
 
-- `order_products__prior` dùng để train/history.
-- `order_products__train` dùng làm ground truth.
-- Không dùng train set để xây interaction training matrix.
+- Use `order_products__prior` for training/history.
+- Use `order_products__train` as ground truth.
+- Do not use the train set to build the interaction training matrix.
 
 ## 23.2. Input
 
@@ -977,13 +927,11 @@ Baseline:
 r_ui = purchaseCount(u,i)
 ```
 
-Có thể thử:
+An alternative feature/hyperparameter experiment may use:
 
 ```math
 r_ui = 1 + log(1 + purchaseCount(u,i))
 ```
-
-như một feature/hyperparameter experiment.
 
 ## 23.4. Model
 
@@ -993,7 +941,7 @@ Spark MLlib ALS:
 implicitPrefs = true
 ```
 
-Hyperparameter được tune:
+Tune the following hyperparameters:
 
 ```text
 rank
@@ -1002,13 +950,13 @@ alpha
 maxIter
 ```
 
-Không đặt giá trị tối ưu trước thực nghiệm.
+Do not specify an optimum before experimentation.
 
 ---
 
 # 24. Recommendation Evaluation
 
-Với user `u`:
+For user `u`:
 
 ```text
 R_K(u) = top-K predicted products
@@ -1031,11 +979,11 @@ Recall@K
 |R_K(u) ∩ G(u)| / |G(u)|
 ```
 
-Có thể bổ sung MAP@K hoặc NDCG@K nếu đủ thời gian.
+MAP@K or NDCG@K may be added if time permits.
 
 ---
 
-# 25. Output ALS
+# 25. ALS Output
 
 ## `user_recommendations`
 
@@ -1065,38 +1013,38 @@ product_id
 
 ### Edge
 
-Hai sản phẩm xuất hiện trong cùng một order.
+Two products appear in the same order.
 
-### Edge Weight
+### Edge weight
 
 ```text
 co_purchase_count(product_a, product_b)
 ```
 
-## 26.2. Graph Algorithms
+## 26.2. Graph algorithms
 
 ### Weighted Degree
 
-Insight:
+Insights:
 
-- sản phẩm nào thường đồng xuất hiện với nhiều sản phẩm khác;
-- mức độ kết nối trong basket.
+- which products frequently co-occur with many other products;
+- degree of connectivity within baskets.
 
 ### PageRank
 
 Insight:
 
-- sản phẩm có tính trung tâm trong mạng lưới co-purchase.
+- which products are central in the co-purchase network.
 
 ### Connected Components
 
 Optional.
 
-Chỉ sử dụng nếu thực nghiệm tạo ra insight có ý nghĩa.
+Use it only if the experiment produces meaningful insight.
 
 ---
 
-# 27. Output Graph
+# 27. Graph Output
 
 ## `product_graph_metrics`
 
@@ -1109,7 +1057,7 @@ component_id
 computed_at
 ```
 
-`component_id` là optional.
+`component_id` is optional.
 
 ---
 
@@ -1155,9 +1103,9 @@ lambda × A'_{u,p}
 (1-lambda) × T'_{p,t}
 ```
 
-`lambda` là configurable.
+`lambda` is configurable.
 
-Ví dụ benchmark:
+Example benchmark values:
 
 ```text
 0.5
@@ -1165,31 +1113,31 @@ Ví dụ benchmark:
 0.9
 ```
 
-Không xem giá trị nào là tối ưu trước thực nghiệm.
+Do not treat any value as optimal before experimentation.
 
 ## 28.4. Cold Start
 
-### User mới
+### New user
 
-Không có ALS:
+When no ALS score exists:
 
 ```math
 FinalScore = TrendScore
 ```
 
-### Product mới
+### New product
 
-Nếu chưa có ALS score nhưng có trend score:
+When an ALS score is unavailable but a trend score exists:
 
 ```text
 NormalizedALS = 0
 ```
 
-product vẫn có thể xuất hiện trong final ranking.
+The product can still appear in the final ranking.
 
 ---
 
-# 29. Output Serving
+# 29. Serving Output
 
 ## `final_recommendations`
 
@@ -1211,12 +1159,12 @@ generated_at
 
 # 30. MODULE 4D — Visualization
 
-Dashboard chỉ hiển thị các output đã tồn tại trong pipeline.
+The dashboard displays only outputs that exist in the pipeline.
 
 ## 30.1. Realtime
 
 - Top trending products.
-- Trend score theo window.
+- Trend score by window.
 - Kafka/Spark throughput.
 - Streaming processing latency.
 
@@ -1225,20 +1173,20 @@ Dashboard chỉ hiển thị các output đã tồn tại trong pipeline.
 - Top products.
 - Reorder rate.
 - Department statistics.
-- Purchase distribution theo giờ/ngày.
+- Purchase distribution by hour/day.
 
 ## 30.3. ML
 
 - Precision@K.
 - Recall@K.
-- ALS recommendation cho một user.
+- ALS recommendations for one user.
 
 ## 30.4. Serving
 
 - ALS score.
 - Trend score.
 - Final score.
-- Ranking trước và sau khi trend thay đổi.
+- Ranking before and after a trend change.
 
 ## 30.5. Performance
 
@@ -1251,15 +1199,15 @@ Dashboard chỉ hiển thị các output đã tồn tại trong pipeline.
 
 # 31. NoSQL Design
 
-Dự án sử dụng **MongoDB**.
+The project uses **MongoDB**.
 
-Lý do:
+Rationale:
 
-- access pattern đơn giản;
-- document model phù hợp recommendation/trending;
-- dễ upsert;
-- phù hợp dashboard/API;
-- triển khai đơn giản hơn Cassandra cho đồ án sinh viên.
+- simple access patterns;
+- a document model suitable for recommendations and trending data;
+- straightforward upserts;
+- compatibility with dashboards and APIs;
+- simpler student-project deployment than Cassandra.
 
 ## 31.1. `batch_product_metrics`
 
@@ -1299,7 +1247,7 @@ Indexes:
 ```text
 (window_end, trend_rank)
 (window_end, product_id)
-updated_at TTL (mặc định 7 ngày)
+updated_at TTL (default: 7 days)
 ```
 
 ## 31.3. `user_recommendations`
@@ -1352,9 +1300,9 @@ computed_at
 
 ---
 
-# 32. Data Contract Toàn Hệ Thống
+# 32. System-wide Data Contract
 
-| Producer Module | Output Dataset/Event | Schema chính | Format | Storage/Topic | Consumer |
+| Producer Module | Output Dataset/Event | Primary Schema | Format | Storage/Topic | Consumer |
 |---|---|---|---|---|---|
 | M1 | `orders_curated` | order/user/time | Parquet | HDFS | M2 |
 | M1 | `order_products_prior_curated` | order-product | Parquet | HDFS | M2, M4 |
@@ -1372,20 +1320,20 @@ computed_at
 
 ---
 
-# 33. Input – Processing – Output của từng Module
+# 33. Input–Processing–Output by Module
 
-| Module | Input | Processing | Output | Output dùng bởi |
+| Module | Input | Processing | Output | Output Consumer |
 |---|---|---|---|---|
-| M1 | 6 Instacart CSV | validation, cleaning, timestamp synthesis, event generation | HDFS curated tables + Kafka events | M2, M3, M4 |
+| M1 | 6 Instacart CSV files | validation, cleaning, timestamp synthesis, event generation | HDFS curated tables + Kafka events | M2, M3, M4 |
 | M2 | HDFS curated tables | batch aggregation, transformation, joins, optimization | batch metrics + user features | M4, Dashboard |
 | M3 | Kafka purchase events | event-time streaming, watermark, windows, trending | realtime_trending | M4, Dashboard |
 | M4 | history + train ground truth + batch metrics + trend | ALS, graph, serving, visualization | user recommendations, graph metrics, final ranking | API/Dashboard |
 
 ---
 
-# 34. Sáu nhóm yêu cầu Spark
+# 34. Six Spark Requirement Categories
 
-| Yêu cầu môn học | Project thực hiện ở đâu | Ví dụ | Module |
+| Course Requirement | Project Location | Example | Module |
 |---|---|---|---|
 | Complex Aggregations | Spark Batch | rolling metrics, pivot, reorder rate | M2 |
 | Advanced Transformations | Batch ETL | multi-stage feature pipeline | M2 |
@@ -1396,21 +1344,21 @@ computed_at
 
 ---
 
-# 35. Công nghệ
+# 35. Technologies
 
-| Technology | Vai trò | Input | Output | Vì sao cần |
+| Technology | Role | Input | Output | Rationale |
 |---|---|---|---|---|
-| HDFS | distributed storage | CSV/Parquet | historical datasets | lưu trữ dữ liệu lớn |
-| Kafka | message queue | synthetic events | event stream | replay và decouple |
+| HDFS | distributed storage | CSV/Parquet | historical datasets | large-scale data storage |
+| Kafka | message queue | synthetic events | event stream | replay and decoupling |
 | Spark SQL | batch processing | HDFS | metrics/features | distributed processing |
-| Structured Streaming | speed layer | Kafka | trending | event-time streaming |
+| Structured Streaming | Speed Layer | Kafka | trending | event-time streaming |
 | Spark MLlib | machine learning | user-product interactions | ALS recommendations | native distributed ML |
-| GraphFrames | graph analytics | co-purchase edges | graph metrics | xử lý graph trên Spark |
-| MongoDB | serving store | processed outputs | dashboard/API query | dễ upsert và triển khai |
+| GraphFrames | graph analytics | co-purchase edges | graph metrics | graph processing on Spark |
+| MongoDB | serving store | processed outputs | dashboard/API queries | straightforward upserts and deployment |
 | FastAPI | API | MongoDB | HTTP JSON | serving |
-| Streamlit | dashboard | MongoDB/API | charts | triển khai nhanh |
+| Streamlit | dashboard | MongoDB/API | charts | rapid deployment |
 | Docker | packaging | services | images | reproducibility |
-| Kubernetes | orchestration | containers | deployed services | đáp ứng yêu cầu môn học |
+| Kubernetes | orchestration | containers | deployed services | course deployment requirement |
 
 ---
 
@@ -1418,7 +1366,7 @@ computed_at
 
 ## 36.1. Development
 
-Dùng Docker Compose cho:
+Use Docker Compose for:
 
 ```text
 Kafka
@@ -1431,9 +1379,9 @@ Dashboard
 
 ## 36.2. Final Demonstration
 
-Dùng Kubernetes local cluster như Minikube.
+Use a local Kubernetes cluster such as Minikube.
 
-Ví dụ:
+Example:
 
 ```text
 namespace: instacart-bigdata
@@ -1445,21 +1393,21 @@ namespace: instacart-bigdata
 └── dashboard
 ```
 
-HDFS có thể chạy bằng containerized NameNode/DataNode hoặc được giữ trong môi trường Docker Compose nếu Kubernetes local quá nặng, nhưng phải mô tả rõ deployment thực tế khi demo.
+HDFS may run with containerized NameNode/DataNode services or remain in Docker Compose if local Kubernetes is too resource-intensive. The actual deployment must be documented clearly during the demonstration.
 
-Persistent Volume:
+Persistent volumes:
 
 - Kafka;
 - MongoDB;
 - HDFS DataNode.
 
-Mục tiêu không phải production-grade HA mà là chứng minh có deployment orchestration thực tế.
+The objective is to demonstrate real deployment orchestration, not production-grade high availability.
 
 ---
 
 # 37. Non-Functional Requirements
 
-| Metric | Cách đo |
+| Metric | Measurement Method |
 |---|---|
 | Kafka throughput | events/s |
 | Streaming input rate | inputRowsPerSecond |
@@ -1468,10 +1416,10 @@ Mục tiêu không phải production-grade HA mà là chứng minh có deploymen
 | Streaming latency | processing/output time − ingestion time |
 | Batch runtime | Spark job duration |
 | Shuffle | Spark UI metrics |
-| Data correctness | Spark output vs reference sample |
+| Data correctness | Spark output vs. reference sample |
 | Recommendation quality | Precision@K, Recall@K |
 
-Không đặt SLA production phi thực tế.
+Do not specify an unrealistic production SLA.
 
 ---
 
@@ -1479,11 +1427,11 @@ Không đặt SLA production phi thực tế.
 
 ## 38.1. Data Correctness
 
-- kiểm tra row count;
+- row-count checks;
 - key uniqueness;
 - weekday consistency;
 - per-user timestamp monotonicity;
-- Spark aggregation so với reference sample.
+- Spark aggregation compared with a reference sample.
 
 ## 38.2. Batch Performance
 
@@ -1504,58 +1452,57 @@ Không đặt SLA production phi thực tế.
 
 - Precision@K;
 - Recall@K;
-- MAP@K/NDCG@K nếu đủ thời gian.
+- MAP@K/NDCG@K if time permits.
 
 ## 38.5. Serving
 
-Kiểm tra:
+Verify that:
 
-- ALS recommendation tồn tại;
-- trending thay đổi;
-- FinalScore thay đổi;
-- ranking cuối thay đổi theo trend.
+- ALS recommendations exist;
+- trending changes;
+- `FinalScore` changes;
+- final ranking responds to the trend.
 
 ---
 
-# 39. Kịch bản Demo Cuối kỳ
+# 39. Final Demonstration Scenario
 
-Thời lượng dự kiến: **8–12 phút**.
+Estimated duration: **8–12 minutes**.
 
 ```text
 0:00–1:00
-Giới thiệu problem + architecture.
+Introduce the problem and architecture.
 
 1:00–2:00
 Show HDFS raw/curated data.
 
 2:00–3:00
-Chạy Spark batch aggregation.
+Run Spark batch aggregation.
 
 3:00–4:00
-Show physical plan:
-sort-merge vs broadcast.
+Show the physical plan:
+sort-merge vs. broadcast.
 
 4:00–5:00
-Start Kafka replay producer.
+Start the Kafka replay producer.
 
 5:00–6:00
-Show Kafka events + Spark Structured Streaming.
+Show Kafka events and Spark Structured Streaming.
 
 6:00–7:00
-Dashboard trending thay đổi.
+Show the dashboard responding to a trend change.
 
 7:00–8:00
-Inject late event để demo watermark.
+Inject a late event to demonstrate watermark behavior.
 
 8:00–9:00
-Nhập user_id, show ALS recommendation.
+Enter user_id and show ALS recommendations.
 
 9:00–10:00
-Tăng trend của một product,
-show FinalScore/rank thay đổi.
+Increase the trend for one product and show the resulting FinalScore/rank change.
 
 10:00–11:00
-Show performance benchmark.
+Show the performance benchmark.
 
 11:00–12:00
 Show kubectl get pods/services.
@@ -1565,9 +1512,9 @@ Show kubectl get pods/services.
 
 # 40. Timeline
 
-Baseline đề xuất: 8 tuần.
+Proposed baseline: eight weeks.
 
-| Tuần | Module 1 | Module 2 | Module 3 | Module 4 | Integration |
+| Week | Module 1 | Module 2 | Module 3 | Module 4 | Integration |
 |---|---|---|---|---|---|
 | 1 | profiling | batch design | stream design | ALS design | freeze contracts |
 | 2 | schemas + HDFS | aggregation prototype | Kafka prototype | ALS pipeline | schema freeze |
@@ -1578,16 +1525,16 @@ Baseline đề xuất: 8 tuần.
 | 7 | fixes | experiment | experiment | experiment | Kubernetes |
 | 8 | report | report | report | report | rehearsal/demo |
 
-Dependency chính:
+Primary dependencies:
 
 ```text
-Module 3 phụ thuộc event schema từ Module 1.
-Module 4 serving phụ thuộc output schema từ Module 2 và Module 3.
+Module 3 depends on the event schema from Module 1.
+Module 4 serving depends on the output schemas from Modules 2 and 3.
 ```
 
 ---
 
-# 41. Phân công nhóm
+# 41. Team Responsibilities
 
 ## Member 1 — Module 1
 
@@ -1608,7 +1555,7 @@ Module 4 serving phụ thuộc output schema từ Module 2 và Module 3.
 
 - Structured Streaming;
 - watermark;
-- late event;
+- late events;
 - realtime trending;
 - streaming sink.
 
@@ -1619,135 +1566,135 @@ Module 4 serving phụ thuộc output schema từ Module 2 và Module 3.
 - serving;
 - dashboard.
 
-Do Module 4 có khối lượng lớn, nhóm nên hỗ trợ chéo:
+Because Module 4 has a large workload, the team should provide cross-module support:
 
-- Member 2 hỗ trợ graph preprocessing.
-- Member 3 hỗ trợ realtime MongoDB contract.
-- Member 1 hỗ trợ integration/dashboard data.
+- Member 2 supports graph preprocessing.
+- Member 3 supports the realtime MongoDB contract.
+- Member 1 supports integration and dashboard data.
 
-Ownership vẫn giữ nguyên theo 4 module.
+Ownership remains aligned with the four modules.
 
 ---
 
 # 42. Definition of Done
 
-## Module 1 Done khi
+## Module 1 is complete when
 
-- đọc thành công 6 file;
-- explicit schema hoạt động;
-- validation chạy;
-- timestamp deterministic;
-- weekday consistency đạt yêu cầu;
-- timestamp monotonic theo user;
-- Parquet ghi HDFS;
-- Kafka producer replay được;
-- event schema được freeze.
+- all six files are read successfully;
+- explicit schemas work;
+- validation runs;
+- timestamps are deterministic;
+- weekday consistency meets requirements;
+- timestamps are monotonic per user;
+- Parquet is written to HDFS;
+- the Kafka producer can replay events;
+- the event schema is frozen.
 
-## Module 2 Done khi
+## Module 2 is complete when
 
-- batch metrics chạy end-to-end;
-- có window/pivot/custom aggregation;
-- broadcast join được chứng minh;
-- sort-merge join được chứng minh;
-- có ít nhất 3 optimization experiments;
-- output ghi đúng storage.
+- batch metrics run end to end;
+- window, pivot, and custom aggregations exist;
+- Broadcast Hash Join is demonstrated;
+- Sort-Merge Join is demonstrated;
+- at least three optimization experiments exist;
+- outputs are written to the correct storage.
 
-## Module 3 Done khi
+## Module 3 is complete when
 
-- Kafka → Spark chạy;
-- parse đúng schema;
-- event-time window đúng;
-- watermark hoạt động;
-- late-event test thành công;
-- trending tính được;
-- checkpoint hoạt động;
-- sink idempotent;
-- throughput/latency đo được.
+- Kafka → Spark operates correctly;
+- the schema parses correctly;
+- event-time windows are correct;
+- watermark behavior works;
+- the late-event test passes;
+- trending is calculated;
+- checkpoint recovery works;
+- the sink is idempotent;
+- throughput and latency are measured.
 
-## Module 4 Done khi
+## Module 4 is complete when
 
-- ALS train được;
-- không data leakage;
-- Precision@K/Recall@K tính được;
-- graph chạy được;
-- recommendation lưu MongoDB;
-- FinalScore chạy được;
-- cold-start có fallback;
-- dashboard đọc đúng output.
+- ALS training completes;
+- there is no data leakage;
+- Precision@K/Recall@K are calculated;
+- the graph pipeline runs;
+- recommendations are stored in MongoDB;
+- `FinalScore` is calculated;
+- cold start has a fallback;
+- the dashboard reads the correct outputs.
 
 ---
 
-# 43. Rủi ro và phương án xử lý
+# 43. Risks and Mitigation
 
-## 43.1. Kubernetes quá nặng
+## 43.1. Kubernetes is too resource-intensive
 
-**Rủi ro:** laptop không đủ tài nguyên.
+**Risk:** development laptops lack sufficient resources.
 
-**Giải pháp:**
+**Mitigation:**
 
-- development bằng Docker Compose;
-- chỉ deploy các service chính lên Minikube ở final demo;
-- không triển khai production HA.
+- use Docker Compose for development;
+- deploy only the primary services to Minikube for the final demonstration;
+- do not implement production high availability.
 
-## 43.2. Graph quá lớn
+## 43.2. Graph is too large
 
-**Rủi ro:** pairwise product co-purchase có thể tạo rất nhiều edge.
+**Risk:** pairwise product co-purchases may create a very large number of edges.
 
-**Giải pháp:**
+**Mitigation:**
 
-- lọc edge weight tối thiểu;
-- giới hạn theo top products;
-- coi Connected Components là optional.
+- apply a minimum edge-weight threshold;
+- limit the graph to top products;
+- keep Connected Components optional.
 
-## 43.3. ALS tốn tài nguyên
+## 43.3. ALS is resource-intensive
 
-**Giải pháp:**
+**Mitigation:**
 
-- tune với subset trước;
-- full training sau;
-- cache interaction table;
-- checkpoint model.
+- tune on a subset first;
+- perform full training afterward;
+- cache the interaction table;
+- checkpoint the model.
 
-## 43.4. Streaming replay quá nhanh
+## 43.4. Streaming replay is too fast
 
-**Giải pháp:**
+**Mitigation:**
 
-- producer có configurable event rate;
-- hỗ trợ accelerated replay;
-- tách synthetic event_time khỏi ingestion_time.
+- provide a configurable producer event rate;
+- support accelerated replay;
+- separate synthetic `event_time` from `ingestion_time`.
 
-## 43.5. Timestamp synthetic bị hiểu nhầm
+## 43.5. Synthetic timestamps are misinterpreted
 
-**Giải pháp:**
+**Mitigation:**
 
-Trong proposal, code, dashboard và demo luôn ghi rõ:
+Always state the following in the proposal, code, dashboard, and demonstration:
 
 ```text
 Synthetic event time for replay simulation
 ```
 
-không xem đây là timestamp thực của Instacart.
+Do not represent it as an actual Instacart timestamp.
 
 ---
 
-# 44. Tính khả thi
+# 44. Feasibility
 
-Dự án có phạm vi tương đối lớn nhưng khả thi với nhóm 4 người nếu:
+The project has a relatively large scope but is feasible for a four-person team if it:
 
-- freeze data contract sớm;
-- giữ GraphFrames ở mức vừa đủ;
-- không mở rộng sang deep learning;
-- không thêm công nghệ không cần thiết;
-- không yêu cầu production deployment;
-- tách development và final deployment.
+- freezes the data contract early;
+- keeps GraphFrames at an appropriate scope;
+- does not expand into deep learning;
+- does not add unnecessary technologies;
+- does not require production deployment;
+- separates development from final deployment.
 
-Kiến trúc được chia theo module độc lập và có hợp đồng dữ liệu rõ ràng nên các thành viên có thể phát triển song song.
+The architecture is divided into independent modules with clear data contracts, allowing team members to develop in parallel.
 
 ---
 
-# 45. Kết quả đầu ra dự kiến
+# 45. Expected Deliverables
 
-Sau khi hoàn thành, dự án sẽ có:
+At completion, the project will provide:
 
 1. HDFS raw/curated data lake.
 2. Synthetic timestamp generator.
@@ -1760,46 +1707,46 @@ Sau khi hoàn thành, dự án sẽ có:
 9. Recommendation evaluation report.
 10. Product co-purchase graph.
 11. MongoDB serving database.
-12. Final trend-aware recommendation.
+12. Final trend-aware recommendations.
 13. API.
 14. Dashboard.
 15. Docker environment.
-16. Kubernetes deployment demo.
-17. Báo cáo thực nghiệm.
-18. Video/demo hoặc slide trình bày.
+16. Kubernetes deployment demonstration.
+17. Experimental report.
+18. Video/demo or presentation slides.
 
 ---
 
-# 46. Câu hỏi phản biện dự kiến
+# 46. Expected Defense Questions
 
-| Câu hỏi | Câu trả lời đề xuất |
+| Question | Proposed Answer |
 |---|---|
-| Tại sao đây là Big Data? | Dataset có hàng triệu orders và hàng chục triệu interactions, phù hợp distributed storage/processing. |
-| Tại sao Lambda? | ALS cần lịch sử dài hạn; trending cần tín hiệu mới gần realtime. |
-| Tại sao không Kappa? | Recompute ALS và historical analytics là workload batch tự nhiên. |
-| Realtime data ở đâu? | Historical data được replay thành synthetic event stream qua Kafka. |
-| Timestamp có thật không? | Không. Timestamp được sinh deterministic cho mục đích replay. |
-| M1 → M2 bằng gì? | HDFS curated Parquet. |
-| M1 → M3 bằng gì? | Kafka purchase event JSON. |
-| M2/M3 → M4 bằng gì? | MongoDB batch metrics + realtime trending và HDFS features. |
-| Recommendation + Trending kết hợp thế nào? | Normalize ALS và Trend rồi linear blend bằng lambda. |
-| NoSQL dùng để làm gì? | Serving low-latency outputs cho API/dashboard. |
-| HDFS khác MongoDB ở đâu? | HDFS là historical master/batch storage; MongoDB là serving database. |
-| Exactly-once đến đâu? | Checkpoint + Kafka offsets + idempotent MongoDB upsert cho deterministic outputs. |
-| GraphFrames tạo giá trị gì? | Phân tích sản phẩm có tính kết nối/trung tâm trong co-purchase network. |
-| Kubernetes dùng thật không? | Các service chính được container hóa và deploy trong final demo. |
-| Có quá nhiều công nghệ không? | Chỉ dùng những công nghệ gắn trực tiếp với yêu cầu môn học và kiến trúc. |
-| Nhóm 4 người có làm được không? | Có nếu freeze contract sớm và giữ graph/deployment ở phạm vi vừa đủ. |
-| Dataset không có giá thì phân tích doanh thu thế nào? | Không phân tích doanh thu. |
-| Có click/view không? | Không. Streaming chỉ mô phỏng purchase event. |
-| `train` có dùng train ALS không? | Không. `prior` dùng training/history, `train` dùng ground truth evaluation. |
-| Demo chứng minh điều gì? | Batch, streaming, optimization, recommendation và sự thay đổi ranking khi trend thay đổi. |
+| Why is this Big Data? | The dataset contains millions of orders and tens of millions of interactions, making it suitable for distributed storage and processing. |
+| Why Lambda architecture? | ALS requires long-term history, while trending requires new near-real-time signals. |
+| Why not Kappa architecture? | Recomputing ALS and historical analytics is naturally a batch workload. |
+| Where does realtime data come from? | Historical data is replayed as a synthetic event stream through Kafka. |
+| Are the timestamps real? | No. They are generated deterministically for replay purposes. |
+| How does M1 feed M2? | HDFS curated Parquet. |
+| How does M1 feed M3? | Kafka purchase-event JSON. |
+| How do M2/M3 feed M4? | MongoDB batch metrics and realtime trending, plus HDFS features. |
+| How are recommendation and trending combined? | Normalize ALS and Trend scores, then apply a linear blend using lambda. |
+| What is NoSQL used for? | Low-latency serving of outputs to the API/dashboard. |
+| How do HDFS and MongoDB differ? | HDFS is the historical master/batch store; MongoDB is the serving database. |
+| What exactly-once guarantee is provided? | Checkpoints, Kafka offsets, and idempotent MongoDB upserts provide deterministic outputs. |
+| What value does GraphFrames provide? | It identifies products with connectivity or centrality in the co-purchase network. |
+| Is Kubernetes actually used? | The primary services are containerized and deployed for the final demonstration. |
+| Are too many technologies being used? | Only technologies directly tied to course requirements and the architecture are included. |
+| Can a four-person team complete it? | Yes, if contracts are frozen early and graph/deployment scope remains controlled. |
+| How is revenue analyzed without price data? | Revenue is not analyzed. |
+| Are click/view events available? | No. Streaming simulates purchase events only. |
+| Is `train` used to train ALS? | No. `prior` is used for training/history, and `train` is used as evaluation ground truth. |
+| What does the demonstration verify? | Batch processing, streaming, optimization, recommendation, and ranking changes in response to trends. |
 
 ---
 
-# 47. Kết luận
+# 47. Conclusion
 
-Dự án xây dựng một hệ thống Big Data hoàn chỉnh dựa trên Instacart Market Basket Analysis và kiến trúc Lambda. Hệ thống tách rõ:
+The project builds a complete Big Data system using the Instacart Market Basket Analysis dataset and Lambda Architecture. The system clearly separates:
 
 ```text
 Historical Preference
@@ -1812,13 +1759,13 @@ ALS + Trend
 → Serving Layer
 ```
 
-Cách thiết kế này vừa phù hợp với bản chất bài toán Recommendation + Trending, vừa cho phép nhóm chứng minh đầy đủ các nội dung chính của học phần:
+This design fits the combined recommendation-and-trending problem and allows the team to demonstrate the primary course topics:
 
 - distributed storage;
 - Spark batch processing;
 - advanced aggregation;
 - transformation;
-- join;
+- joins;
 - optimization;
 - streaming;
 - machine learning;
@@ -1826,11 +1773,11 @@ Cách thiết kế này vừa phù hợp với bản chất bài toán Recommend
 - NoSQL;
 - deployment.
 
-Điểm quan trọng nhất của proposal là **Data Contract** giữa các module. Mỗi module đều có input, processing, output, storage và consumer xác định, giúp các thành viên có thể triển khai độc lập nhưng vẫn ghép nối thành một pipeline end-to-end thống nhất.
+The proposal's most important element is the **Data Contract** between modules. Each module has defined inputs, processing, outputs, storage, and consumers, allowing team members to implement independently while integrating into a consistent end-to-end pipeline.
 
 ---
 
-# 48. Tài liệu tham khảo
+# 48. References
 
 1. Apache Spark Documentation.
 2. Apache Kafka Documentation.
@@ -1840,4 +1787,39 @@ Cách thiết kế này vừa phù hợp với bản chất bài toán Recommend
 6. MongoDB Documentation.
 7. Kubernetes Documentation.
 8. Instacart Market Basket Analysis Dataset, Kaggle.
-9. Tài liệu học phần IT4931 — Lưu trữ và Xử lý Dữ liệu lớn.
+9. IT4931 course materials — Big Data Storage and Processing.
+
+## 11.4. `product_dimension`
+
+- Format: Parquet
+- Storage: HDFS
+- Consumer: Module 2, Module 4
+
+## 11.5. `curated_interactions`
+
+Primary schema:
+
+```text
+order_id
+user_id
+product_id
+add_to_cart_order
+reordered
+aisle_id
+department_id
+order_number
+event_time
+synthetic_date
+```
+
+- Format: Parquet
+- Storage: HDFS
+- Consumer: Module 2, Module 4
+
+## 11.6. `purchase_event`
+
+- Format: JSON
+- Topic: Kafka `instacart-purchase-events`
+- Consumer: Module 3
+
+---
