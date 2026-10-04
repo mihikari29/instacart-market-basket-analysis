@@ -22,3 +22,6 @@ venv/
 derby.log
 /work/
 *.log
+
+# local review report
+/review123.md

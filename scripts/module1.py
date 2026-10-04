@@ -54,7 +54,10 @@ def main() -> None:
             cwd=root,
             check=True,
         )
-        run_step("stage_hdfs")
+        # Stage the same feed selected for generation.  Without this argument,
+        # a custom --out-dir would be silently ignored and the default feed
+        # (scatter_3m) could be uploaded instead.
+        run_step("stage_hdfs", "--feed", args.out_dir)
 
 
 if __name__ == "__main__":
