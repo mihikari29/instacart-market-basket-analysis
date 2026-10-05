@@ -1,5 +1,18 @@
 # Kế hoạch triển khai và đánh giá Module 4A–4B
 
+Ngày cập nhật: **05/10/2026** (Asia/Bangkok).
+
+**Trạng thái hiện tại (05/10/2026): phần lớn implementation và contract checks đã
+được bổ sung; lượt contract-focused gần nhất đạt 6 passed, 1 skipped.** Docker/Spark runtime,
+GraphFrames thật, MongoDB live, staged flow và full-data acceptance chưa được chạy
+trong môi trường này. Vì vậy Module 4A–4B chưa được nghiệm thu. Mục 12 ghi phần đã
+làm và bằng chứng; mục 13–18 theo dõi các gate còn mở.
+
+Trong tài liệu này, “chạy hoàn chỉnh” nghĩa là chạy đúng contract, kết quả có thể
+đối soát và tái lập trong runtime đã pin, xử lý thất bại có kiểm soát và có một run
+nghiệm thu trên nguồn dữ liệu đầy đủ. Đây không phải cam kết không còn lỗi trong
+mọi môi trường hoặc đã đáp ứng năng lực production.
+
 ## 1. Phạm vi
 
 Tài liệu này chỉ bao gồm hai phần:
@@ -18,14 +31,17 @@ Module 4A–4B được xem là hoàn thành khi:
 
 1. ALS chỉ học từ `order_products_prior`; `order_products_train` không tham gia
    huấn luyện hoặc tuning.
-2. Precision@K và Recall@K được tính trên ground truth `train` và có baseline để
-   đối chiếu.
+2. Precision/Recall/MAP/NDCG tại K=5/10/20 được tính đúng trên ground truth
+   official `train`, với cohort minh bạch và hai baseline để đối chiếu.
 3. Mọi trial ALS có cấu hình, seed, runtime và metric truy xuất được.
 4. Co-purchase graph được dựng từ `prior`, không có self-loop hoặc cạnh trùng.
-5. Weighted degree và PageRank chạy thành công; Connected Components là tùy chọn.
+5. Weighted degree và PageRank bằng GraphFrames thật chạy thành công;
+   Connected Components là tùy chọn.
 6. `user_recommendations` và `product_graph_metrics` được ghi vào MongoDB với
    version/index rõ ràng.
 7. Có test trên fixture và một lần chạy dữ liệu đầy đủ với evidence cùng `run_id`.
+
+Checklist chi tiết bắt buộc ở mục 17; bảng này chỉ tóm tắt mục tiêu.
 
 ## 3. Hợp đồng dữ liệu
 
@@ -40,8 +56,9 @@ Module 4A–4B được xem là hoàn thành khi:
 | `user_features` | HDFS `features/user_features` | Phân tích cohort; không phải input bắt buộc của ALS |
 
 `prior` và `train` không chứa `user_id`, nên Module 4 phải join với `orders` bằng
-`order_id`. Đề cương hiện ghi `orders_curated` chỉ phục vụ Module 2; data contract
-cần cập nhật Module 4 là consumer.
+`order_id`. Đường dẫn này đã khớp với staging của Module 1 và config của Module 2.
+`Proposal.md` đã ghi Module 4 là consumer ở phần contract orders; bảng handoff và
+các báo cáo khác vẫn cần được đối chiếu để giữ cùng cách gọi.
 
 Theo full-data evidence hiện có, mốc đối soát dự kiến là 32.434.489 prior facts và
 1.384.617 train facts. Code không được hard-code các số này; mỗi run phải tính lại
@@ -93,8 +110,11 @@ src/module4/
 └── cli.py             # validate, als, graph, all
 
 scripts/module4.py
-tests/test_module4.py
-tests/test_module4_spark.py
+tests/test_module4_contracts.py     # hiện có: host/unit contracts
+tests/test_module4.py               # hiện có: Spark fixture
+tests/test_module4_spark.py         # đề xuất: mở rộng runtime/standalone tests
+tests/test_module4_mongo.py         # đề xuất: live publish/replay/failure
+tests/test_module4_flow.py          # đề xuất: staged Module 1–2–4 flow
 docs/evidence/module4/<run_id>/
 ```
 
@@ -184,6 +204,7 @@ Không chạy toàn bộ tích Descartes trên full data. Quy trình đề xuấ
 1. Baseline ALS: `rank=32`, `regParam=0.1`, `alpha=10`, `maxIter=10`.
 2. Pilot tối đa 12 cấu hình trên sample user cố định bằng hash.
 3. Miền thử nghiệm:
+
    - `rank={16,32,64}`;
    - `regParam={0.01,0.05,0.1}`;
    - `alpha={10,40}`;
@@ -210,7 +231,7 @@ trên user với `K={5,10,20}`:
 
 - Precision@K;
 - Recall@K;
-- MAP@K hoặc NDCG@K nên có;
+- MAP@K và NDCG@K;
 - user coverage;
 - catalog coverage;
 - số recommendation trung bình mỗi user;
@@ -219,10 +240,14 @@ trên user với `K={5,10,20}`:
 Precision dùng mẫu số K ngay cả khi hệ thống trả ít hơn K. Chỉ user có ground
 truth không rỗng mới vào mẫu số; số user bị loại và lý do phải được công bố.
 
-Đánh giá nên có hai cohort:
+Đánh giá phải có hai cohort, theo định nghĩa cụ thể ở mục 14.5:
 
-- **warm cohort:** user và ground-truth product có factor phù hợp;
-- **all test users:** gồm fallback cho trường hợp cold-start, nếu triển khai.
+- **warm cohort:** user có factor và toàn bộ ground-truth products có item factor;
+- **all official-train users:** mọi user có truth không rỗng, gồm cold-start;
+  fallback nếu dùng phải được ghi rõ, không loại cold truth khỏi mẫu số.
+
+Không gọi đây là đánh giá official `eval_set='test'`: bộ Instacart không cung cấp
+truth cho các test orders. Những user đó vẫn thuộc publication nếu có prior factors.
 
 Không đặt ngưỡng Precision/Recall tùy ý. Điều kiện nghiệm thu là metric được tính
 đúng, cohort minh bạch và so sánh công bằng với baseline. Nếu ALS không vượt
@@ -230,8 +255,9 @@ baseline ở metric chính, không được kết luận ALS cải thiện recom
 
 ### 5.7. Sinh và publish recommendation
 
-Model cuối sinh Top-20 cho mọi warm user. Sau khi explode kết quả ALS, xếp hạng
-lại xác định bằng:
+Model cuối sinh Top-20 cho mọi prior user có user factor, không chỉ official-train
+users. Tie-break phải đúng cả membership ở biên K (mục 14.3), không chỉ xếp lại
+một list đã cắt. Output order là:
 
 ```text
 als_score DESC, product_id ASC
@@ -252,7 +278,7 @@ không tạo document hoặc rank trùng.
 
 ### 6.1. Tạo vertices và edges
 
-Graph chỉ dùng prior:
+Graph dùng toàn bộ products catalog làm vertices; chỉ dùng prior để dựng edges:
 
 1. Join prior với orders và giữ `order_id`, `product_id`.
 2. Deduplicate product trong từng order.
@@ -327,9 +353,9 @@ Job phải tự động xác minh:
 - PageRank không null, NaN hoặc Inf;
 - mỗi product xuất hiện tối đa một lần trong graph output/version.
 
-Các product có prior purchase nhưng không còn cạnh sau threshold cần được giữ với
-`neighbor_count=0`, `weighted_degree=0`; PageRank null phải được xử lý và báo cáo
-theo contract đã chọn.
+Mọi catalog product không có cạnh, kể cả chưa có prior purchase, vẫn cần được giữ
+với `neighbor_count=0`, `weighted_degree=0`. PageRank phải hữu hạn theo contract
+GraphFrames đã kiểm chứng; không âm thầm thay null bằng một giá trị chưa được test.
 
 ### 6.5. Publish graph output
 
@@ -362,7 +388,7 @@ Fixture nhỏ phải có:
 - một user có nhiều prior orders và một train order;
 - một user chỉ có một prior order;
 - reordered và new-to-user products;
-- một product cold-start trong test;
+- một product cold-start trong official train truth;
 - một basket tạo nhiều co-purchase pairs;
 - isolated vertex và PageRank tie.
 
@@ -381,14 +407,15 @@ Một run hoàn chỉnh phải thực hiện:
 ```text
 validate
 -> internal split
--> baselines
--> ALS tuning
--> final ALS train
+-> pilot baselines + bounded ALS trials
+-> full internal baselines + shortlist validation + parameter freeze
+-> final full-prior ALS train + save/load verification
 -> official train evaluation
--> user_recommendations publication
+-> all prior warm-user recommendations + validated publication
 -> graph threshold experiment
--> final graph metrics
--> product_graph_metrics publication
+-> final GraphFrames metrics + graph validation
+-> product_graph_metrics validated publication
+-> pair readiness + evidence finalization
 ```
 
 ## 8. Ma trận đánh giá/nghiệm thu
@@ -429,9 +456,11 @@ docs/evidence/module4/<run_id>/
 └── README.md
 ```
 
-`manifest.json` phải chứa source digest, input receipt/digest nếu có, Spark/Java/
-Python/GraphFrames versions, seed, run ID, model version và graph version. Không
-trộn summary, plans hoặc metrics của các run khác nhau.
+`manifest.json` phải chứa source-code digest, receipt và digest dữ liệu đầu vào,
+Spark/Scala/Java/Python/GraphFrames versions, seed, cấu hình runtime, run ID, model
+version và graph version. Với dữ liệu HDFS do Module 1 stage, `_sources.json` là
+receipt bắt buộc. Fixture tự tạo phải có manifest fixture và nhãn scope riêng.
+Không trộn summary, plans hoặc metrics của các run khác nhau.
 
 ## 10. Kế hoạch thực hiện
 
@@ -446,51 +475,660 @@ trộn summary, plans hoặc metrics của các run khác nhau.
 | B2 | Weighted degree, PageRank và publish | 0.5–1 ngày | Graph output/Mongo đạt |
 | F | Full-data evidence, báo cáo và rehearsal | 1 ngày | Ma trận bắt buộc hoàn chỉnh |
 
-Tổng thời gian hợp lý: khoảng **5–7 ngày làm việc cho một người**. Nếu chia việc,
-một người phụ trách ALS/evaluation và một người phụ trách graph; cả hai dùng chung
-data validation, versioning và evidence format.
+Đây là ước lượng triển khai ban đầu, không phải cam kết thời gian còn lại sau
+audit. Cần ước lượng lại W01–W12 sau khi runtime smoke và bounded run cho biết
+thời gian fit/graph/publish, dung lượng HDFS và khả năng chạy đồng thời. Nếu chia
+việc, một người phụ trách ALS/evaluation và một người phụ trách graph; cả hai
+dùng chung data validation, versioning và evidence format.
 
 ## 11. Thứ tự ưu tiên khi thiếu thời gian
 
-1. Data contract và chống leakage.
-2. ALS + Precision/Recall + hai baseline.
-3. Co-purchase graph + weighted degree + PageRank.
-4. Mongo outputs và idempotency.
-5. Full-data evidence cùng run ID.
-6. MAP/NDCG và threshold analysis mở rộng.
-7. Connected Components.
+1. Đóng lỗi P0 runner/config/schema ALS và runtime smoke.
+2. Data contract, receipts và chống leakage.
+3. ALS + metrics + hai baseline + full internal shortlist.
+4. Co-purchase graph + weighted degree + GraphFrames PageRank + thresholds 2/5/10.
+5. Mongo outputs, idempotency và pair readiness.
+6. Full-data evidence cùng run ID và đồng bộ báo cáo tiến độ.
+7. Tối ưu/threshold analysis mở rộng và Connected Components tùy chọn.
 
 Không nên bỏ internal validation để chạy nhiều hyperparameter hơn. Không nên thêm
 Connected Components trước khi các graph invariants và PageRank cơ bản đã đạt.
 
-## 12. Phần đã triển khai sau khi hoàn thành nhiệm vụ này
+## 12. Kết quả kiểm tra hiện tại
 
-Ngày cập nhật: **04/10/2026**.
+Đã bổ sung `config.py`, `data.py`, `split.py`, `als.py`, `evaluation.py`,
+`graph.py`, `sink_mongo.py`, `spark.py`, `cli.py`, host runner, test contracts,
+live-Mongo tests, runtime smoke scripts và workflow CI. Các contract chính được
+hiện thực theo hướng prior-only, internal holdout, hai baseline, canonical graph
+và staged publication. Đây là trạng thái implementation; không đồng nghĩa các
+đường chạy Spark/Mongo đã được xác minh.
 
-Đã triển khai nền tảng đầu tiên và phần lõi tiếp theo của Module 4A–4B trong
-`src/module4`:
+### 12.1. Bằng chứng đã có và giới hạn
 
-- `config.py`: cấu hình root HDFS, seed, recommendation K và graph threshold;
-- `data.py`: đọc bốn input chính, kiểm tra schema, khóa, domain, foreign key,
-  `eval_set`, overlap prior/train và tạo interaction `purchase_count` với hai dạng
-  strength `raw`/`log`;
-- `split.py`: tạo internal holdout bằng prior order cuối của từng user đủ ít nhất
-  hai prior orders, trả training facts, validation facts và ground truth;
-- `__init__.py`: khởi tạo package Module 4.
-- `als.py`: khai báo ALS implicit-feedback parameters, tạo estimator có seed,
-  fit model, sinh recommendation Top-K với tie-break xác định và lưu model;
-- `evaluation.py`: tính Precision@K/Recall@K, user/catalog coverage và tạo hai
-  baseline global popularity/personal frequency;
-- `graph.py`: tạo canonical co-purchase edges, vertices, cạnh hai chiều cho
-  GraphFrames, weighted degree và kiểm tra invariant self-loop/duplicate/weight.
+- Lượt contract/Mongo-focused gần nhất: **6 passed, 1 skipped** (live Mongo bị
+  skip do thiếu URI/service). Lượt full host suite: **24 passed, 4 skipped, 12
+  setup errors** vì Windows không cho pytest đọc thư mục temp dùng chung; đây là
+  lỗi môi trường, không phải assertion của Module 4.
+- Sau khi sửa flow-smoke script, `ruff check .`, `compileall` cho Module 4/runner,
+  `docker compose config --quiet` và `python scripts/module4.py --help` đều pass.
+  `python scripts/module4.py --help` chạy được trên host không cần PySpark/Docker.
+- Docker engine không kết nối được (`docker info` báo không tới Docker Desktop
+  daemon); host cũng không có PySpark/Java. Do đó các lệnh container chưa chạy.
+- Chưa có `docs/evidence/module4/<run_id>/` hoặc dataset cục bộ `data/` trong
+  workspace ở thời điểm audit. Chưa xác minh được dữ liệu còn tồn tại trong HDFS
+  volume vì Docker chưa hoạt động.
+- Đã thêm `scripts/module4_runtime_smoke.py`, `scripts/module4_flow_smoke.py` và
+  `.github/workflows/module4.yml`; chưa chạy workflow/smoke. Flow-smoke script
+  chưa được runtime-verified.
+- Contract tests, Ruff và compile đã được chạy lại sau khi sửa flow-smoke; Spark
+  fixture/full-data execution vẫn chưa chạy vì host không có PySpark/Java.
+- Chưa có evidence runtime ALS fit/recommend, GraphFrames PageRank, live Mongo
+  publication/rerun, staged flow hoặc full Instacart data.
 
-Đã kiểm tra syntax bằng `py_compile` và kiểm tra cấu hình/path bằng Python. Phần
-còn lại là chạy ALS/GraphFrames trên Spark, tuning thực tế, PageRank, MongoDB
-publication và full-data evidence; các bước này vẫn theo thứ tự A2 → A4 → B1 → B2.
+### 12.2. Các vấn đề của audit ban đầu
+
+Bảng dưới ghi nhận lỗi được phát hiện trước khi sửa; trạng thái sửa hiện tại nằm
+ở mục 12.3. Các gate runtime tương ứng vẫn mở cho tới khi có evidence thật.
+
+| ID | Mức | Vị trí | Hiện trạng và tác động |
+|---|---|---|---|
+| R01 | P0 | `als.py::recommend_top_k` | Đọc `recommendation.als_score`; Spark 3.5.5 trả field `rating`. Tuning/recommendation bị chặn. |
+| R02 | P0 | `cli.py::main`, `Config.environment` | CLI tạo `Config()` trực tiếp; bỏ qua Mongo URI/database/collection từ environment. Trong Compose sẽ dùng `localhost` thay vì service `mongodb`. |
+| R03 | P0 | `scripts/module4.py` | `python scripts/module4.py --help` trên host lỗi import `src.module4`; runner chưa tương đương Module 2–3. |
+| R04 | P1 | `cli.py::run_als` | Publish chỉ cho user trong official train truth, bỏ warm users thuộc official test. Nhãn warm cohort chưa lọc theo factors. |
+| R05 | P1 | `evaluation.py` | MAP/NDCG dùng độ dài prediction thực trả thay K; coverage đếm user/product ngoài cohort, có thể vượt 100%. |
+| R06 | P1 | `graph.py::pagerank` | Bắt mọi exception rồi âm thầm fallback; một run pass chưa chứng minh GraphFrames thực sự chạy. |
+| R07 | P1 | Graph validation/sink | Chưa kiểm tra đủ Infinity, null/integer weight, FK và tập vertex; document graph thiếu `min_edge_weight`. |
+| R08 | P1 | `data.py`, manifest | Chưa đọc/đối soát `_sources.json`, chưa có input digest liên kết với handoff Module 1–2. |
+| R09 | P1 | `cli.py::tune_als` | Mới chọn model từ pilot; thiếu vòng internal validation full-size cho shortlist, giải phóng factors và evidence trial đầy đủ. |
+| R10 | P1 | `sink_mongo.py`, CLI | Chưa gate đủ schema/count/rank/score trước promote; validation sau publish chưa đối chiếu đủ expected counts. |
+| R11 | P1 | Evidence/tests/CI | Chưa có Spark/Mongo flow test, full-data run, actual test logs, backend/version và shuffle evidence. |
+| R12 | P1 | `progress.md`, `README.md`, mục 12 cũ | Progress ghi đã chạy/publish; README vẫn ghi chưa triển khai; trạng thái và bằng chứng không đồng bộ. |
+
+P0 là lỗi chặn đường chạy chuẩn. P1 là lỗi tính đúng đắn hoặc thiếu điều kiện
+nghiệm thu phải đóng trước khi công bố hoàn thành. Tối ưu bổ sung và Connected
+Components là P2, chỉ làm sau khi các gate bắt buộc đã đạt.
+
+### 12.3. Tóm tắt phần đã làm và trạng thái từng vấn đề
+
+| ID | Phần đã triển khai trong workspace | Trạng thái xác minh |
+|---|---|---|
+| R01 | Recommendation lấy `als_score` từ score do ALS sinh; thêm kiểm tra input và tie-break xác định ở biên Top-K. | Unit/contracts có; Spark ALS thật chưa chạy. |
+| R02 | Config nhận environment; CLI ưu tiên tham số CLI, rồi environment, rồi default; URI được che trong report. | Host contract có; service DNS/Mongo Compose chưa chạy. |
+| R03 | Lazy Spark import và host Docker runner; `--help` không cần runtime, không dùng `--remove-orphans`. | Help, Ruff và Compose config pass; runner container/worker chưa chạy. |
+| R04 | Evaluation cohorts và publication dựa trên prior-factor users, không chỉ train-truth users. | Có code/contract; Spark user-set đối soát chưa chạy. |
+| R05 | Sửa MAP/NDCG cho list ngắn; kiểm tra duplicate/key/rank/score và coverage theo cohort; cohort rỗng được gắn `not_applicable`. | Contract tests có; Spark-scale metrics chưa chạy. |
+| R06 | GraphFrames là backend mặc định và thiếu/lỗi không bị che bằng fallback; DataFrame backend chỉ bật rõ ràng. | Chưa chạy JAR/backend GraphFrames thật. |
+| R07 | Tăng cường graph edge/vertex/weight/degree/PageRank invariants; graph snapshot ghi threshold. | Code/fixture contracts có; runtime chưa chạy. |
+| R08 | Đọc `_sources.json`, đối soát row counts và SHA-256 Parquet từ HDFS; kiểm tra schema, khóa, FK, chronology và domain. | Chưa chạy trên HDFS handoff thật. |
+| R09 | Bổ sung pilot giới hạn, internal shortlist, final prior fit và evidence trial/model trong CLI. | Chưa chạy ALS tuning trong Spark. |
+| R10 | Mongo snapshot staging/validation, indexes, bounded batches, writer lock và readiness gate cho cặp A/B. | Fake/contract tests có; live Mongo replay/failure chưa chạy. |
+| R11 | Thêm live-Mongo tests, runtime smoke, staged-flow smoke và GitHub Actions workflow. | Chưa chạy CI/runtime smoke; flow-smoke chưa được runtime-verified. |
+| R12 | Cập nhật plan này để phản ánh trạng thái và giới hạn evidence. | README/progress vẫn cần đồng bộ; không đánh dấu đã đóng. |
+
+Ngoài các mục trên, test fixtures/contracts đã được mở rộng cho config/env,
+short-list MAP/NDCG, ALS tie tại ranh giới K và Mongo snapshot/replay/failure.
+Các kiểm tra này không thay thế integration chạy trên Spark/GraphFrames/Mongo.
+
+### 12.4. Luồng liên kết phải được kiểm chứng
+
+```text
+Module 1 clean + stage
+  -> HDFS curated tables + _sources.json
+  -> Module 2 validates the same handoff and creates optional user_features
+  -> Module 4 validates input receipts/keys/counts
+       -> 4A: prior holdout -> tuning -> final prior model -> official evaluation
+                -> all warm-user recommendations -> Mongo snapshot
+       -> 4B: prior baskets -> threshold experiment -> GraphFrames metrics
+                -> Mongo snapshot
+
+Module 1 producer -> Kafka -> Module 3 -> realtime_trending
+  -> future Module 4C: combine recommendations + graph + trend
+```
+
+Module 4A–4B đọc curated data của Module 1, không cần chờ một streaming query của
+Module 3 chạy. Module 2 `user_features` là đầu vào cohort tùy chọn. Việc chưa đọc
+`realtime_trending` không phải lỗi phạm vi A/B; tránh bổ sung Kafka/trend vào quá
+trình fit hoặc tuning. Feed của Module 3 có cả prior + train nên kết hợp trend
+vào đánh giá sau này cần một thiết kế cutoff riêng ở Module 4C.
+
+## 13. Backlog thực hiện và thứ tự phụ thuộc
+
+Implementation cho phần lớn W01–W11 đã được thêm, nhưng mỗi dòng chỉ được đóng
+khi đạt điều kiện ở cột cuối. Tĩnh/unit pass không thay cho runtime gate.
+
+| Gói | Ưu tiên | Công việc | Phụ thuộc | Điều kiện đóng |
+|---|---|---|---|---|
+| W01 | P0 | Sửa schema recommendation ALS | Không | Spark fixture fit/recommend thành công, nested `rating` đổi thành output `als_score` |
+| W02 | P0 | Sửa runner, environment, driver DNS và preflight | Không | Host runner và standalone executor truy cập driver/HDFS/Mongo đúng cấu hình |
+| W03 | P1 | Pin và smoke GraphFrames Python/JAR | W02 | PageRank thật trong image, có backend/version; lỗi dependency làm job fail |
+| W04 | P1 | Receipt, data validation và leakage assertions | W02 | Fixture âm tính bị từ chối; input counts/hash khớp staged receipt |
+| W05 | P1 | Metric, baseline, warm/all/history cohorts | W04 | Ví dụ tính tay và Spark cùng kết quả, coverage không vượt 1 |
+| W06 | P1 | Pilot + full internal shortlist + final model | W01, W04, W05 | Trial evidence đủ, chọn model từ internal validation; save/load xác minh được |
+| W07 | P1 | Sinh và kiểm tra recommendation cho mọi warm user | W06 | User-set/count/rank/score khớp factors, gồm user thuộc official test |
+| W08 | P1 | Graph scope, threshold, invariants, PageRank | W03, W04 | Threshold 2/5/10, conservation/FK/isolates/finite checks đạt |
+| W09 | P1 | Mongo snapshot validation, promote và recovery | W07, W08 | Publish/rerun/fault-injection đạt; expected counts và indexes khớp |
+| W10 | P1 | Manifest, failure evidence, event-log metrics | W02; xuyên suốt W04–W09 | Artifact từng stage có cùng run ID, source/input digests và trạng thái rõ |
+| W11 | P1 | CI và fixture flow Module 1–2–4 | W01–W10 | Pinned CI chạy Spark, GraphFrames và Mongo thực; không skip gate bắt buộc |
+| W12 | P1 | Full-data run, báo cáo và rehearsal | W11 | Một run đầy đủ passed, hai snapshots đối soát; báo cáo trỏ đúng evidence |
+| W13 | P2 | Tối ưu tiếp, Connected Components | W12 | Có mục tiêu đo được; không thay đổi contract đã nghiệm thu |
+
+## 14. Chi tiết công việc theo thành phần
+
+### 14.1. W02 — Runner, config và preflight
+
+File chính: `scripts/module4.py`, `config.py`, `cli.py`, `spark.py`, `compose.yaml`.
+
+- Đổi host runner thành container runner như Module 2–3: xác định repo root từ
+  `__file__`, đặt `cwd` đúng, forward arguments và truyền commit. Host chỉ cần
+  Python + Docker; import PySpark nằm trong container.
+- Hỗ trợ `--help` không cần Spark/services, `--build` cho runtime đã thay dependency
+  và trả exit code khác 0 khi Docker/Spark/job thất bại. Không tạo lifecycle
+  side-effect từ một lệnh chỉ hỏi help.
+- Runner `compose run` dùng `--use-aliases` hoặc cấu hình driver address khác đã
+  được kiểm chứng. `spark.driver.host=module4` phải resolve được từ worker.
+  Hướng dẫn chạy trực tiếp Compose phải có cùng cấu hình DNS với runner.
+- Không tự dùng `--remove-orphans`, `down -v` hay dọn shared volumes để chạy A/B.
+  Chỉ khởi động các service cần thiết; giữ Kafka/streaming và dữ liệu module trước.
+- Tạo config qua `Config.environment(...)`; precedence rõ ràng:
+  **CLI được chỉ định > environment > default**. Không để argparse default
+  vô tình ghi đè environment khi user không truyền cờ.
+- Áp dụng URI/database/collection cho Mongo, root/master/seed, partitions, K,
+  graph threshold/reset/iterations và giới hạn tuning. Validate input số nguyên,
+  hữu hạn, miền giá trị; không nhận NaN/Infinity hay âm cho pilot/trial budgets.
+- Tách `publish_k` khỏi `evaluation_ks` hoặc bảo đảm generation cho evaluation
+  luôn đủ `max(5,10,20)`. Giảm publish K không được làm metric @20 bị hụt candidate.
+- CLI graph-only/validate-only không fit ALS; help/config parsing không cần
+  import runtime nặng. Công bố config đã resolve với credential được che.
+- Preflight: Docker engine/image, Spark master/worker, driver DNS, quyền đọc
+  curated HDFS, quyền ghi model và evidence, Mongo ping/rename/index privilege.
+  `--skip-serving` phải bỏ yêu cầu Mongo, ghi serving skipped trong report.
+- `--skip-serving` còn phải chạy được khi Mongo không khả dụng: kiểm tra cả
+  `depends_on` của Compose/runner, không chỉ bỏ ping trong CLI. ALS checkpoint
+  dùng đường dẫn shared HDFS worker truy cập được; ghi checkpoint interval,
+  storage level và chính sách dọn checkpoint theo run ownership.
+- Các đường dẫn ghi model/output/version phải cụ thể, không chứa path traversal;
+  run/version IDs có format hợp lệ. Không overwrite một version đã tồn tại nếu
+  khác config/input digest; reuse phải có quy tắc riêng và explicit.
+
+Gate: chạy help trên host sạch; kiểm tra CLI/env precedence; chạy Spark action
+qua worker và HDFS; ping đúng service Mongo trong container. Việc parse Compose
+thành công chưa chứng minh DNS hoặc kết nối runtime thành công.
+
+### 14.2. W03 — Runtime GraphFrames được kiểm chứng
+
+File chính: `Dockerfile.spark`, `requirements*.txt`, `spark.py`, `graph.py`.
+
+- Giữ Spark 3.5.5, Java 17, Scala 2.12; chọn/pin Python wrapper và JAR GraphFrames
+  thực sự tương thích. Hiện Python package là `graphframes==0.6`, JAR là
+  `0.8.3-spark3.5-s_2.12`; chưa được kết luận tương thích chỉ từ tên version.
+- Checksum JAR trong build, có JAR ở cả driver và workers, không tải Maven khi
+  chạy job. Ghi phiên bản package, JAR filename/hash và Scala trong manifest.
+- Chạy smoke graph có cạnh hai chiều và isolated vertex trên image đã build,
+  rồi chạy qua standalone worker. Assert backend thực sự là `graphframes`.
+- Bỏ `except Exception: pass` trong PageRank đường nghiệm thu; giữ stack trace
+  và làm job fail khi GraphFrames thiếu hoặc lỗi runtime.
+- Nếu giữ DataFrame backend để phát triển, chọn explicit, chỉ cho fixture và
+  ghi backend/scope. Không dùng kết quả đó để đóng gate GraphFrames/full-data.
+- Hai backend hiện khác cách chuẩn hóa và xử lý dangling mass. Chọn và ghi
+  PageRank contract cho runtime chính; chỉ so sánh số giữa backend khi đã làm
+  đồng nhất thuật toán, normalization và isolated-vertex policy.
+
+Gate: JAR/Python smoke thật pass, backend metadata có đủ; mô phỏng thiếu JAR hoặc
+lỗi JVM phải tạo report failed, không chuyển thành một run passed bằng fallback.
+
+### 14.3. W01, W06, W07 — ALS input, tuning, model và recommendation
+
+File chính: `als.py`, `split.py`, `cli.py`.
+
+**Sửa lỗi chặn và kiểm tra input:**
+
+- Đọc `recommendation.rating`, cast sang double và alias `als_score`. Trong
+  [Spark ALS 3.5.5](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala),
+  `recommendForUserSubset` có nested rating field cố định; `predictionCol` dùng
+  cho `transform`, không đổi field này.
+- ID user/product phải là integer đúng giá trị trong int32 trước cast; từ chối
+  fractional, overflow, null, non-positive. Strength/purchase count hữu hạn và
+  dương; không để cast âm thầm làm hai ID khác nhau thành cùng một ID.
+- One row/user/product; lưu distribution purchase_count/strength, source scope
+  và interaction count. Deterministic partition/sort, materialize training input
+  phù hợp để ALS không phụ thuộc một lineage không xác định.
+- Kiểm tra model có user/item factors không rỗng và không có factor/score lỗi.
+  Công bố số factors khớp distinct IDs của training interactions.
+
+**Internal split và tuning:**
+
+- Assert `(user_id, order_number)` xác định duy nhất một order; last prior order
+  phải duy nhất mỗi eligible user. Training order numbers nhỏ hơn holdout.
+- Kiểm tra training/validation order sets disjoint và cùng bao phủ eligible facts;
+  official train order IDs không xuất hiện trong cả hai. Report excluded users,
+  rows/orders/products và cold-start products của internal holdout.
+- Trường hợp không có eligible users: report tuning not performed; baseline
+  fallback fixture có thể được công bố riêng, không đóng gate tuning nghiệm thu.
+- Pilot user sample bằng hash có seed hoặc quy tắc hash đã ghi; hash tie-break
+  bằng user ID; giữ tất cả prior orders của user đã chọn. Dedupe grid để tránh
+  cùng baseline xuất hiện nhiều trial; giới hạn tối đa 12 cấu hình distinct.
+- Tính baseline trên đúng pilot cohort từ internal training history; không dùng
+  full-prior popularity khi đánh giá holdout vì có thể đưa holdout trở lại baseline.
+- Lấy tối đa 3 cấu hình tốt nhất pilot, fit trên full internal training và đánh
+  giá full internal holdout. Chọn final params từ vòng này, không chọn trực tiếp
+  pilot rồi gọi đó là full tuning.
+- Trial ghi input/factor counts, params/strength/seed, P/R/coverage, fit time,
+  recommendation time, evaluation time, total time và resource/job-group metrics.
+- Persist input dùng chung có budget, unpersist model factors/trial output trong
+  `finally` để 12 model không chiếm bộ nhớ đồng thời. Dọn cache theo ownership,
+  không ảnh hưởng cache của một job ngoài phạm vi.
+- Trial failure lưu error/stack trace và input/config ngay khi xảy ra. Nếu mọi
+  trial fail, vẫn phải có `als_trials.json`; CLI hiện chỉ ghi trial file sau
+  `run_als` thành công nên cần sửa failure path.
+- Khi full shortlist chưa đủ trials hợp lệ, khai báo incomplete/degraded;
+  không đánh dấu toàn bộ run nghiệm thu passed để che thiếu stage.
+
+**Final model và publication users:**
+
+- Freeze selected params, refit toàn bộ prior, save model versioned bằng chế độ
+  tránh overwrite. Reload model và kiểm tra factor counts/schema/recommendations.
+- Official train chỉ được đánh giá sau freeze params; không dùng official score
+  chọn model, threshold hay fallback strategy. Baseline final dùng full prior.
+- Publication cohort là tất cả prior users có `userFactors`, gồm user có terminal
+  order `eval_set='test'`. Evaluation cohort official train là một tập riêng.
+- Sinh Top-K không loại seen products. Output finite, positive IDs, product FK,
+  unique user/product, rank 1..min(K, available factors), mỗi user có số hàng đúng.
+- Tie-break score DESC/product ID ASC áp dụng cả membership ở biên K. Sorting
+  sau một Top-K đã cắt chưa bảo đảm chọn đúng nhóm equal-score ở biên; thêm test
+  tie và chọn candidate/score strategy bảo đảm contract, có budget rõ ràng.
+- Report publication requested users, factor-backed users, missing users,
+  expected vs actual rows và số item factors giới hạn list size.
+
+Gate: model thật fit/save/load/recommend pass; publication tập user đúng; rerun
+cùng input/seed/config cho ranking fixture như nhau trong tolerance đã công bố.
+
+### 14.4. W04 — Data handoff và input validation
+
+File chính: `data.py`, `config.py`; đối chiếu Module 1 staging và Module 2 data.
+
+- Đọc `/instacart/curated/_sources.json`; đối chiếu counts và SHA-256 của các file
+  curated thực đang đọc với receipt, không chỉ chép hash trong receipt vào report.
+  Ghi receipt digest, dataset scope, paths/file inventory và thời điểm validation.
+- Các table hiện có một source Parquet/file staging; nếu hỗ trợ nhiều part files,
+  định nghĩa manifest/digest tổng hợp có thứ tự và không đổi nghĩa SHA-256 file.
+- Input phải được giữ ổn định trong run: dùng snapshot bất biến hoặc kiểm tra
+  inventory/digest trước và sau. Nếu Module 1 stage lại cùng root giữa run,
+  không promote output ghép từ hai dataset khác nhau.
+- Tận dụng helper đọc HDFS receipt nếu phù hợp nhưng không ép A/B scan toàn bộ
+  streaming interactions chỉ để xác minh bốn input curated cần thiết.
+  `_handoff.json` của event feed chỉ là provenance bổ sung khi dùng feed đó.
+- Giữ separation tên file local `order_products__prior.parquet` và HDFS directory
+  `order_products_prior`; mô tả rõ để runner không nhầm root `data/clean` là layout
+  HDFS curated.
+- Validate schema và types, critical nulls (gồm product name), keys, integer
+  domains, order/user/cart position và reordered 0/1; duplicate order/product,
+  duplicate `(user_id, order_number)` và cart-position consistency.
+- FK order/product, eval_set và counts trước/sau join; không thêm user metadata
+  bằng một join có thể nhân rows rồi chỉ kiểm tra count ở cuối.
+- Kiểm tra mọi prior/train order có fact theo contract; user ground truth trống
+  được ghi số lượng/lý do loại. Đối chiếu prior users, train users và catalog với
+  source hiện tại, không hard-code con số historical làm nguồn xác thực.
+- `prior`/`train` fact order sets disjoint; chỉ bảng prior đã enrich đi vào
+  interactions/graph. Handoff/leakage flags phải xuất phát từ assertion.
+- Optional `user_features`: nếu bật cohort features, đọc đúng path từ Module 2,
+  validate unique user/schema/prior-only provenance và report coverage. Nếu không
+  bật thì ghi unused/optional; không quảng bá ALS đã dùng features này.
+- Không ghi vào curated source tables hoặc sửa receipt của Module 1–2 trong
+  quá trình Module 4 chạy.
+
+Gate: mọi fixture lỗi schema/FK/domain/hash/count/chronology bị từ chối trước fit;
+các input digest/counts Module 2 và Module 4 khớp cùng staged dataset.
+
+### 14.5. W05 — Metrics, baseline và cohort chính xác
+
+File chính: `evaluation.py`, `cli.py`.
+
+- Chuẩn hóa truth thành tập distinct products; user truth unique; recommendation
+  key/rank unique, positive và trong miền K. Invalid rows phải fail validation,
+  không âm thầm bỏ để làm metric tốt hơn.
+- Truyền K explicit vào AP/NDCG helper. Khi list trả ít hơn K vẫn dùng:
+
+```text
+Precision@K(u) = hits / K
+Recall@K(u)    = hits / |G(u)|
+AP@K(u)       = sum(hit_at_rank_i * precision_at_i) / min(K, |G(u)|)
+IDCG@K(u)     = sum(1 / log2(i + 1), i = 1..min(K, |G(u)|))
+NDCG@K(u)     = DCG@K(u) / IDCG@K(u)
+```
+
+- Ví dụ bắt buộc: K=5, predictions `[1]`, truth `[1,2,3,4,5]` -> P=0.2,
+  R=0.2, AP=0.2, NDCG xấp xỉ 0.33916. Code hiện trả AP/NDCG=1 cho ví dụ này.
+  Đối chiếu [Spark RankingMetrics 3.5.5](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/mllib/evaluation/RankingMetrics.scala).
+- User coverage chỉ đếm predicted users thuộc cohort/nonempty truth; catalog
+  coverage chỉ đếm predictions của cohort và chia đúng candidate-catalog scope.
+  User ngoài truth, truth trống và duplicates không được làm coverage vượt 1.
+- Tính average recommendation count/user gồm user không được trả recommendation;
+  report min/max/count distribution, skipped users và empty-cohort reason. Cohort
+  rỗng phải có trạng thái not applicable, không coi số 0 là một lần đánh giá hợp lệ.
+- Warm cohort định nghĩa cụ thể: user có factor và toàn bộ truth products có
+  item factors. All-train cohort giữ nguyên mọi nonempty truth users/products;
+  cold items vẫn ở mẫu số và được report vì global fallback không thể tạo factor.
+- Report riêng user cold-start, item cold-start, user có mixed warm/cold truth,
+  tỷ lệ truth items có factor. Không dùng `train_truth` làm warm filter.
+- Reordered/new-to-user được phân loại từ lịch sử training thích hợp với stage;
+  đánh giá từng nhóm giữ nguyên ranked predictions và chỉ đổi truth. Mỗi nhóm
+  có cohort/user coverage riêng, không dùng toàn bộ user numerator cho subgroup.
+- Global popularity và personal frequency dùng cùng users, truth, K và candidate
+  scope với ALS ở mỗi cohort. Personal thiếu list bổ sung global, loại duplicate
+  products, giữ personal trước rồi rank fallback deterministic.
+- Baseline cho all/cold users trả fallback đã công bố; score baseline không được
+  ghi nhầm là model prediction trong production recommendation collection.
+- So sánh P/R@5/10/20; ghi delta ALS vs mỗi baseline, không tuyên bố cải thiện nếu
+  số liệu không hỗ trợ. Khi giữ UDF, bảo đảm callable import được trên executor;
+  dùng tính toán Spark native nếu kiểm tra cho thấy giảm chi phí có ý nghĩa.
+
+Gate: hand-calculated cases, missing/short list, cold users/items, empty cohort,
+extra users, duplicates và subgroup đều pass; mọi coverage thuộc [0,1].
+
+### 14.6. W08 — Graph build, threshold và invariants
+
+File chính: `graph.py`, `cli.py`.
+
+- Freeze scope: mặc định vertices là toàn bộ `products` catalog như code hiện tại,
+  gồm products không có prior activity. Report catalog/prior-active/edge-active
+  counts và lý do isolated (no prior hoặc bị threshold loại hết cạnh).
+- Baskets chỉ từ prior; product dedupe trong order; canonical pair `src < dst`;
+  weight là số order chứa pair, không phải số dòng fact hoặc số directed edges.
+- Tính raw co-purchase counts một lần rồi reuse cho thresholds 2/5/10 và final
+  threshold khi tài nguyên cho phép. Hiện self-join/groupBy bị chạy lại nhiều lần.
+- Đo số baskets, max/quantiles basket size và tổng pair expansion trước full run.
+  Cấu hình hiện chỉ 2 cores/1 GB executor không được coi là đủ cho full graph
+  nếu chưa đo spill/shuffle/memory/disk.
+- Mỗi threshold có vertex/edge/directed counts, total weight, active product và
+  prior-fact coverage theo công thức đã ghi, isolated count, degree/weight
+  quantiles, runtime và event-log shuffle/spill metrics.
+- Final threshold do cấu hình/analysis prior-only chọn; evidence ghi lý do và
+  reference đến trial tương ứng. Không ghi “tuned optimum” cho một default chưa
+  được phân tích.
+- Nếu cần top-P subset, chọn prior popularity deterministic, giữ đầy đủ fact/order
+  semantics trong scope đã chọn, ghi `graph_scope`, P, selected IDs/digest và
+  catalog/prior-fact coverage. Đó là graph subset trên nguồn full-data, không phải
+  full-catalog graph; không âm thầm cap baskets hoặc sample pairs.
+- Validate schema/types; null/fractional/non-positive weights; canonical pairs,
+  duplicate edges, endpoint FK và vertex uniqueness. Directed graph đúng hai
+  reciprocal rows/undirected edge, không có row bổ sung.
+- Validate output exact product set với vertices bằng anti-join hai chiều, không
+  chỉ so count. Assert degree <= vertex_count-1, finite/non-null/non-negative
+  metrics và `sum(weighted_degree)=2*sum(edge weight)`.
+- PageRank GraphFrames thật trên symmetric topology; weight co-purchase chỉ dùng
+  weighted degree. Check NaN và cả ±Infinity; không gắn `pagerank_finite=True`
+  nếu các check này chưa thực thi.
+- Edge-empty/one-vertex/isolated/disconnected graphs có semantics đã định nghĩa
+  và được test; isolate không bị mất khi join PageRank. Top-20 sắp metric DESC,
+  product ID ASC, kèm product name.
+- Document final có `graph_version`, `run_id`, `min_edge_weight`, `computed_at`;
+  graph backend/scope và PageRank params truy được từ version manifest.
+
+Gate: graph manual fixture và threshold tests pass; backend real verified;
+invariants/counters/coverage đúng cả full graph và subset nếu có.
+
+### 14.7. W09 — Mongo snapshot, validation và phục hồi
+
+File chính: `sink_mongo.py`, `cli.py`.
+
+- Tách `generated_at`/`computed_at` khỏi logical identity; timestamp nhất quán trong
+  snapshot và metadata UTC. IDs/ranks dùng integer phù hợp BSON; scores finite.
+- Recommendation documents đúng contract và publication cohort; graph documents
+  đúng contract ở mục 3, gồm threshold. Pre-publish validate schema, FK, row counts,
+  unique key/rank và expected user/product sets trong Spark.
+- Stream `toLocalIterator` với bulk batch size cấu hình; graph writer hiện collect
+  toàn bộ documents vào list cần chuyển sang iterator/batch. Báo cáo đây là
+  bounded driver-side writer, không tuyên bố distributed Mongo connector.
+- Tạo unique/index topology ở collection tạm; kiểm tra inserted count với expected
+  Spark count, exact logical sets và index key/options trước rename. Index lỗi,
+  thiếu documents hoặc invalid score phải dừng và giữ active snapshot trước.
+- Remove fallback `_drop`/`rename` dựa trên bắt lỗi để hỗ trợ test doubles khỏi
+  production path. Test doubles phải mô phỏng API; không drop target rồi insert
+  một iterator đã tiêu thụ khi `rename` thiếu.
+- Cleanup chỉ collection tạm do run sở hữu; failure cleanup không che exception
+  gốc. Không chuyển sang `delete_many` khi một lệnh drop thực sự lỗi permission
+  hoặc connectivity.
+- Same-database rename là promote một collection; chứng minh bằng Mongo thật.
+  Rerun cùng version giữ nguyên logical document set và rank/count, chấp nhận
+  timestamp cập nhật theo policy đã công bố.
+- Chọn rõ retention: collection công khai giữ active snapshot; rename thay phiên
+  trước. Nếu cần rollback, giữ immutable version collection/backup có run owner
+  và retention cụ thể, không quảng bá nhiều version còn nằm trong active collection.
+- Sau promote, kiểm tra lại count/version/index và raise nếu validation không đạt;
+  `validation.valid=False` không được đi cùng status passed.
+- ALS snapshot và graph snapshot có hai rename riêng, không atomic thành một
+  cặp. Với lệnh `all`, chỉ đánh dấu run ready khi cả hai đã đối soát cùng run ID.
+  Để future consumer không đọc một cặp lệch version, cần snapshot readiness
+  manifest/pointer, hoặc giới hạn một writer và quy trình serving có gate rõ ràng.
+- Test concurrent writers nếu cho phép; nếu chưa triển khai locking/version pointer,
+  enforce một writer và ghi giới hạn đó. Không để validation của run A đọc snapshot
+  vừa bị run B thay thế mà vẫn coi A pass.
+- Mongo failure exit nonzero; báo stage nào đã publish, stage nào chưa, rollback/
+  retry policy. Không giả định job failed nghĩa là cả hai collections chưa đổi.
+
+Gate: real Mongo publish twice converges; count/index/schema đúng; lỗi insert,
+index build, count mismatch và rename giữ snapshot trước theo policy đã kiểm chứng.
+
+### 14.8. W10 — Evidence, performance và failure reporting
+
+File chính: `cli.py`, `spark.py`; có thể reuse parser `module2/eventlog.py`.
+
+- Dùng một run ID xuyên suốt A/B; thêm stage/trial IDs/job groups, scope
+  fixture/pilot/full-data, model/graph versions và executed/skipped/failed status.
+- Manifest được ghi lúc bắt đầu rồi finalize, cả khi job thất bại. Có command args,
+  resolved config (redacted), commit/dirty flag và digest của code/runtime scripts/
+  dependency configs ảnh hưởng run, input receipts/data hashes và environment.
+- Ghi Spark/Scala/Java/Python/GraphFrames Python/JAR/backend; Spark master,
+  driver/executor memory/cores, shuffle partitions, ALS blocks, checkpoint config,
+  graph scope/threshold và runtime resource inventory.
+- Ghi artifact theo stage ngay khi hoàn tất và khi failure; đừng giữ hết report
+  trong RAM rồi chỉ viết sau cùng. Error giữ stack trace, duration, stage/trial
+  context, completed/published stages và cleanup outcome.
+- Bảo đảm event log finalize sau Spark stop; parse job-group attribution cho
+  validation, fit, recommend, evaluate, edge-build, PageRank và publish. Performance
+  gồm shuffle read/write, spill, task/executor failures, runtime, model/output size.
+- `test-results.txt` chứa actual command/output/exit code, kèm skipped tests và lý
+  do. Dòng placeholder “run pytest separately” không phải test evidence.
+- `summary.json` có toàn bộ acceptance gates; status passed chỉ khi các gate cần
+  cho command/scope đã pass. `all --skip-serving` chỉ là compute validation;
+  serving skipped phải tách khỏi full acceptance.
+- Ghi README evidence có scope, counts, params, cohort/baseline comparison,
+  thresholds, limitations, reproducibility command và liên kết artifact. Chi tiết
+  lớn/event logs/model Parquet nằm `results/module4/<run_id>/` hoặc HDFS; giữ
+  compact evidence trong docs để tránh đưa dữ liệu lớn vào Git.
+- Hash/check existence các artifact quan trọng; không trộn evidence của run khác.
+  Cleanup/cache release và lỗi Spark stop không được ghi đè lỗi stage ban đầu.
+
+Gate: successful run và fault-injected failed run đều có manifest/report đủ;
+shuffle/resource/backend evidence truy được và mọi compact artifact cùng run ID.
+
+### 14.9. W11–W12 — Test, CI, full flow và báo cáo
+
+File chính: tests, runner smoke, `.github/workflows`, `progress.md`, `README.md`,
+`Proposal.md`, `docs/evidence/module4/`.
+
+- Thêm test thực chất cho mọi regression R01–R11, phân nhóm contract, Spark,
+  GraphFrames, live Mongo và flow; import guard trên host được phép nhưng CI
+  nghiệm thu phải cài runtime và không skip những nhóm cần đóng gate.
+- Chạy fixture flow bằng dữ liệu đúng staging layout Module 1; chạy Module 2
+  validation/feature generation nếu cohort bật; rồi Module 4 `validate`, `als`,
+  `graph`, `all`. Có test qua standalone worker, không chỉ `local[2]`.
+- Smoke runner dùng root/output/database/collections riêng và record ownership;
+  cleanup không đụng curated dataset/shared active snapshots hoặc module trước.
+- CI fast: pin image, lint/static, unit + Spark + GraphFrames fixture. CI live
+  Mongo: phục vụ snapshot/idempotency/failure tests. CI full-data qua manual trigger
+  với budget/timeouts cụ thể; upload evidence/logs kể cả khi fail.
+- Giữ test suite Module 1–3 pass vì dependency/runtime chung đã thay; đây là
+  regression gate, không đồng nghĩa benchmark module trước đã được chạy lại.
+- Full flow phải chạy cả hai publications với scope/count/hash đối soát, expected
+  product/user sets, readiness và rerun. Không lấy evidence cũ Module 1–3 để
+  thay thế một run Module 4 hiện tại.
+- Cập nhật status A/B trong README/progress/plan thống nhất. Phân biệt implemented,
+  fixture validated, integration validated và full-data accepted; chỉ tick mục
+  run/train/publish khi có artifact thật.
+- Sửa trạng thái overclaim R12 ngay khi bắt đầu hoàn thiện backlog, trước run
+  nghiệm thu; sau mỗi gate cập nhật lại bằng evidence mới. Không đợi full run
+  thành công mới gỡ những tick hiện chưa có bằng chứng.
+- `review123.md` là audit lịch sử Module 1–3 có ngày/commit riêng, giữ nguyên tính
+  lịch sử; không dùng nó làm bằng chứng nghiệm thu Module 4 hoặc viết lại kết quả
+  cũ thành kết quả mới.
+- Update Proposal contract nếu scope/index/version fields cần bổ sung. Tách A/B
+  và C/D trong bảng trạng thái: hoàn thành A/B không có nghĩa API/dashboard/blend
+  đã hoàn thành.
+
+Gate: fixture flow và full-data acceptance pass; report trỏ đúng run ID/source
+digest; các lệnh reproduction hoạt động trên môi trường đã mô tả.
+
+## 15. Ma trận test bắt buộc để đóng backlog
+
+Các case dưới đây cần triển khai/chạy; tên test là mô tả mục tiêu, không phải
+khẳng định các test này đã tồn tại.
+
+| Nhóm | Case tối thiểu | Assertion chính |
+|---|---|---|
+| Runner/config | Host help; env/CLI precedence; Docker unavailable; driver DNS | Help không cần Spark; URI đúng; fail rõ; worker gọi driver được |
+| Receipt/data | Count/hash mismatch; missing/null/type; duplicate/FK; wrong eval_set; chronology tie | Fail trước fit; exact join/source counts; không silent casts |
+| Split | 1 prior order; >=2 orders; last-order tie; official train overlap | Eligibility/disjoint/chronology đúng; không official leakage |
+| ALS | Real implicit fit; nested rating; save/load; cold user; repeat seed; tie at K | Schema/finite/factors/ranks/user sets và repeatability đúng |
+| Metrics | Hand example; fewer than K; empty/no prediction; extra users; duplicate ranks/products | P/R/AP/NDCG đúng, coverage [0,1], empty cohort labeled |
+| Baselines/cohort | Personal short list; global tie; cold user/item; subgroup | Không duplicate; cùng users/truth/K; warm/cold definitions đúng |
+| Tuning | Budget/dedup grid; pilot; full shortlist; failed/all-failed trial | Chọn từ internal; trial evidence tồn tại cả failure; factors released |
+| Graph construction | Basket duplicate; repeated pair; thresholds; subset; no prior activity | Canonical weight đúng; coverage/isolation/scope được đối soát |
+| GraphFrames | Real backend; missing JAR; symmetric graph; isolated/disconnected/empty graph | GraphFrames gate thật; missing dependency fail; documented PageRank |
+| Graph invariants | Null/fractional/negative weight; orphan endpoint; wrong vertex set; Inf/NaN | Mọi invalid graph bị từ chối; degree conservation đúng |
+| Mongo | Expected sets/count; index conflict; rerun; insert/index/rename failure | Promote sau validation; không stale/duplicate rank; previous snapshot preserved |
+| Flow | Staged-layout fixture -> Module 2 -> Module 4; standalone all; skipped serving | Paths/hashes/outputs đúng; trạng thái compute/serving phân biệt |
+| Failure/evidence | Spark/ALS/GraphFrames/Mongo failure ở từng stage | Nonzero exit + actual logs, manifest và completed/published stage report |
+| Regression/full | Module 1–3 suite; full input run; final snapshot rerun | Không regression; scope/count/versions cùng run; reproducibility evidence |
+
+Fixture bổ sung ít nhất một prior-active user có terminal `eval_set='test'`,
+unknown evaluation user, catalog cold product trong train, truth subgroup rỗng,
+short recommendation list, equal-score boundary và bad data cases. Fixture
+hiện tại chưa bao phủ hết các tình huống này.
+
+## 16. Quy trình chạy nghiệm thu sau khi sửa code
+
+Lệnh ở mục này là **quy trình nghiệm thu chưa chạy được tại host hiện tại**.
+Host `--help` và cấu hình Compose đã kiểm tra; container build, Spark fixture và
+publication vẫn cần chạy trong môi trường có Docker daemon.
+
+### 16.1. Kiểm tra tĩnh và runtime
+
+```bash
+python -m ruff check .
+docker compose config --quiet
+docker compose build spark-master
+docker compose up -d --wait namenode datanode mongodb spark-master spark-worker
+
+# Container fixture, Spark, GraphFrames và live-Mongo tests
+docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 -m pytest -q
+```
+
+Ghi actual output/exit code và skipped list; verify GraphFrames backend trong
+fixture. Chạy thêm `scripts/module4_runtime_smoke.py` để kiểm tra standalone
+worker, HDFS, GraphFrames và Mongo; chỉ evidence từ lần chạy mới này đóng runtime
+gate.
+
+### 16.2. Xác minh handoff và bounded flow
+
+1. Kiểm tra HDFS có đúng curated directories và `_sources.json`. Nếu volume chưa
+   có dữ liệu, chạy Module 1 clean/stage theo runbook rồi Module 2 validate.
+2. Chạy fixture/bounded flow ở root và Mongo collections riêng. Bounded scope phải
+   được thể hiện trong manifest; không được ghi nhãn full-data.
+3. Chạy `validate`, `als`, `graph`, `all`; verify `als` không chạy graph và `graph`
+   không fit ALS. Preflight và reporting phù hợp từng command.
+4. Thực hiện live Mongo rerun/failure cases trước khi dùng active collections.
+5. Kiểm tra Module 1–3 không bị thay source tables, receipts hoặc serving outputs.
+
+### 16.3. Run full-data và promote
+
+```bash
+# Handoff Module 2; services đã khởi động ở mục 16.1
+docker compose run --rm --use-aliases module2 validate
+
+# Host wrapper sau khi W02 đã hoàn thành
+python scripts/module4.py validate
+python scripts/module4.py all
+
+# Đường chạy trực tiếp tương đương; override command bỏ default --skip-serving
+docker compose run --rm --use-aliases module4 all
+```
+
+Không bắt buộc dùng wrapper Module 2 trong shared-stack rehearsal: wrapper hiện
+có `up --remove-orphans`. Đường chạy trực tiếp ở trên tránh lệnh đó và không
+khởi động lại toàn bộ Module 3; luôn đối soát các service trước/sau flow.
+
+`all` phải thực hiện pilot, full internal shortlist, final prior fit, official
+evaluation, all warm-user recommendations, threshold experiment, GraphFrames và
+hai Mongo publications. Dataset/input receipts, trials/model/graph scope và
+publications dùng cùng run ID. Rerun kiểm tra idempotency cần dùng lại version
+theo cơ chế explicit sẽ bổ sung; hiện CLI tự sinh version mới mỗi lần nên chỉ
+chạy `all` lần hai chưa chứng minh cùng-version replay.
+
+Nếu chỉ chạy `all --skip-serving`, report ghi compute-only; không đóng A4/B2
+publication hoặc full end-to-end acceptance. Graph subset nếu dùng phải có nhãn
+riêng; chỉ được chấp nhận khi phù hợp scope ghi trước run, không thay tên subset
+thành full-catalog để đóng checklist.
+
+### 16.4. Đóng báo cáo
+
+Đối chiếu tất cả gate mục 17; finalize manifest/summary, lưu compact evidence,
+actual test/command logs và limitation. Update `progress.md`, README và status
+trong plan bằng link run ID đã passed; rehearsal lại lệnh reproduction từ đầu
+trong image/version đã ghi. Không cần retrain full model nhiều lần chỉ để làm
+đẹp thời gian benchmark; mọi phép đo performance phải ghi cách đo.
+
+## 17. Checklist đóng Module 4A–4B
+
+- [ ] R01–R03 đã sửa và runtime/runner gate pass.
+- [ ] GraphFrames Python/JAR đã pin, smoke driver/worker pass; backend thật được ghi.
+- [ ] Handoff receipts/hash/counts đúng; source không bị Module 4 ghi đè.
+- [ ] Validation âm tính và leakage/chronology assertions pass.
+- [ ] Metrics/baselines/warm-all/history cohorts đúng, coverage [0,1].
+- [ ] Pilot và full internal shortlist hoàn thành; official train không chọn params.
+- [ ] Final prior model save/load đúng, factors và model metadata đối soát.
+- [ ] Publication phủ mọi prior warm user, gồm user thuộc official test.
+- [ ] Recommendation scores/keys/ranks/product sets/counts đúng và deterministic.
+- [ ] Graph thresholds/scope/coverage/invariants/PageRank/isolation đúng.
+- [ ] Graph output có version/run/threshold; backend/params truy được.
+- [ ] Mongo schema/index/count/set pre-promote và post-promote đạt cả hai outputs.
+- [ ] Same-version replay và failure preservation có live Mongo evidence.
+- [ ] Pair publication readiness/partial failure/single-writer policy rõ ràng.
+- [ ] Manifest/input/source/runtime/version/evidence đủ cho success và failure.
+- [ ] Actual test logs, stage timings, shuffle/resource/model-size metrics có đủ.
+- [ ] CI fixture/live integration pass, không skip nhóm nghiệm thu bắt buộc.
+- [ ] Fixture flow Module 1–2–4 và standalone worker pass.
+- [ ] Một run trên nguồn đầy đủ với serving thật đã passed; graph scope được công bố.
+- [ ] Suite regression Module 1–3 pass trong runtime mới.
+- [ ] README/progress/plan/Proposal contract thống nhất, link đúng evidence hiện tại.
+
+Chỉ khi các ô bắt buộc đã đóng mới ghi **Module 4A–4B complete and validated**.
+Nếu chưa có full-data run, trạng thái tối đa là **fixture/integration validated,
+full-data acceptance pending**. Connected Components và Module 4C–4D không thuộc
+checklist bắt buộc A/B này.
+
+## 18. Quy tắc cập nhật tiến độ và bàn giao
+
+- Mỗi Wxx cập nhật ngày thực hiện, files thay đổi, test commands/results,
+  artifact/run ID, remaining issues và người thực hiện nếu làm nhóm.
+- Tách “đã viết code”, “đã chạy fixture”, “đã chạy integration” và “đã nghiệm thu
+  full-data”; checkbox chạy/publish không đóng chỉ nhờ lint hoặc syntax pass.
+- Một run failed/partial/skip vẫn giữ evidence và không được sửa thành passed
+  sau khi đổi source; chạy lại có run ID hoặc resume manifest theo policy rõ ràng.
+- Bàn giao cho Module 4C gồm active model/graph versions cùng run ID, schema/index,
+  snapshot readiness, scope/threshold/backend, publication user cohort và cách
+  chọn/đọc snapshot. Consumer join bằng `user_id`/`product_id`, không trộn versions.
+- Không đưa `FinalScore`, API/dashboard hoặc Kafka consumer vào định nghĩa done
+  của A/B; ghi riêng backlog C/D. Nếu sau này dùng trend trong official evaluation,
+  thêm cutoff/prior-train leakage gate trước khi công bố metric.
 
 ## Tài liệu kỹ thuật đối chiếu
 
 - [Spark 3.5.5 ALS API](https://spark.apache.org/docs/3.5.5/api/java/org/apache/spark/ml/recommendation/ALS.html)
-- [Spark RankingMetrics](https://spark.apache.org/docs/3.5.6/api/python/reference/api/pyspark.mllib.evaluation.RankingMetrics.html)
+- [Spark 3.5.5 ALS recommendation implementation](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala)
+- [Spark 3.5.5 RankingMetrics implementation](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/mllib/evaluation/RankingMetrics.scala)
+- [GraphFrames 0.8.3 PageRank implementation](https://github.com/graphframes/graphframes/blob/v0.8.3/src/main/scala/org/graphframes/lib/PageRank.scala)
+- [Docker Compose run: --use-aliases](https://docs.docker.com/reference/cli/docker/compose/run/)
 - [GraphFrames installation](https://graphframes.io/02-quick-start/01-installation.html)
 - [GraphFrames centrality metrics](https://graphframes.io/04-user-guide/03-centralities.html)

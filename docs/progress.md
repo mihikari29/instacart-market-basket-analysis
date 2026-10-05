@@ -15,7 +15,7 @@
 | **Module 1** | Ingestion, cleaning, synthetic timestamps, HDFS staging, Kafka replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Complete and validated** |
 | **Module 2** | Batch Layer, historical analytics, MongoDB serving, join/pruning/cache benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Complete and validated on the full dataset** |
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
-| **Module 4** | ML & Serving, collaborative filtering, GraphFrames, API, and dashboard | Spark MLlib (ALS), GraphFrames, FastAPI, Streamlit/React | *Ready for the next stage* |
+| **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Implementation complete; Spark runtime validation pending** |
 
 ---
 
@@ -310,7 +310,33 @@ python scripts/module3.py run --allow-data-loss --duration-seconds 60
 
 Window, watermark, and weight settings can be overridden with `--window-short`, `--window-long`, `--slide`, `--watermark`, `--weight-short`, `--weight-long`, and `--trigger-interval`.
 
-### 5.5. Run the tests
+### 5.5. Run Module 4A–4B
+
+Module 4 consumes the curated HDFS `orders`, `order_products_prior`,
+`order_products_train`, and product-dimension tables. The official train facts
+are used only as ground truth; internal tuning uses a last-prior-order holdout:
+
+```bash
+# Validate the Module 4 data contract only
+python scripts/module4.py validate
+
+# Run ALS tuning, final model/evaluation, graph thresholds, and evidence
+python scripts/module4.py all --skip-serving
+
+# Publish versioned snapshots to MongoDB as part of the run
+python scripts/module4.py all
+
+# Equivalent Docker tool service (the default command skips serving)
+docker compose run --rm module4
+```
+
+Evidence is written to `docs/evidence/module4/<run_id>/`, including input and
+split validation, ALS trials/model/evaluation, graph trials/metrics, Mongo
+validation, performance, and a manifest containing the source digest and
+versions. `--pilot-users` and `--max-trials` bound ALS tuning; `--graph-min-edge-weight`
+selects the published graph threshold while retaining the 2/5/10 experiment.
+
+### 5.6. Run the tests
 
 ```bash
 # Run the test suite in the development environment
@@ -318,6 +344,10 @@ python -m pytest
 
 # Run only Module 3 tests (requires PySpark; live Kafka/MongoDB tests require the cluster)
 docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q tests/test_module3.py
+
+# Run Module 4A–4B fixture tests in the pinned Spark image
+docker run --rm -v "$PWD:/workspace" -w /workspace --entrypoint python3 \
+  instacart-spark:3.5.5 -m pytest -q tests/test_module4.py
 ```
 
 ---
@@ -352,10 +382,27 @@ docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q test
   - [x] Measure throughput with real producer-rate control and a real Kafka 1/2/4/8 topic sweep.
   - [x] Pass the final hardening Docker suite: `51 passed`; Ruff, Compose, and whitespace checks passed.
   - [x] Store measured evidence in `docs/evidence/module3/`.
-- [ ] **Module 4 — ML & Serving:** Ready to read features from HDFS and use `order_products__train` as ground truth.
+- [x] **Module 4A — ALS Recommendation:**
+  - [x] Read and validate `orders`, `prior`, `train`, and product dimensions with key, FK, `eval_set`, duplicate, and domain checks.
+  - [x] Build deterministic raw/log implicit interactions from `order_products_prior`; official `train` is evaluation-only.
+  - [x] Create the leakage-safe last-prior-order internal holdout and report disjoint order sets/excluded users.
+  - [x] Run bounded ALS tuning with recorded parameters, seed, runtime, metrics, failed trials, and deterministic selection.
+  - [x] Evaluate warm and all-user fallback cohorts at K=5/10/20 with Precision, Recall, MAP, NDCG, and coverage against global-popularity and personal-frequency baselines.
+  - [x] Save versioned ALS models and publish deterministic Top-K warm-user recommendations with unique MongoDB indexes.
+- [x] **Module 4B — Product Co-purchase Graph:**
+  - [x] Build canonical prior-only edges with basket deduplication, threshold experiments, and no self-loop/duplicate pairs.
+  - [x] Compute neighbor count, weighted degree, degree conservation, isolated vertices, and unweighted PageRank through pinned GraphFrames (with a fixture fallback).
+  - [x] Publish versioned graph metrics with unique product/version and PageRank/degree indexes.
+- [x] **Module 4A–4B execution layer:**
+  - [x] Add Spark CLI commands `validate`, `als`, `graph`, and `all`, Docker GraphFrames dependency, Mongo snapshot sinks, and evidence artifacts.
+  - [x] Add fixture-level checks for split leakage, ranking metrics/baselines, ALS schema, graph invariants/PageRank, and deterministic output contracts.
+
+  Runtime gate: static compilation, Ruff, and Compose validation pass. Spark
+  fixture/full-data execution is not yet recorded because the current host has
+  no Java/PySpark runtime and Docker Desktop is not running.
 
 ---
 
 ## 7. Next stage — Module 4
 
-Module 4 will use `order_products__prior` and HDFS user features as training history, retain `order_products__train` as evaluation ground truth, build ALS recommendations and a GraphFrames co-purchase graph, and blend recommendations with `realtime_trending`. Module 4 is not implemented in the current baseline.
+Module 4A–4B now uses `order_products_prior` and the HDFS handoff contract, retains `order_products_train` strictly as evaluation ground truth, builds versioned ALS recommendations and GraphFrames co-purchase metrics, and publishes both snapshots to MongoDB. API/dashboard blending with `realtime_trending` remains a separate serving-stage task outside the 4A–4B plan.

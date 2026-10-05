@@ -1,6 +1,7 @@
-"""Configuration and HDFS paths shared by Module 4A and 4B."""
+"""Configuration and paths shared by the Module 4A/4B jobs."""
 
 from dataclasses import dataclass
+import math
 import os
 
 
@@ -20,16 +21,44 @@ class Config:
     seed: int = 42
     recommendation_k: int = 20
     graph_min_edge_weight: int = 2
+    graph_reset_probability: float = 0.15
+    graph_max_iter: int = 10
+    graph_backend: str = "graphframes"
+    mongodb_uri: str = "mongodb://localhost:27017/instacart"
+    mongo_database: str = "instacart"
+    mongo_recommendation_collection: str = "user_recommendations"
+    mongo_graph_collection: str = "product_graph_metrics"
 
     def __post_init__(self):
         if not self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
             raise ValueError("An explicit dataset root is required")
+        if not self.master:
+            raise ValueError("Spark master must not be empty")
         if self.shuffle_partitions < 1:
             raise ValueError("shuffle_partitions must be positive")
         if self.recommendation_k < 1:
             raise ValueError("recommendation_k must be positive")
         if self.graph_min_edge_weight < 1:
             raise ValueError("graph_min_edge_weight must be positive")
+        if not 0.0 < self.graph_reset_probability < 1.0:
+            raise ValueError("graph_reset_probability must be between 0 and 1")
+        if self.graph_max_iter < 1:
+            raise ValueError("graph_max_iter must be positive")
+        if not math.isfinite(self.graph_reset_probability):
+            raise ValueError("graph_reset_probability must be finite")
+        if self.graph_backend not in {"graphframes", "dataframe"}:
+            raise ValueError("graph_backend must be graphframes or dataframe")
+        if not self.mongodb_uri:
+            raise ValueError("mongodb_uri must not be empty")
+        if not self.mongo_database:
+            raise ValueError("mongo_database must not be empty")
+        for name, value in (
+            ("mongo_database", self.mongo_database),
+            ("mongo_recommendation_collection", self.mongo_recommendation_collection),
+            ("mongo_graph_collection", self.mongo_graph_collection),
+        ):
+            if not value or "." in value or "$" in value or "\x00" in value:
+                raise ValueError(f"{name} must be a valid MongoDB identifier")
 
     def table(self, name: str) -> str:
         try:
@@ -41,12 +70,42 @@ class Config:
     def model_path(self, model_version: str) -> str:
         return self.root.rstrip("/") + "/models/als/" + model_version
 
+    def features(self) -> str:
+        """Return the optional Module 2 user-feature handoff path."""
+        return self.root.rstrip("/") + "/features/user_features"
+
     @classmethod
     def environment(cls, **overrides):
+        def env_int(name, default):
+            value = os.environ.get(name)
+            return int(value) if value is not None else default
+
+        def env_float(name, default):
+            value = os.environ.get(name)
+            return float(value) if value is not None else default
+
         values = {
             "root": os.environ.get("MODULE4_ROOT", cls.root),
             "master": os.environ.get("SPARK_MASTER", cls.master),
-            "seed": int(os.environ.get("MODULE4_SEED", cls.seed)),
+            "shuffle_partitions": env_int("MODULE4_SHUFFLE_PARTITIONS", cls.shuffle_partitions),
+            "seed": env_int("MODULE4_SEED", cls.seed),
+            "recommendation_k": env_int("MODULE4_RECOMMENDATION_K", cls.recommendation_k),
+            "graph_min_edge_weight": env_int(
+                "MODULE4_GRAPH_MIN_EDGE_WEIGHT", cls.graph_min_edge_weight
+            ),
+            "graph_reset_probability": env_float(
+                "MODULE4_GRAPH_RESET_PROBABILITY", cls.graph_reset_probability
+            ),
+            "graph_max_iter": env_int("MODULE4_GRAPH_MAX_ITER", cls.graph_max_iter),
+            "graph_backend": os.environ.get("MODULE4_GRAPH_BACKEND", cls.graph_backend),
+            "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
+            "mongo_database": os.environ.get("MODULE4_MONGO_DATABASE", cls.mongo_database),
+            "mongo_recommendation_collection": os.environ.get(
+                "MODULE4_RECOMMENDATION_COLLECTION", cls.mongo_recommendation_collection
+            ),
+            "mongo_graph_collection": os.environ.get(
+                "MODULE4_GRAPH_COLLECTION", cls.mongo_graph_collection
+            ),
         }
         values.update(overrides)
         return cls(**values)

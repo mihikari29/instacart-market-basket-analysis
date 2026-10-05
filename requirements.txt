@@ -5,3 +5,4 @@ requests>=2.32
 hdfs==2.7.3
 kafka-python>=2.1
 pymongo==4.11.3
+graphframes==0.6
