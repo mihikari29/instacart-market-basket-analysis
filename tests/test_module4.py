@@ -7,10 +7,10 @@ import pytest
 pyspark = pytest.importorskip("pyspark")
 from pyspark.sql import SparkSession
 
-from src.module4.als import ALSParams, fit_model, recommend_top_k
+from src.module4.als import ALSParams, fit_model, load_model, recommend_top_k, recommend_with_fallback, save_model
 from src.module4.data import build_prior_interactions, validate_inputs
-from src.module4.evaluation import ranking_metrics
-from src.module4.graph import build_edges, build_metrics, build_vertices, validate_metrics
+from src.module4.evaluation import evaluate_at_k, personal_frequency, ranking_metrics
+from src.module4.graph import build_edges, build_metrics, build_vertices, validate_edges, validate_metrics
 from src.module4.split import make_internal_holdout
 
 
@@ -99,7 +99,7 @@ def test_recommend_top_k_resolves_score_ties_before_cutting_membership(spark):
             from pyspark.sql import functions as F
 
             ordered = spark.createDataFrame(
-                [(1, float(product_id), product_id) for product_id in (4, 3, 2, 1)],
+                [(1, 1.0, product_id) for product_id in (4, 3, 2, 1)],
                 "user_id int, rating double, product_id int",
             )
             recs = ordered.orderBy(F.desc("product_id")).limit(count).groupBy("user_id").agg(
@@ -120,3 +120,143 @@ def test_graph_invariants_and_pagerank_include_isolated_vertex(spark, tables):
     assert report["edge_count"] == 3
     assert report["isolated_vertices"] == 1
     assert metrics.where("product_id = 4").select("pagerank").first()[0] is not None
+
+
+def test_split_rejects_distinct_orders_with_equal_chronology_and_official_leakage(spark, tables):
+    prior = tables["prior"].join(tables["orders"], "order_id")
+    from pyspark.sql import functions as F
+
+    tied = prior.withColumn("order_number", F.lit(1))
+    with pytest.raises(ValueError, match="chronology"):
+        make_internal_holdout(tied)
+    with pytest.raises(ValueError, match="official train"):
+        make_internal_holdout(prior, spark.createDataFrame([(2,)], "order_id int"))
+
+
+@pytest.mark.parametrize("value", [None, -1.0, 0.0, 1.5, float("nan"), float("inf")])
+def test_graph_rejects_invalid_weights(spark, value):
+    edges = spark.createDataFrame([(1, 2, value)], "src int, dst int, weight double")
+    with pytest.raises(ValueError):
+        validate_edges(edges)
+
+
+def test_graphframes_empty_edges_preserve_all_isolated_vertices(spark):
+    vertices = spark.createDataFrame([(1,), (2,)], "id int")
+    edges = spark.createDataFrame([], "src int, dst int, weight long")
+    metrics = build_metrics(vertices, edges, max_iter=2)
+    report = validate_metrics(metrics, edges, vertices)
+    assert report["isolated_vertices"] == 2
+    assert report["weighted_degree_sum"] == 0
+    assert report["pagerank_finite"]
+
+
+def test_metrics_short_missing_empty_and_extra_users_share_correct_denominators(spark):
+    predictions = spark.createDataFrame([(1, 1, 0.8, 1), (999, 9, 0.9, 1)],
+                                       "user_id int, product_id int, als_score double, als_rank int")
+    truth = spark.createDataFrame([(1, [1, 2, 3, 4, 5]), (2, [2]), (3, [])],
+                                 "user_id int, ground_truth array<int>")
+    result = evaluate_at_k(predictions, truth, (5, 10, 20), catalog_size=9)
+    assert result["5"]["precision_at_k"] == pytest.approx(0.1)
+    assert result["5"]["recall_at_k"] == pytest.approx(0.1)
+    assert result["5"]["map_at_k"] == pytest.approx(0.1)
+    assert result["5"]["ndcg_at_k"] == pytest.approx(0.3391602052736161 / 2)
+    assert result["5"]["user_coverage"] == pytest.approx(0.5)
+    assert result["5"]["catalog_coverage"] == 1
+    assert result["5"]["users_with_no_recommendations"] == 1
+    empty = spark.createDataFrame([], "user_id int, ground_truth array<int>")
+    assert ranking_metrics(predictions, empty)["status"] == "not_applicable_empty_cohort"
+
+
+@pytest.mark.parametrize("duplicate", ["rank", "product"])
+def test_metrics_reject_duplicate_predictions(spark, duplicate):
+    rows = [(1, 1, 1)] + ([(1, 2, 1)] if duplicate == "rank" else [(1, 1, 2)])
+    predictions = spark.createDataFrame(rows, "user_id int, product_id int, als_rank int")
+    truth = spark.createDataFrame([(1, [1])], "user_id int, ground_truth array<int>")
+    with pytest.raises(ValueError, match="duplicate"):
+        ranking_metrics(predictions, truth)
+
+
+def test_als_save_reload_seed_repeatability_and_cold_user_fallback(spark, tables, tmp_path):
+    from pyspark.sql import functions as F
+
+    prior = tables["prior"].join(tables["orders"], "order_id")
+    interactions = build_prior_interactions(prior)
+    params = ALSParams(rank=2, max_iter=2)
+    model = fit_model(interactions, params, seed=7, blocks=2)
+    path = str(tmp_path / "model")
+    save_model(model, path)
+    restored = load_model(path)
+    users = spark.createDataFrame([(1,), (2,), (99,)], "user_id int")
+    expected = recommend_top_k(model, users, 2).orderBy("user_id", "als_rank").collect()
+    actual = recommend_top_k(restored, users, 2).orderBy("user_id", "als_rank").collect()
+    repeated = fit_model(interactions, params, seed=7, blocks=2)
+    replay = recommend_top_k(repeated, users, 2).orderBy("user_id", "als_rank").collect()
+    assert [(r.user_id, r.product_id, r.als_rank) for r in actual] == [
+        (r.user_id, r.product_id, r.als_rank) for r in expected
+    ]
+    assert [r.als_score for r in actual] == pytest.approx([r.als_score for r in expected], abs=1e-6)
+    assert [(r.user_id, r.product_id) for r in replay] == [(r.user_id, r.product_id) for r in expected]
+    fallback = recommend_with_fallback(restored, users, interactions, 2)
+    assert fallback.where(F.col("user_id") == 99).count() == 2
+    personal = personal_frequency(interactions, users, 3)
+    assert personal.groupBy("user_id", "product_id").count().where("count > 1").count() == 0
+    assert personal.where("user_id = 99").count() == 3
+    for fitted in (model, restored, repeated):
+        fitted.userFactors.unpersist()
+        fitted.itemFactors.unpersist()
+
+
+@pytest.mark.parametrize("corruption", ["duplicate_fact", "wrong_eval_set", "orphan_product", "chronology_tie"])
+def test_data_contract_rejects_corruption_before_training(tables, corruption):
+    from pyspark.sql import functions as F
+
+    invalid = dict(tables)
+    if corruption == "duplicate_fact":
+        invalid["prior"] = invalid["prior"].unionByName(invalid["prior"].limit(1))
+    elif corruption == "wrong_eval_set":
+        invalid["orders"] = invalid["orders"].withColumn(
+            "eval_set", F.when(F.col("order_id") == 4, "train").otherwise(F.col("eval_set")))
+    elif corruption == "orphan_product":
+        invalid["products"] = invalid["products"].where("product_id != 2")
+    else:
+        invalid["orders"] = invalid["orders"].withColumn(
+            "order_number", F.when(F.col("order_id") == 2, 1).otherwise(F.col("order_number")))
+    with pytest.raises(ValueError):
+        validate_inputs(invalid)
+
+
+def test_staged_receipt_checks_real_parquet_hash_and_count(spark, tmp_path):
+    import json
+    from src.module2.fixtures import create_fixture
+    from src.module4.config import Config
+    from src.module4.data import read_inputs, validate_source_receipts
+
+    root = create_fixture(tmp_path / "source")
+    config = Config(root=root.as_uri())
+    frames = read_inputs(spark, config)
+    receipt = validate_source_receipts(spark, config, frames)
+    assert receipt["inputs"]["order_products_prior"]["rows"] == 24
+    path = root / "curated/_sources.json"
+    source = json.loads(path.read_text())
+    source["orders"]["rows"] += 1
+    path.write_text(json.dumps(source))
+    with pytest.raises(ValueError, match="row count"):
+        validate_source_receipts(spark, config, frames)
+    source["orders"]["rows"] -= 1
+    source["orders"]["sha256"] = "0" * 64
+    path.write_text(json.dumps(source))
+    with pytest.raises(ValueError, match="SHA-256"):
+        validate_source_receipts(spark, config, frames)
+
+
+def test_graphframes_failure_is_not_replaced_with_fallback(spark, monkeypatch):
+    from src.module4.graph import pagerank
+    import graphframes
+
+    def broken_backend(*args, **kwargs):
+        raise RuntimeError("injected missing GraphFrames JAR")
+
+    monkeypatch.setattr(graphframes, "GraphFrame", broken_backend)
+    with pytest.raises(RuntimeError, match="GraphFrames JAR"):
+        pagerank(spark.createDataFrame([(1,)], "id int"),
+                 spark.createDataFrame([], "src int, dst int"))

@@ -15,7 +15,7 @@
 | **Module 1** | Ingestion, cleaning, synthetic timestamps, HDFS staging, Kafka replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Complete and validated** |
 | **Module 2** | Batch Layer, historical analytics, MongoDB serving, join/pruning/cache benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Complete and validated on the full dataset** |
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
-| **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Implementation complete; Spark runtime validation pending** |
+| **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Fixture/integration validated; full-data acceptance pending. Stopped at user request, 08/10/2026.** |
 
 ---
 
@@ -382,24 +382,28 @@ docker run --rm -v "$PWD:/workspace" -w /workspace --entrypoint python3 \
   - [x] Measure throughput with real producer-rate control and a real Kafka 1/2/4/8 topic sweep.
   - [x] Pass the final hardening Docker suite: `51 passed`; Ruff, Compose, and whitespace checks passed.
   - [x] Store measured evidence in `docs/evidence/module3/`.
-- [x] **Module 4A — ALS Recommendation:**
-  - [x] Read and validate `orders`, `prior`, `train`, and product dimensions with key, FK, `eval_set`, duplicate, and domain checks.
-  - [x] Build deterministic raw/log implicit interactions from `order_products_prior`; official `train` is evaluation-only.
-  - [x] Create the leakage-safe last-prior-order internal holdout and report disjoint order sets/excluded users.
-  - [x] Run bounded ALS tuning with recorded parameters, seed, runtime, metrics, failed trials, and deterministic selection.
-  - [x] Evaluate warm and all-user fallback cohorts at K=5/10/20 with Precision, Recall, MAP, NDCG, and coverage against global-popularity and personal-frequency baselines.
-  - [x] Save versioned ALS models and publish deterministic Top-K warm-user recommendations with unique MongoDB indexes.
-- [x] **Module 4B — Product Co-purchase Graph:**
-  - [x] Build canonical prior-only edges with basket deduplication, threshold experiments, and no self-loop/duplicate pairs.
-  - [x] Compute neighbor count, weighted degree, degree conservation, isolated vertices, and unweighted PageRank through pinned GraphFrames (with a fixture fallback).
-  - [x] Publish versioned graph metrics with unique product/version and PageRank/degree indexes.
-- [x] **Module 4A–4B execution layer:**
-  - [x] Add Spark CLI commands `validate`, `als`, `graph`, and `all`, Docker GraphFrames dependency, Mongo snapshot sinks, and evidence artifacts.
-  - [x] Add fixture-level checks for split leakage, ranking metrics/baselines, ALS schema, graph invariants/PageRank, and deterministic output contracts.
+- [x] **Module 4A — fixture/integration verified:** input validation, prior-only
+  interactions, last-order holdout, bounded pilot/full-internal tuning, final model
+  save/load, K=5/10/20 cohorts/baselines and warm-user Mongo publication.
+- [x] **Module 4B — fixture/integration verified:** canonical prior graph,
+  thresholds 2/5/10, degree conservation, real GraphFrames PageRank/isolation and
+  versioned Mongo publication.
+- [x] **Module 4 execution checks:** standalone worker/HDFS/Mongo smoke, live
+  insert/count/index/rename failure preservation, 78-test repository regression
+  and later 33-test Module 4 suite, with no skips.
+- [x] **Cross-module fixture:** Module 1 partition handoff → Module 2 validation
+  and 4 user features → Module 4; 24 recommendations/6 graph documents validated.
+- [ ] Complete the host-wrapper full-input validation after worker resources free.
+- [ ] Repeat the whole staged model/publication replay with fixed source/config.
+- [ ] Observe the updated GitHub Actions runtime workflow.
+- [ ] Complete a full-data A/B run and validate both serving snapshots.
 
-  Runtime gate: static compilation, Ruff, and Compose validation pass. Spark
-  fixture/full-data execution is not yet recorded because the current host has
-  no Java/PySpark runtime and Docker Desktop is not running.
+  Work stopped at user request on 08/10/2026. Six complete source CSVs were
+  downloaded, cleaned and staged to HDFS. The full-input validate-only job was
+  interrupted while waiting for worker resources; full ALS/graph execution was
+  not started. Docker Desktop failed, so measured runtime checks used a separate
+  Docker Engine 28.5.1 in WSL with the same pinned Spark image. See
+  [Module 4 plan](module4-plan.md) and [actual evidence](evidence/module4/validation-20261008/README.md).
 
 ---
 

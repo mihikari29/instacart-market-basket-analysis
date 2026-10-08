@@ -24,6 +24,11 @@ class Config:
     graph_reset_probability: float = 0.15
     graph_max_iter: int = 10
     graph_backend: str = "graphframes"
+    graph_top_products: int | None = None
+    executor_memory: str = "1g"
+    executor_cores: int = 2
+    total_cores: int = 2
+    als_blocks: int = 4
     mongodb_uri: str = "mongodb://localhost:27017/instacart"
     mongo_database: str = "instacart"
     mongo_recommendation_collection: str = "user_recommendations"
@@ -48,6 +53,14 @@ class Config:
             raise ValueError("graph_reset_probability must be finite")
         if self.graph_backend not in {"graphframes", "dataframe"}:
             raise ValueError("graph_backend must be graphframes or dataframe")
+        if self.graph_top_products is not None and self.graph_top_products < 2:
+            raise ValueError("graph_top_products must be at least two")
+        if min(self.executor_cores, self.total_cores, self.als_blocks) < 1:
+            raise ValueError("executor_cores, total_cores and als_blocks must be positive")
+        import re
+
+        if not re.fullmatch(r"[1-9][0-9]*[mgMG]", self.executor_memory):
+            raise ValueError("executor_memory must be an explicit positive Spark memory size")
         if not self.mongodb_uri:
             raise ValueError("mongodb_uri must not be empty")
         if not self.mongo_database:
@@ -98,6 +111,11 @@ class Config:
             ),
             "graph_max_iter": env_int("MODULE4_GRAPH_MAX_ITER", cls.graph_max_iter),
             "graph_backend": os.environ.get("MODULE4_GRAPH_BACKEND", cls.graph_backend),
+            "graph_top_products": env_int("MODULE4_GRAPH_TOP_PRODUCTS", cls.graph_top_products),
+            "executor_memory": os.environ.get("MODULE4_EXECUTOR_MEMORY", cls.executor_memory),
+            "executor_cores": env_int("MODULE4_EXECUTOR_CORES", cls.executor_cores),
+            "total_cores": env_int("MODULE4_TOTAL_CORES", cls.total_cores),
+            "als_blocks": env_int("MODULE4_ALS_BLOCKS", cls.als_blocks),
             "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
             "mongo_database": os.environ.get("MODULE4_MONGO_DATABASE", cls.mongo_database),
             "mongo_recommendation_collection": os.environ.get(

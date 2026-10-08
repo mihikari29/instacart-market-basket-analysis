@@ -110,3 +110,36 @@ def test_live_mongo_snapshot_replay_and_pre_promote_failure_preserve_active():
             assert db["module4_snapshot_readiness"].find_one({"_id": "active"})["ready"] is False
         finally:
             client.drop_database(database_name)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("failure", ["count", "index", "rename"])
+def test_live_mongo_pre_promote_faults_preserve_previous_snapshot(failure, monkeypatch):
+    uri = os.environ.get("MODULE4_MONGO_TEST_URI")
+    if not uri:
+        pytest.skip("MODULE4_MONGO_TEST_URI is not configured")
+    pymongo = pytest.importorskip("pymongo")
+    from pymongo.synchronous.collection import Collection
+
+    name = f"module4_fault_{uuid.uuid4().hex}"
+    document = {"_id": "g1__1", "product_id": 1, "graph_version": "g1", "run_id": "r1"}
+    with pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000) as client:
+        db = client[name]
+        try:
+            _write_snapshot(db, "graph", [document], ensure_graph_indexes, "graph_version", "g1", "r1", 1)
+            def fail(*args, **kwargs):
+                raise RuntimeError(f"injected {failure} failure")
+
+            with monkeypatch.context() as patch:
+                if failure == "index":
+                    patch.setattr(Collection, "create_index", fail)
+                elif failure == "rename":
+                    patch.setattr(Collection, "rename", fail)
+                with pytest.raises(RuntimeError):
+                    _write_snapshot(db, "graph", [{**document, "_id": "g2__1", "graph_version": "g2"}],
+                                    ensure_graph_indexes, "graph_version", "g2", "r1",
+                                    2 if failure == "count" else 1)
+            assert list(db["graph"].find()) == [document]
+            assert not any("__staging_" in collection for collection in db.list_collection_names())
+        finally:
+            client.drop_database(name)

@@ -70,7 +70,7 @@ def _training_frame(interactions, strength_col: str):
     return frame
 
 
-def build_estimator(params: ALSParams, seed: int = 42):
+def build_estimator(params: ALSParams, seed: int = 42, blocks: int = 4):
     """Build an explicit, reproducible implicit-feedback ALS estimator."""
     from pyspark.ml.recommendation import ALS
 
@@ -79,7 +79,6 @@ def build_estimator(params: ALSParams, seed: int = 42):
             userCol="user_id",
             itemCol="product_id",
             ratingCol="rating",
-            predictionCol="als_score",
             implicitPrefs=True,
             coldStartStrategy="drop",
             rank=params.rank,
@@ -87,19 +86,32 @@ def build_estimator(params: ALSParams, seed: int = 42):
             alpha=params.alpha,
             maxIter=params.max_iter,
             seed=seed,
+            numUserBlocks=blocks,
+            numItemBlocks=blocks,
+            blockSize=512,
         )
     )
 
 
-def fit_model(interactions, params: ALSParams | None = None, seed: int = 42):
+def fit_model(interactions, params: ALSParams | None = None, seed: int = 42, blocks: int = 4):
     """Fit ALS from aggregated prior interactions only."""
     params = params or ALSParams()
-    return build_estimator(params, seed=seed).fit(
+    from pyspark import StorageLevel
+
+    training = (
         _training_frame(interactions, params.strength_col)
+        .repartition(blocks, "user_id")
+        .sortWithinPartitions("user_id", "product_id")
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
+    try:
+        training.count()
+        return build_estimator(params, seed=seed, blocks=blocks).fit(training)
+    finally:
+        training.unpersist(blocking=False)
 
 
-def model_summary(model, params: ALSParams, seed: int, input_frame=None) -> dict[str, Any]:
+def model_summary(model, params: ALSParams, seed: int, input_frame=None, blocks: int = 4) -> dict[str, Any]:
     """Return the model facts required by the Module 4 evidence contract."""
     summary = {
         "params": {
@@ -114,7 +126,23 @@ def model_summary(model, params: ALSParams, seed: int, input_frame=None) -> dict
         "product_factors": int(model.itemFactors.count()),
         "implicit_prefs": True,
         "cold_start_strategy": "drop",
+        "num_user_blocks": blocks,
+        "num_item_blocks": blocks,
+        "checkpoint_interval": 10,
+        "intermediate_storage_level": "MEMORY_AND_DISK",
+        "final_storage_level": "MEMORY_AND_DISK",
+        "recommendation_block_size": model.getBlockSize(),
     }
+    from pyspark.sql import functions as F
+
+    for factors in (model.userFactors, model.itemFactors):
+        if factors.where(F.col("id").isNull() | F.col("features").isNull() | F.exists(
+            "features", lambda value: value.isNull() | F.isnan(value) | (F.abs(value) == float("inf"))
+        )).limit(1).count():
+            raise ValueError("ALS model contains null or non-finite factors")
+    if not summary["user_factors"] or not summary["product_factors"]:
+        raise ValueError("ALS model has empty user/item factors")
+    summary["factors_finite"] = True
     if input_frame is not None:
         summary["input_rows"] = int(input_frame.count())
         summary["input_users"] = int(input_frame.select("user_id").distinct().count())

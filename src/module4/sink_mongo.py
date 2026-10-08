@@ -65,18 +65,31 @@ def _snapshot_validation(collection, version_field, version, expected_count, run
     )
     indexes = collection.index_information()
     expected_indexes = (
-        {"uq_model_user_product", "uq_model_user_rank", "idx_model_user"}
-        if version_field == "model_version"
-        else {"uq_graph_product", "idx_graph_pagerank", "idx_graph_weighted_degree"}
+        {
+            "uq_model_user_product": ([("model_version", 1), ("user_id", 1), ("product_id", 1)], True),
+            "uq_model_user_rank": ([("model_version", 1), ("user_id", 1), ("als_rank", 1)], True),
+            "idx_model_user": ([("model_version", 1), ("user_id", 1)], False),
+        } if version_field == "model_version" else {
+            "uq_graph_product": ([("graph_version", 1), ("product_id", 1)], True),
+            "idx_graph_pagerank": ([("graph_version", 1), ("pagerank", -1)], False),
+            "idx_graph_weighted_degree": ([("graph_version", 1), ("weighted_degree", -1)], False),
+        }
     )
-    missing_indexes = sorted(expected_indexes.difference(indexes))
+    missing_indexes = sorted(set(expected_indexes).difference(indexes))
+    invalid_indexes = sorted(
+        name for name, (keys, unique) in expected_indexes.items()
+        if name in indexes and (
+            list(indexes[name]["key"]) != keys or bool(indexes[name].get("unique", False)) != unique
+        )
+    )
     return {
         "documents": count,
         "expected_documents": int(expected_count),
         "duplicate_keys": len(duplicate),
         "indexes": sorted(indexes),
         "missing_indexes": missing_indexes,
-        "valid": count == int(expected_count) and not duplicate and not missing_indexes,
+        "invalid_indexes": invalid_indexes,
+        "valid": count == int(expected_count) and not duplicate and not missing_indexes and not invalid_indexes,
     }
 
 

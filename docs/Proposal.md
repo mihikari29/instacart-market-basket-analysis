@@ -910,6 +910,8 @@ updated_at
 - Use `order_products__prior` for training/history.
 - Use `order_products__train` as ground truth.
 - Do not use the train set to build the interaction training matrix.
+- Select parameters using each eligible user's last prior order as an internal
+  holdout, then refit on all prior facts before evaluating official train truth.
 
 ## 23.2. Input
 
@@ -979,7 +981,8 @@ Recall@K
 |R_K(u) ∩ G(u)| / |G(u)|
 ```
 
-MAP@K or NDCG@K may be added if time permits.
+Module 4A reports Precision, Recall, MAP and NDCG at K=5/10/20, alongside global
+popularity and personal-frequency baselines on the same warm/all-user cohorts.
 
 ---
 
@@ -994,10 +997,13 @@ als_score
 als_rank
 model_version
 generated_at
+run_id
 ```
 
 - Storage: MongoDB
 - Consumer: Serving Layer
+- Unique indexes: `(model_version, user_id, product_id)` and
+  `(model_version, user_id, als_rank)`; publication covers all prior factor users.
 
 ---
 
@@ -1014,6 +1020,10 @@ product_id
 ### Edge
 
 Two products appear in the same order.
+Only prior baskets are used. Undirected edges use `src < dst`; PageRank expands
+them in both directions and measures unweighted topology centrality. The full
+catalog is the default vertex set; any configured popularity subset must publish
+its scope and coverage in the run manifest.
 
 ### Edge weight
 
@@ -1054,10 +1064,18 @@ neighbor_count
 weighted_degree
 pagerank
 component_id
+graph_version
+min_edge_weight
 computed_at
+run_id
 ```
 
 `component_id` is optional.
+MongoDB enforces unique `(graph_version, product_id)` and indexes PageRank and
+weighted degree. Both outputs are promoted from validated temporary snapshots;
+consumers check `module4_snapshot_readiness` before joining the active A/B pair.
+The implementation and acceptance gates for A/B are tracked separately from C/D
+in [module4-plan.md](module4-plan.md) and [progress.md](progress.md).
 
 ---
 

@@ -58,7 +58,7 @@ from .sink_mongo import (
     update_pair_readiness,
 )
 from .split import make_internal_holdout
-from .spark import session
+from .spark import clear_job_group, session
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -72,8 +72,9 @@ def save_json(path: Path, value) -> None:
 
 def revision() -> dict:
     try:
-        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
-        dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO_ROOT, text=True))
+        git = ["git", "-c", f"safe.directory={REPO_ROOT}"]
+        commit = subprocess.check_output([*git, "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True).strip()
+        dirty = bool(subprocess.check_output([*git, "status", "--porcelain"], cwd=REPO_ROOT, text=True))
         return {"commit": commit, "dirty": dirty}
     except (OSError, subprocess.CalledProcessError):
         return {"commit": os.environ.get("MODULE4_COMMIT", "unavailable"), "dirty": None}
@@ -85,6 +86,9 @@ def source_digest() -> str:
     paths = [
         *REPO_ROOT.joinpath("src/module4").glob("*.py"),
         REPO_ROOT / "scripts/module4.py",
+        REPO_ROOT / "scripts/module4_runtime_smoke.py",
+        REPO_ROOT / "scripts/module4_flow_smoke.py",
+        REPO_ROOT / "scripts/module4_cross_module_smoke.py",
         REPO_ROOT / "Dockerfile.spark",
         REPO_ROOT / "compose.yaml",
         REPO_ROOT / "requirements.txt",
@@ -243,7 +247,7 @@ def tune_als(
                 name: _metric_summary(frame, pilot_truth) for name, frame in baseline_frames.items()
             }
         finally:
-            spark_context.clearJobGroup()
+            clear_job_group(spark_context)
         for trial_id, params in enumerate(_trial_grid(max_trials), 1):
             trial = {
                 "trial_id": trial_id,
@@ -263,7 +267,7 @@ def tune_als(
             )
             try:
                 fit_started = time.perf_counter()
-                model = fit_model(pilot_training, params, config.seed)
+                model = fit_model(pilot_training, params, config.seed, config.als_blocks)
                 trial["fit_runtime_ms"] = round((time.perf_counter() - fit_started) * 1000, 3)
                 trial["user_factors"] = model.userFactors.count()
                 trial["item_factors"] = model.itemFactors.count()
@@ -283,7 +287,7 @@ def tune_als(
                 trial["error"] = f"{type(exc).__name__}: {exc}"
                 trial["traceback"] = traceback.format_exc()
             finally:
-                spark_context.clearJobGroup()
+                clear_job_group(spark_context)
                 if recommendations is not None:
                     recommendations.unpersist(blocking=False)
                 if model is not None:
@@ -311,7 +315,7 @@ def tune_als(
                 name: _metric_summary(frame, full_truth) for name, frame in full_baselines.items()
             }
         finally:
-            spark_context.clearJobGroup()
+            clear_job_group(spark_context)
         for full_id, pilot_trial in enumerate(shortlist, 1):
             params = ALSParams(**pilot_trial["params"])
             trial = {
@@ -335,7 +339,7 @@ def tune_als(
             )
             try:
                 fit_started = time.perf_counter()
-                model = fit_model(full_training, params, config.seed)
+                model = fit_model(full_training, params, config.seed, config.als_blocks)
                 trial["fit_runtime_ms"] = round((time.perf_counter() - fit_started) * 1000, 3)
                 trial["user_factors"] = model.userFactors.count()
                 trial["item_factors"] = model.itemFactors.count()
@@ -355,7 +359,7 @@ def tune_als(
                 trial["error"] = f"{type(exc).__name__}: {exc}"
                 trial["traceback"] = traceback.format_exc()
             finally:
-                spark_context.clearJobGroup()
+                clear_job_group(spark_context)
                 if recommendations is not None:
                     recommendations.unpersist(blocking=False)
                 if model is not None:
@@ -374,7 +378,7 @@ def tune_als(
             return state
         selected = max(full_passed, key=_trial_order)
         state.update(
-            status="passed",
+            status="passed" if len(full_passed) == len(shortlist) else "incomplete",
             selected_trial_id=selected["trial_id"],
             selected_pilot_trial_id=selected["pilot_trial_id"],
             selected_params=selected["params"],
@@ -417,7 +421,7 @@ def _write_hdfs_json(spark, path: str, value: dict) -> None:
         raise FileExistsError(f"Refusing to overwrite model metadata: {path}")
     stream = fs.create(location, False)
     try:
-        stream.write(jvm.java.lang.String(json.dumps(value, sort_keys=True)).getBytes("UTF-8"))
+        stream.write(bytearray(json.dumps(value, sort_keys=True).encode("utf-8")))
     finally:
         stream.close()
 
@@ -527,6 +531,7 @@ def run_als(
     try:
         official_train_orders = tables["orders"].where("eval_set = 'train'").select("order_id")
         split = make_internal_holdout(prior, official_train_orders)
+        save_json(output / "split_summary.json", split["summary"])
         tuning = tune_als(
             split,
             config,
@@ -544,6 +549,7 @@ def run_als(
             "model_version": model_version,
             "params": asdict(selected),
             "seed": config.seed,
+            "als_blocks": config.als_blocks,
             "source_receipt_sha256": input_receipt["receipt_sha256"],
             "source_code_sha256": code_hash,
             "interaction_users": interactions.select("user_id").distinct().count(),
@@ -564,11 +570,25 @@ def run_als(
             model = load_model(model_path)
             reused = True
         else:
-            model = fit_model(interactions, selected, config.seed)
+            model = fit_model(interactions, selected, config.seed, config.als_blocks)
+            verification_users = interactions.select("user_id").distinct().orderBy("user_id").limit(5)
+            before_save = recommend_top_k(model, verification_users, config.recommendation_k).orderBy(
+                "user_id", "als_rank"
+            ).collect()
             save_model(model, model_path)
             _write_hdfs_json(spark, marker_path, expected_model_metadata)
+            _unpersist_model(model)
             model = load_model(model_path)
-        model_report = model_summary(model, selected, config.seed, interactions)
+            after_load = recommend_top_k(model, verification_users, config.recommendation_k).orderBy(
+                "user_id", "als_rank"
+            ).collect()
+            if len(before_save) != len(after_load) or any(
+                (left.user_id, left.product_id, left.als_rank) != (right.user_id, right.product_id, right.als_rank)
+                or abs(left.als_score - right.als_score) > 1e-6
+                for left, right in zip(before_save, after_load)
+            ):
+                raise ValueError("saved/reloaded ALS recommendation verification failed")
+        model_report = model_summary(model, selected, config.seed, interactions, config.als_blocks)
         expected_user_count = expected_model_metadata["interaction_users"]
         expected_item_count = expected_model_metadata["interaction_products"]
         if model_report["user_factors"] != expected_user_count:
@@ -581,8 +601,13 @@ def run_als(
                 "model_path": model_path,
                 "reused_existing_model": reused,
                 "save_load_verified": True,
+                "save_load_recommendation_tolerance": 1e-6,
+                "model_bytes": int(spark._jvm.org.apache.hadoop.fs.Path(model_path).getFileSystem(
+                    spark.sparkContext._jsc.hadoopConfiguration()
+                ).getContentSummary(spark._jvm.org.apache.hadoop.fs.Path(model_path)).getLength()),
             }
         )
+        save_json(output / "als_model.json", model_report)
 
         factor_users = model.userFactors.select(F.col("id").alias("user_id")).distinct().cache()
         factor_items = model.itemFactors.select(F.col("id").alias("product_id")).distinct().cache()
@@ -723,7 +748,7 @@ def run_als(
             "duration_ms": round((time.perf_counter() - started) * 1000, 3),
         }
     finally:
-        spark.sparkContext.clearJobGroup()
+        clear_job_group(spark.sparkContext)
         interactions.unpersist(blocking=False)
         train_truth.unpersist(blocking=False)
         all_prior_users.unpersist(blocking=False)
@@ -761,18 +786,33 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
 
     started = time.perf_counter()
     graph_started = time.perf_counter()
-    spark.sparkContext.setJobGroup("module4.graph.raw_edges", "Module 4 prior-only co-purchase edges", True)
-    raw_edges = build_edges(prior, min_edge_weight=1).cache()
-    raw_edge_count = raw_edges.count()
-    spark.sparkContext.clearJobGroup()
-    vertices = build_vertices(prior, tables["products"]).cache()
+    catalog_count = tables["products"].count()
+    full_prior_count = prior.count()
+    graph_products = tables["products"]
+    graph_scope = "full_catalog_vertices_and_prior_baskets"
+    selected_ids_sha256 = None
+    if config.graph_top_products is not None:
+        selected_products = prior.groupBy("product_id").count().orderBy(
+            F.desc("count"), F.asc("product_id")
+        ).limit(config.graph_top_products).select("product_id").cache()
+        selected_ids_sha256 = hashlib.sha256(
+            json.dumps([row.product_id for row in selected_products.orderBy("product_id").collect()]).encode()
+        ).hexdigest()
+        graph_products = graph_products.join(selected_products, "product_id")
+        prior = prior.join(selected_products, "product_id").cache()
+        graph_scope = "top_prior_popularity_product_subset"
+    vertices = build_vertices(prior, graph_products).cache()
     vertex_count = vertices.count()
     basket_sizes = prior.groupBy("order_id").agg(F.countDistinct("product_id").alias("basket_size"))
     basket_quantiles = basket_sizes.approxQuantile("basket_size", [0.5, 0.9, 0.95, 0.99, 1.0], 0.001)
     pair_expansion = basket_sizes.agg(
         F.sum((F.col("basket_size") * (F.col("basket_size") - 1) / 2).cast("double")).alias("pairs")
     ).first().pairs or 0.0
-    prior_fact_count = prior.select("order_id", "product_id").distinct().count()
+    prior_fact_count = prior.count()
+    spark.sparkContext.setJobGroup("module4.graph.raw_edges", "Module 4 prior-only co-purchase edges", True)
+    raw_edges = build_edges(prior, min_edge_weight=1).cache()
+    raw_edge_count = raw_edges.count()
+    clear_job_group(spark.sparkContext)
     thresholds = sorted({2, 5, 10, config.graph_min_edge_weight})
     trials = []
     for threshold in thresholds:
@@ -800,13 +840,14 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
         trials.append(
             {
                 "min_edge_weight": threshold,
-                "graph_scope": "full_catalog_vertices_and_prior_baskets",
+                "graph_scope": graph_scope,
                 "vertex_count": vertex_count,
                 **edge_summary,
                 "directed_edge_count": directed_count,
                 "active_product_count": active_products,
-                "catalog_product_coverage": active_products / vertex_count if vertex_count else 0.0,
-                "prior_fact_coverage": covered_facts / prior_fact_count if prior_fact_count else 0.0,
+                "catalog_product_coverage": active_products / catalog_count if catalog_count else 0.0,
+                "prior_fact_coverage": covered_facts / full_prior_count if full_prior_count else 0.0,
+                "scope_product_coverage": active_products / vertex_count if vertex_count else 0.0,
                 "isolated_vertices": isolated,
                 "neighbor_count_quantiles": degree_quantiles,
                 "edge_weight_quantiles": weight_quantiles,
@@ -815,7 +856,7 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
             }
         )
         edges.unpersist(blocking=False)
-        spark.sparkContext.clearJobGroup()
+        clear_job_group(spark.sparkContext)
     edges = raw_edges.where(F.col("weight") >= config.graph_min_edge_weight).cache()
     validate_edges(edges)
     spark.sparkContext.setJobGroup("module4.graph.final_metrics", "Module 4 final GraphFrames metrics", True)
@@ -833,7 +874,14 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
             "reset_probability": config.graph_reset_probability,
             "max_iter": config.graph_max_iter,
             "directed_edge_count": _validate_directed_edges(edges),
-            "graph_scope": "full_catalog_vertices_and_prior_baskets",
+            "graph_scope": graph_scope,
+            "top_products_requested": config.graph_top_products,
+            "selected_product_ids_sha256": selected_ids_sha256,
+            "catalog_products": catalog_count,
+            "catalog_scope_coverage": vertex_count / catalog_count if catalog_count else 0.0,
+            "prior_facts_in_scope": prior_fact_count,
+            "prior_facts_total": full_prior_count,
+            "prior_fact_scope_coverage": prior_fact_count / full_prior_count if full_prior_count else 0.0,
             "raw_edge_count_at_weight_1": raw_edge_count,
             "basket_count": basket_sizes.count(),
             "basket_size_quantiles": basket_quantiles,
@@ -852,10 +900,13 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
         for metric in ("pagerank", "weighted_degree", "neighbor_count")
     }
     graph_runtime = round((time.perf_counter() - graph_started) * 1000, 3)
-    spark.sparkContext.clearJobGroup()
+    clear_job_group(spark.sparkContext)
     raw_edges.unpersist(blocking=False)
     vertices.unpersist(blocking=False)
     edges.unpersist(blocking=False)
+    if config.graph_top_products is not None:
+        prior.unpersist(blocking=False)
+        selected_products.unpersist(blocking=False)
     return {
         "trials": trials,
         "validation": validation,
@@ -893,6 +944,26 @@ def _runtime_metadata(spark):
     }
 
 
+def _mongo_preflight(config, run_id):
+    from pymongo import MongoClient
+
+    name = f"module4_preflight_{run_id}"
+    promoted_name = name + "_rename"
+    with MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=10000) as client:
+        client.admin.command("ping")
+        db = client[config.mongo_database]
+        try:
+            db[name].insert_one({"_id": run_id, "probe": 1})
+            db[name].create_index("probe", unique=True)
+            db[name].rename(promoted_name)
+            if db[promoted_name].count_documents({"_id": run_id}) != 1:
+                raise RuntimeError("MongoDB preflight rename/read-back failed")
+        finally:
+            db[name].drop()
+            db[promoted_name].drop()
+    return {"ping": "passed", "insert_index_rename_readback": "passed"}
+
+
 def _save_run_artifacts(output: Path, report: dict):
     finished = datetime.now(timezone.utc).isoformat()
     report["finished_at_utc"] = finished
@@ -903,6 +974,10 @@ def _save_run_artifacts(output: Path, report: dict):
         "status": report.get("status"),
         "stages": report.get("stages", {}),
         "source_receipt": report.get("validation", {}).get("source_receipt"),
+        "input_source_receipt": report.get("input_source_receipt"),
+        "scope": report.get("scope"),
+        "acceptance_status": report.get("acceptance_status"),
+        "checkpoint": report.get("checkpoint"),
         "eventlog": report.get("eventlog"),
         "error": report.get("error"),
         "started_at_utc": report.get("started_at_utc"),
@@ -956,9 +1031,17 @@ def build_parser():
     parser.add_argument("--graph-reset-probability", type=float)
     parser.add_argument("--graph-max-iter", type=int)
     parser.add_argument("--graph-backend", choices=["graphframes", "dataframe"])
+    parser.add_argument("--graph-top-products", type=int)
+    parser.add_argument("--executor-memory")
+    parser.add_argument("--executor-cores", type=int)
+    parser.add_argument("--total-cores", type=int)
+    parser.add_argument("--als-blocks", type=int)
     parser.add_argument("--pilot-users", type=int, default=5000)
     parser.add_argument("--max-trials", type=int, default=12)
     parser.add_argument("--output", type=Path, default=Path("results/module4"))
+    parser.add_argument("--scope", choices=["staged_curated", "staged_fixture", "full_data"],
+                        default="staged_curated")
+    parser.add_argument("--source-receipt", type=Path)
     parser.add_argument("--run-id")
     parser.add_argument("--model-version")
     parser.add_argument("--graph-version")
@@ -978,8 +1061,17 @@ def main(argv=None):
         "graph_reset_probability": args.graph_reset_probability,
         "graph_max_iter": args.graph_max_iter,
         "graph_backend": args.graph_backend,
+        "graph_top_products": args.graph_top_products,
+        "executor_memory": args.executor_memory,
+        "executor_cores": args.executor_cores,
+        "total_cores": args.total_cores,
+        "als_blocks": args.als_blocks,
     }
     config = Config.environment(**{key: value for key, value in overrides.items() if value is not None})
+    if config.graph_backend == "dataframe" and args.scope != "staged_fixture":
+        raise ValueError("the dataframe graph backend is restricted to explicit staged_fixture scope")
+    if args.scope == "full_data" and args.source_receipt is None:
+        raise ValueError("full_data scope requires --source-receipt from the verified source download")
     if args.pilot_users < 1:
         raise ValueError("pilot_users must be positive")
     if not 1 <= args.max_trials <= 12:
@@ -997,7 +1089,7 @@ def main(argv=None):
     report = {
         "run_id": run_id,
         "status": "running",
-        "scope": "staged_curated_not_yet_full_data_accepted",
+        "scope": args.scope,
         "serving_status": "skipped" if args.skip_serving else "pending",
         "started_at_utc": started_at,
         "stages": {"input_validation": "pending"},
@@ -1022,7 +1114,15 @@ def main(argv=None):
     exit_code = 0
     try:
         spark = session(config, output / "eventlog")
+        checkpoint_path = config.root.rstrip("/") + "/checkpoints/module4/" + run_id
+        spark.sparkContext.setCheckpointDir(checkpoint_path)
+        report["checkpoint"] = {"path": checkpoint_path, "ownership": run_id, "retention": "retained for audit"}
         report["environment"].update(_runtime_metadata(spark))
+        report["preflight"] = (
+            {"mongo": "skipped_by_request_or_validation_only"}
+            if args.skip_serving or args.command == "validate"
+            else {"mongo": _mongo_preflight(config, run_id)}
+        )
         input_started = time.perf_counter()
         tables = read_inputs(spark, config)
         spark.sparkContext.setJobGroup(
@@ -1031,8 +1131,19 @@ def main(argv=None):
         try:
             validation = validate_inputs(tables)
         finally:
-            spark.sparkContext.clearJobGroup()
+            clear_job_group(spark.sparkContext)
         source_receipt = validate_source_receipts(spark, config, tables, verify_counts=True)
+        if args.scope == "full_data":
+            source_bytes = args.source_receipt.read_bytes()
+            download_receipt = json.loads(source_bytes)
+            for name, csv_name in {"orders": "orders.csv", "prior": "order_products__prior.csv",
+                                   "train": "order_products__train.csv", "products": "products.csv"}.items():
+                if download_receipt["files"][csv_name]["rows"] != validation["counts"][name]:
+                    raise ValueError(f"full-data source/staged row count mismatch for {name}")
+            report["input_source_receipt"] = {
+                "file": str(args.source_receipt), "sha256": hashlib.sha256(source_bytes).hexdigest(),
+                "receipt": download_receipt,
+            }
         validation["schema"] = {name: frame.schema.simpleString() for name, frame in tables.items()}
         validation["source_receipt"] = source_receipt
         report["validation"] = validation
@@ -1152,7 +1263,7 @@ def main(argv=None):
                                     client=mongo_client,
                                 )
                             finally:
-                                spark.sparkContext.clearJobGroup()
+                                clear_job_group(spark.sparkContext)
                             als_mongo["published"] = True
                             als_result["mongo"] = als_mongo
                             report["als"]["mongo"] = als_mongo
@@ -1177,7 +1288,7 @@ def main(argv=None):
                                     client=mongo_client,
                                 )
                             finally:
-                                spark.sparkContext.clearJobGroup()
+                                clear_job_group(spark.sparkContext)
                             graph_mongo["published"] = True
                             graph_result["mongo"] = graph_mongo
                             report["graph"]["mongo"] = graph_mongo
@@ -1238,7 +1349,10 @@ def main(argv=None):
                 report["serving_status"] = "published_and_validated"
                 report.update(
                     status="passed",
-                    acceptance_status="run_passed_full_data_acceptance_not_claimed",
+                    acceptance_status=(
+                        "full_data_pair_validated" if args.scope == "full_data" and both_published
+                        else "run_passed_full_data_acceptance_not_claimed"
+                    ),
                 )
         save_json(output / "summary.json", report)
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
@@ -1264,10 +1378,14 @@ def main(argv=None):
         }
         print(f"[FAILED] {current_stage}: {type(exc).__name__}: {exc}", flush=True)
     finally:
-        if als_result and als_result.get("recommendations") is not None:
-            als_result["recommendations"].unpersist(blocking=False)
-        if graph_result and graph_result.get("metrics") is not None:
-            graph_result["metrics"].unpersist(blocking=False)
+        for result, name in ((als_result, "recommendations"), (graph_result, "metrics")):
+            if result and result.get(name) is not None:
+                try:
+                    result[name].unpersist(blocking=False)
+                except Exception as cleanup_error:
+                    report.setdefault("cleanup_errors", []).append(
+                        f"{name}: {type(cleanup_error).__name__}: {cleanup_error}"
+                    )
         if spark is not None:
             try:
                 spark.stop()
@@ -1300,6 +1418,9 @@ def main(argv=None):
                     report.setdefault("evidence_warnings", []).append(
                         f"Spark event log metrics could not be parsed: {event_error}"
                     )
+                    if report.get("status") in {"passed", "compute_passed"}:
+                        report.update(status="failed", failed_stage="event_log_validation")
+                        exit_code = 1
             else:
                 report["eventlog"] = {"status": "missing", "directory": str(eventlog_directory)}
         _save_run_artifacts(output, report)

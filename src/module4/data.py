@@ -97,19 +97,11 @@ def _read_hdfs_json(spark, path: str) -> dict:
 
 def _hdfs_sha256(spark, fs, path) -> str:
     jvm = spark._jvm
-    gateway = spark.sparkContext._gateway
-    digest = jvm.java.security.MessageDigest.getInstance("SHA-256")
     stream = fs.open(path)
-    buffer = gateway.new_array(jvm.java.lang.Byte.TYPE, 1024 * 1024)
     try:
-        while True:
-            size = stream.read(buffer)
-            if size < 0:
-                break
-            digest.update(buffer, 0, size)
+        return str(jvm.org.apache.commons.codec.digest.DigestUtils.sha256Hex(stream))
     finally:
         stream.close()
-    return "".join(f"{int(value) & 255:02x}" for value in digest.digest())
 
 
 def validate_source_receipts(spark, config, tables, verify_counts=True) -> dict:

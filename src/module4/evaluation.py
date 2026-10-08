@@ -52,7 +52,7 @@ def _score_lists(predicted, truth, k: int = 20):
     return (float(average_precision), float(dcg / idcg) if idcg else 0.0)
 
 
-def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | None = None) -> dict:
+def _ranking_metrics_many(recommendations, truth, ks, catalog_size=None) -> dict:
     """Compute macro P/R/MAP/NDCG and coverage over non-empty truth users.
 
     Precision always uses ``K`` as its denominator, including when Spark
@@ -61,8 +61,9 @@ def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | Non
     """
     from pyspark.sql import functions as F
 
-    if k < 1:
-        raise ValueError("k must be positive")
+    ks = tuple(sorted(set(ks)))
+    if not ks or any(not isinstance(k, int) or k < 1 for k in ks):
+        raise ValueError("ks must contain positive integers")
     for name, frame, columns in (
         ("recommendations", recommendations, {"user_id", "product_id"}),
         ("truth", truth, {"user_id", "ground_truth"}),
@@ -83,7 +84,7 @@ def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | Non
         | (F.col("product_id") <= 0)
         | F.col("als_rank").isNull()
         | (F.col("als_rank") < 1)
-        | (F.col("als_rank") > max(k, 20))
+        | (F.col("als_rank") != F.col("als_rank").cast("long"))
     )
     if "als_score" in recommendations.columns:
         invalid_recommendation = invalid_recommendation | F.col("als_score").isNull() | F.isnan("als_score") | (
@@ -106,7 +107,7 @@ def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | Non
         raise ValueError("truth contains invalid or duplicate product IDs")
 
     predicted = (
-        _top_k(recommendations, k)
+        _top_k(recommendations, max(ks))
         .where(F.col("product_id").isNotNull())
         .groupBy("user_id")
         .agg(
@@ -116,70 +117,91 @@ def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | Non
         )
         .select("user_id", F.expr("transform(ranked, x -> x.product_id)").alias("predicted"))
     )
+    spark = recommendations.sparkSession
+    k_frame = spark.createDataFrame([(k,) for k in ks], "k int")
     evaluated = (
         truth.where(F.size("ground_truth") > 0)
         .join(predicted, "user_id", "left")
+        .crossJoin(k_frame)
         .withColumn(
             "predicted",
             F.when(F.col("predicted").isNull(), F.array().cast("array<int>")).otherwise(
-                F.col("predicted").cast("array<int>")
+                F.slice(F.col("predicted").cast("array<int>"), F.lit(1), F.col("k"))
             ),
         )
         .withColumn("hits", F.size(F.array_intersect("predicted", "ground_truth")))
-        .withColumn("precision_at_k", F.col("hits") / F.lit(float(k)))
+        .withColumn("precision_at_k", F.col("hits") / F.col("k"))
         .withColumn("recall_at_k", F.col("hits") / F.size("ground_truth"))
     )
-    evaluated = evaluated.withColumn(
-        "ranking", F.udf(_score_lists, _ranking_detail())("predicted", "ground_truth", F.lit(k))
-    )
-    summary = evaluated.agg(
+    # Compute AP/DCG with Spark expressions so workers do not need a Python UDF.
+    hits = F.transform("predicted", lambda product, index: F.struct(
+        F.when(F.array_contains(F.col("ground_truth"), product), 1.0).otherwise(0.0).alias("hit"),
+        (index + 1).cast("double").alias("position"),
+    ))
+    initial = F.struct(F.lit(0.0).alias("hits"), F.lit(0.0).alias("ap"), F.lit(0.0).alias("dcg"))
+    details = F.aggregate(hits, initial, lambda acc, item: F.struct(
+        (acc.hits + item.hit).alias("hits"),
+        (acc.ap + item.hit * (acc.hits + item.hit) / item.position).alias("ap"),
+        (acc.dcg + item.hit / F.log2(item.position + 1.0)).alias("dcg"),
+    ))
+    ideal_size = F.least(F.col("k"), F.size("ground_truth"))
+    ideal_dcg = F.aggregate(F.sequence(F.lit(1), ideal_size), F.lit(0.0),
+                            lambda acc, position: acc + 1.0 / F.log2(position + 1.0))
+    evaluated = evaluated.withColumn("ranking", details).cache()
+    summaries = evaluated.groupBy("k").agg(
         F.count("*").alias("evaluated_users"),
         F.avg("precision_at_k").alias("precision_at_k"),
         F.avg("recall_at_k").alias("recall_at_k"),
-        F.avg("ranking.average_precision").alias("map_at_k"),
-        F.avg("ranking.ndcg").alias("ndcg_at_k"),
-    ).first()
-    truth_users = truth.where(F.size("ground_truth") > 0).select("user_id").distinct().count()
-    cohort_users = truth.where(F.size("ground_truth") > 0).select("user_id").distinct()
-    cohort_predictions = predicted.join(cohort_users, "user_id", "inner")
-    predicted_users = cohort_predictions.select("user_id").distinct().count()
-    predicted_products = cohort_predictions.select(
-        F.explode("predicted").alias("product_id")
-    ).distinct().count()
-    if catalog_size is not None and predicted_products > catalog_size:
-        raise ValueError("recommendation products exceed the declared catalog size")
-    count_stats = evaluated.agg(
+        F.avg(F.col("ranking.ap") / ideal_size).alias("map_at_k"),
+        F.avg(F.col("ranking.dcg") / ideal_dcg).alias("ndcg_at_k"),
         F.avg(F.size("predicted")).alias("avg_count"),
         F.min(F.size("predicted")).alias("min_count"),
         F.max(F.size("predicted")).alias("max_count"),
-    ).first()
-    applicable = int(summary.evaluated_users or 0) > 0
-    return {
-        "k": k,
-        "evaluated_users": int(summary.evaluated_users or 0),
+        F.sum(F.when(F.size("predicted") > 0, 1).otherwise(0)).alias("predicted_users"),
+        F.sum(F.when(F.size("predicted") == 0, 1).otherwise(0)).alias("missing_users"),
+    )
+    try:
+        summary_by_k = {row.k: row for row in summaries.collect()}
+        products_by_k = {row.k: row.products for row in evaluated.select(
+            "k", F.explode("predicted").alias("product_id")
+        ).groupBy("k").agg(F.countDistinct("product_id").alias("products")).collect()}
+    finally:
+        evaluated.unpersist(blocking=False)
+    results = {}
+    for k in ks:
+        summary = summary_by_k.get(k)
+        applicable = summary is not None and summary.evaluated_users > 0
+        predicted_products = products_by_k.get(k, 0)
+        if catalog_size is not None and predicted_products > catalog_size:
+            raise ValueError("recommendation products exceed the declared catalog size")
+        results[str(k)] = {
+        "k": int(k),
+        "evaluated_users": int(summary.evaluated_users) if applicable else 0,
         "status": "evaluated" if applicable else "not_applicable_empty_cohort",
         "precision_at_k": float(summary.precision_at_k) if applicable else None,
         "recall_at_k": float(summary.recall_at_k) if applicable else None,
         "map_at_k": float(summary.map_at_k) if applicable else None,
         "ndcg_at_k": float(summary.ndcg_at_k) if applicable else None,
-        "user_coverage": (predicted_users / truth_users) if truth_users else 0.0,
+        "user_coverage": summary.predicted_users / summary.evaluated_users if applicable else 0.0,
         "catalog_coverage": predicted_products,
         "catalog_coverage_rate": (
             predicted_products / catalog_size if catalog_size and catalog_size > 0 else 0.0
         ),
-        "average_recommendations_per_user": float(count_stats.avg_count or 0.0) if applicable else None,
-        "min_recommendations_per_user": int(count_stats.min_count or 0) if applicable else None,
-        "max_recommendations_per_user": int(count_stats.max_count or 0) if applicable else None,
-        "users_with_no_recommendations": evaluated.where(F.size("predicted") == 0).count(),
+        "average_recommendations_per_user": float(summary.avg_count or 0.0) if applicable else None,
+        "min_recommendations_per_user": int(summary.min_count or 0) if applicable else None,
+        "max_recommendations_per_user": int(summary.max_count or 0) if applicable else None,
+        "users_with_no_recommendations": int(summary.missing_users) if applicable else 0,
     }
+    return results
+
+
+def ranking_metrics(recommendations, truth, k: int = 10, catalog_size: int | None = None) -> dict:
+    return _ranking_metrics_many(recommendations, truth, (k,), catalog_size)[str(k)]
 
 
 def evaluate_at_k(recommendations, truth, ks=(5, 10, 20), catalog_size=None) -> dict:
     """Evaluate one recommendation frame at every requested K."""
-    return {
-        str(k): ranking_metrics(recommendations, truth, k, catalog_size=catalog_size)
-        for k in ks
-    }
+    return _ranking_metrics_many(recommendations, truth, ks, catalog_size)
 
 
 def personal_frequency(interactions, users, k: int = 20):

@@ -17,8 +17,11 @@ def make_internal_holdout(prior_enriched, official_train_order_ids=None):
     if missing:
         raise ValueError(f"prior_enriched: missing required columns {sorted(missing)}")
 
-    if prior_enriched.groupBy("user_id", "order_number").count().where("count > 1").limit(1).count():
+    orders = prior_enriched.select("user_id", "order_id", "order_number").distinct()
+    if orders.groupBy("user_id", "order_number").count().where("count > 1").limit(1).count():
         raise ValueError("prior orders do not have unique user/order_number chronology keys")
+    if orders.groupBy("order_id").count().where("count > 1").limit(1).count():
+        raise ValueError("prior order_id maps to multiple users or chronology values")
 
     user_window = Window.partitionBy("user_id")
     eligible = (
@@ -46,7 +49,7 @@ def make_internal_holdout(prior_enriched, official_train_order_ids=None):
     if training_order_ids.join(heldout_order_ids, "order_id", "inner").limit(1).count():
         raise ValueError("internal split leaked an order between training and validation")
     holdout_chronology = last_order.join(
-        eligible_facts.select("user_id", "order_id", "order_number"), ["user_id", "order_id"]
+        orders, ["user_id", "order_id"]
     ).select("user_id", F.col("order_number").alias("holdout_order_number"))
     if (
         training.alias("history")

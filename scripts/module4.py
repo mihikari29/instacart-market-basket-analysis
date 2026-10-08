@@ -28,16 +28,18 @@ def main(argv=None):
     if shutil.which("docker") is None:
         raise RuntimeError("Docker CLI is required; install/start Docker Desktop and retry")
 
-    skip_serving = "--skip-serving" in forwarded
+    skip_serving = "--skip-serving" in forwarded or forwarded[0] == "validate"
     services = ["namenode", "datanode", "spark-master", "spark-worker"]
     if not skip_serving:
         services.append("mongodb")
-    up = ["docker", "compose", "up", "-d"]
+    up = ["docker", "compose", "up", "-d", "--wait"]
     if options.build:
         up.append("--build")
     subprocess.run([*up, *services], cwd=root, check=True)
 
-    commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    commit = subprocess.check_output(
+        ["git", "-c", f"safe.directory={root}", "rev-parse", "HEAD"], cwd=root, text=True
+    ).strip()
     run_args = [
         "docker", "compose", "run", "--rm", "--use-aliases", "--no-deps",
         "-e", f"MODULE4_COMMIT={commit}", "module4", *forwarded,

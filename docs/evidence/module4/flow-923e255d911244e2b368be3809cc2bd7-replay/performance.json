@@ -1,0 +1,87 @@
+{
+  "als_ms": null,
+  "graph_ms": null,
+  "spark_job_groups": {
+    "module4.als.final": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 554,
+      "failed_task_attempts": 0,
+      "input_bytes": 10297,
+      "input_records": 30,
+      "referenced_stages": 17,
+      "shuffle_read_bytes": 3332,
+      "shuffle_write_bytes": 3332,
+      "skipped_stages": 6,
+      "stages": 11,
+      "tasks": 53
+    },
+    "module4.als.full_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 11183,
+      "failed_task_attempts": 0,
+      "input_bytes": 52396,
+      "input_records": 100,
+      "referenced_stages": 303,
+      "shuffle_read_bytes": 14612,
+      "shuffle_write_bytes": 7108,
+      "skipped_stages": 239,
+      "stages": 64,
+      "tasks": 506
+    },
+    "module4.als.full_validation.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 5219,
+      "failed_task_attempts": 0,
+      "input_bytes": 53089,
+      "input_records": 196,
+      "referenced_stages": 857,
+      "shuffle_read_bytes": 53624,
+      "shuffle_write_bytes": 52430,
+      "skipped_stages": 772,
+      "stages": 85,
+      "tasks": 412
+    },
+    "module4.als.pilot.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 8535,
+      "failed_task_attempts": 0,
+      "input_bytes": 50560,
+      "input_records": 189,
+      "referenced_stages": 1277,
+      "shuffle_read_bytes": 54096,
+      "shuffle_write_bytes": 52548,
+      "skipped_stages": 1191,
+      "stages": 86,
+      "tasks": 413
+    },
+    "module4.als.pilot_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 14814,
+      "failed_task_attempts": 0,
+      "input_bytes": 40456,
+      "input_records": 73,
+      "referenced_stages": 340,
+      "shuffle_read_bytes": 9090,
+      "shuffle_write_bytes": 7698,
+      "skipped_stages": 271,
+      "stages": 69,
+      "tasks": 455
+    },
+    "module4.input_validation": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 10435,
+      "failed_task_attempts": 0,
+      "input_bytes": 55186,
+      "input_records": 360,
+      "referenced_stages": 125,
+      "shuffle_read_bytes": 18925,
+      "shuffle_write_bytes": 18865,
+      "skipped_stages": 2,
+      "stages": 123,
+      "tasks": 364
+    }
+  },
+  "stages": {
+    "input_validation": 29221.208
+  }
+}

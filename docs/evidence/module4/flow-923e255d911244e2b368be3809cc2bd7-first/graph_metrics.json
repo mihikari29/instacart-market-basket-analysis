@@ -1,0 +1,147 @@
+{
+  "top20": {
+    "neighbor_count": [
+      {
+        "neighbor_count": 2,
+        "pagerank": 2.0742479576661634,
+        "product_id": 1,
+        "product_name": "one",
+        "weighted_degree": 4
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 2,
+        "product_name": "two",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 3,
+        "product_name": "three",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 4,
+        "product_name": "cold truth",
+        "weighted_degree": 0
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 5,
+        "product_name": "isolated catalog product",
+        "weighted_degree": 0
+      }
+    ],
+    "pagerank": [
+      {
+        "neighbor_count": 2,
+        "pagerank": 2.0742479576661634,
+        "product_id": 1,
+        "product_name": "one",
+        "weighted_degree": 4
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 2,
+        "product_name": "two",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 3,
+        "product_name": "three",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 4,
+        "product_name": "cold truth",
+        "weighted_degree": 0
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 5,
+        "product_name": "isolated catalog product",
+        "weighted_degree": 0
+      }
+    ],
+    "weighted_degree": [
+      {
+        "neighbor_count": 2,
+        "pagerank": 2.0742479576661634,
+        "product_id": 1,
+        "product_name": "one",
+        "weighted_degree": 4
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 2,
+        "product_name": "two",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 1,
+        "pagerank": 1.2356032938941908,
+        "product_id": 3,
+        "product_name": "three",
+        "weighted_degree": 2
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 4,
+        "product_name": "cold truth",
+        "weighted_degree": 0
+      },
+      {
+        "neighbor_count": 0,
+        "pagerank": 0.22727272727272727,
+        "product_id": 5,
+        "product_name": "isolated catalog product",
+        "weighted_degree": 0
+      }
+    ]
+  },
+  "validation": {
+    "backend": "graphframes",
+    "basket_count": 5,
+    "basket_size_quantiles": [
+      2.0,
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ],
+    "catalog_products": 5,
+    "catalog_scope_coverage": 1.0,
+    "directed_edge_count": 4,
+    "edge_count": 2,
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 2,
+    "max_iter": 10,
+    "pagerank_backend_validation": "passed",
+    "pagerank_finite": true,
+    "pair_expansion_count": 5.0,
+    "prior_fact_scope_coverage": 1.0,
+    "prior_facts_in_scope": 10,
+    "prior_facts_total": 10,
+    "raw_edge_count_at_weight_1": 3,
+    "reset_probability": 0.15,
+    "selected_product_ids_sha256": null,
+    "threshold_selection": "configured prior-only threshold; no official train signal used",
+    "top_products_requested": null,
+    "total_edge_weight": 4,
+    "vertex_count": 5,
+    "weighted_degree_sum": 8
+  }
+}

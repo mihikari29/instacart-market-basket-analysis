@@ -1,0 +1,3 @@
+Tests were executed independently of this pipeline run; source/config digests in the manifests identify each attempt.
+Full regression: 78 passed, no skips (see ../validation-20261008/regression-tests.txt).
+Later Module 4 suite: 33 passed, no skips (see ../validation-20261008/module4-tests.txt).

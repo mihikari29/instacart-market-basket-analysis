@@ -21,7 +21,7 @@ def _write_json_hdfs(spark, path: str, value: dict):
     fs = location.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
     stream = fs.create(location, False)
     try:
-        stream.write(jvm.java.lang.String(json.dumps(value, sort_keys=True)).getBytes("UTF-8"))
+        stream.write(bytearray(json.dumps(value, sort_keys=True).encode("utf-8")))
     finally:
         stream.close()
 
@@ -116,6 +116,8 @@ def _run_cli(root: Path, fixture_root: str, output_root: str, run_id: str, model
         "20",
         "--max-trials",
         "1",
+        "--scope",
+        "staged_fixture",
     ]
     result = subprocess.run(args, cwd=root, text=True, capture_output=True, check=False)
     log_path = root / output_root / run_id / "flow-command.log"
@@ -217,6 +219,8 @@ def main():
             spark.stop()
         if hdfs_path is not None and fs.exists(hdfs_path):
             fs.delete(hdfs_path, True)
+        with MongoClient(mongo_uri, serverSelectionTimeoutMS=5000) as client:
+            client.drop_database(mongo_database)
 
 
 if __name__ == "__main__":

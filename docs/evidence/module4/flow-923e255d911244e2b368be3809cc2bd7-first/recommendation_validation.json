@@ -1,0 +1,10 @@
+{
+  "actual_rows": 9,
+  "expected_rows": 9,
+  "generated_users": 3,
+  "product_foreign_keys_valid": true,
+  "products_per_user": 3,
+  "rank_product_keys_unique": true,
+  "requested_users": 3,
+  "user_set_exact": true
+}

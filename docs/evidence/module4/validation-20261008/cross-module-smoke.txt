@@ -1,0 +1,74 @@
+wsl : Setting default log level to "WARN".
+At line:2 char:347
++ ... g -Tail 18; wsl -d Ubuntu-24.04 -u root -- bash /mnt/d/instacart-mark ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Setting default log level to "WARN".:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/10/08 14:58:28 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java
+classes where applicable
+
+[Stage 0:>                                                          (0 + 1) / 1]
+
+
+
+[Stage 7:>                                                          (0 + 1) / 1]
+
+
+
+[Stage 97:==========================================================(8 + 0) / 8]
+
+
+
+[Stage 112:>                                                        (0 + 2) / 8]
+
+[Stage 112:==========================================>              (6 + 2) / 8]
+
+
+
+[Stage 181:==============>                                          (2 + 2) / 8]
+
+[Stage 181:=================================================>       (7 + 1) / 8]
+
+{
+  "status": "passed",
+  "scope": "staged_fixture",
+  "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+  "module1_partition_receipt_validated": true,
+  "module2_user_features": 4,
+  "module2_module4_counts_match": true,
+  "source_receipt": {
+    "validated_at_utc": "2026-10-08T14:59:31.499038+00:00",
+    "receipt_path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/_sources.json",
+    "receipt_sha256": "6b9527052485f9bce9b7b8fe3f2ced395c7bd2fb46f7accf270ac8d1fd5804af",
+    "inputs": {
+      "orders": {
+        "rows": 16,
+        "sha256": "eebacc9952f7e436b866bb032af4014b58c8d44698c5ed740414cb2c3cc68d2f",
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/orders/part.parquet",
+        "file_bytes": 2546
+      },
+      "order_products_prior": {
+        "rows": 24,
+        "sha256": "d7bb714e9841634acffb62b995d77587d44fd85bd0f4a6ba1b90cf5c30700914",
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_prior/part.parquet",
+        "file_bytes": 1443
+      },
+      "order_products_train": {
+        "rows": 12,
+        "sha256": "911b530603a51e2b7c15448df902dabadaa947eda9f9b39cd49341a2f395205d",
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_train/part.parquet",
+        "file_bytes": 1415
+      },
+      "products": {
+        "rows": 6,
+        "sha256": "cc3c0f605e1c24b31a96bdc89071a0916498d9b85d65a76a621e9ed6d4dca233",
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/dimensions/products/part.parquet",
+        "file_bytes": 1502
+      }
+    },
+    "source_scope": "staged_curated"
+  },
+  "pair_ready": true
+}

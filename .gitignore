@@ -17,6 +17,8 @@ venv/
 /results/module3-smoke/
 /results/module3-hardening/
 /results/module4/
+/results/module4-flow/
+/results/module4-cross/
 /results/*.json
 /spark-warehouse/
 /metastore_db/
