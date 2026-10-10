@@ -5,25 +5,18 @@
 import pytest
 
 pyspark = pytest.importorskip("pyspark")
-from pyspark.sql import SparkSession
-
 from src.module4.als import ALSParams, fit_model, load_model, recommend_top_k, recommend_with_fallback, save_model
+from src.module4.config import Config
 from src.module4.data import build_prior_interactions, validate_inputs
 from src.module4.evaluation import evaluate_at_k, personal_frequency, ranking_metrics
 from src.module4.graph import build_edges, build_metrics, build_vertices, validate_edges, validate_metrics
 from src.module4.split import make_internal_holdout
+from src.module4.spark import session
 
 
 @pytest.fixture(scope="module")
 def spark():
-    spark = (
-        SparkSession.builder.master("local[2]")
-        .appName("module4-fixture-tests")
-        .config("spark.ui.enabled", "false")
-        .config("spark.sql.shuffle.partitions", "2")
-        .config("spark.sql.adaptive.enabled", "false")
-        .getOrCreate()
-    )
+    spark = session(Config(master="local[2]", shuffle_partitions=2))
     spark.sparkContext.setLogLevel("WARN")
     yield spark
     spark.stop()
@@ -82,6 +75,29 @@ def test_ranking_metrics_use_k_denominator_and_tie_break(spark):
     assert result["catalog_coverage"] == 2
 
 
+def test_internal_holdout_preserves_exact_baskets_and_releases_owned_cache(spark):
+    prior = spark.createDataFrame(
+        [(1, 10, 1, 1), (1, 10, 1, 2), (1, 30, 3, 2), (1, 30, 3, 3),
+         (1, 20, 2, 4), (2, 40, 1, 1), (3, 60, 2, 5), (3, 50, 1, 4)],
+        "user_id int, order_id int, order_number int, product_id int",
+    )
+    cache_before = spark.sparkContext._jsc.getPersistentRDDs().size()
+    split = make_internal_holdout(prior)
+    assert split["summary"]["eligible_users"] == 2
+    assert split["summary"]["excluded_users"] == 1
+    assert split["summary"]["training_rows"] == 4
+    assert split["summary"]["validation_rows"] == 3
+    assert {row.order_id for row in split["training"].collect()} == {10, 20, 50}
+    assert {row.order_id for row in split["validation"].collect()} == {30, 60}
+    assert {row.user_id: row.ground_truth for row in split["validation_truth"].collect()} == {
+        1: [2, 3], 3: [5],
+    }
+    assert spark.sparkContext._jsc.getPersistentRDDs().size() == cache_before
+    with pytest.raises(ValueError, match="official train order leaked"):
+        make_internal_holdout(prior, spark.createDataFrame([(30,)], "order_id int"))
+    assert spark.sparkContext._jsc.getPersistentRDDs().size() == cache_before
+
+
 def test_als_fixture_fit_and_recommend(spark, tables):
     prior = tables["prior"].join(tables["orders"], "order_id")
     interactions = build_prior_interactions(prior.select("order_id", "product_id", "user_id"))
@@ -107,8 +123,11 @@ def test_recommend_top_k_resolves_score_ties_before_cutting_membership(spark):
             )
             return users.select("user_id").join(recs, "user_id")
 
+    cache_before = spark.sparkContext._jsc.getPersistentRDDs().size()
     result = recommend_top_k(EqualScoreModel(), spark.createDataFrame([(1,)], "user_id int"), 2)
     assert [row.product_id for row in result.orderBy("als_rank").collect()] == [1, 2]
+    result.unpersist(blocking=True)
+    assert spark.sparkContext._jsc.getPersistentRDDs().size() == cache_before
 
 
 def test_graph_invariants_and_pagerank_include_isolated_vertex(spark, tables):
@@ -187,6 +206,11 @@ def test_als_save_reload_seed_repeatability_and_cold_user_fallback(spark, tables
     save_model(model, path)
     restored = load_model(path)
     users = spark.createDataFrame([(1,), (2,), (99,)], "user_id int")
+    # Small saved factor files must keep a distributed block cross join. A
+    # broadcast nested-loop join caused heap exhaustion on the full-data run.
+    plan = restored.recommendForUserSubset(users, 2)._jdf.queryExecution().executedPlan().toString()
+    assert "CartesianProduct" in plan
+    assert "BroadcastNestedLoopJoin" not in plan
     expected = recommend_top_k(model, users, 2).orderBy("user_id", "als_rank").collect()
     actual = recommend_top_k(restored, users, 2).orderBy("user_id", "als_rank").collect()
     repeated = fit_model(interactions, params, seed=7, blocks=2)

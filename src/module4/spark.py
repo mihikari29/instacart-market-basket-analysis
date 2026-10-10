@@ -17,6 +17,9 @@ def session(config, event_dir: Path | None = None):
         .master(config.master)
         .config("spark.sql.shuffle.partitions", config.shuffle_partitions)
         .config("spark.sql.adaptive.enabled", "false")
+        # Reloaded factor files have small byte statistics. Broadcasting their
+        # block cross join collapses recommendation work into too few tasks and
+        # exhausts the heap while merging aggregate spills on the full catalog.
         .config("spark.sql.autoBroadcastJoinThreshold", "-1")
         .config("spark.sql.session.timeZone", "UTC")
         .config("spark.sql.ansi.enabled", "true")

@@ -151,8 +151,13 @@ def model_summary(model, params: ALSParams, seed: int, input_frame=None, blocks:
 
 
 def recommend_top_k(model, users, k: int = 20):
-    """Return deterministic top-K rows, expanding exact boundary ties as needed."""
-    from pyspark.sql import Window
+    """Return materialized Top-K rows, expanding exact boundary ties as needed.
+
+    The caller owns the returned DISK_ONLY cache and must unpersist it. Temporary
+    candidate caches prevent repeating the full factor cross join for the tie
+    check and are released before returning, including on failure.
+    """
+    from pyspark import StorageLevel
     from pyspark.sql import functions as F
 
     if k < 1:
@@ -181,8 +186,26 @@ def recommend_top_k(model, users, k: int = 20):
             )
         )
 
+    cached = []
+
+    def retain(frame):
+        cached.append(frame.persist(StorageLevel.DISK_ONLY))
+        return frame
+
+    try:
+        return _materialize_top_k(fetch, requested, available_items, k, retain)
+    finally:
+        for frame in reversed(cached):
+            frame.unpersist(blocking=False)
+
+
+def _materialize_top_k(fetch, requested, available_items, k, retain):
+    from pyspark import StorageLevel
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+
     limit = min(available_items, max(1, k + 1))
-    candidates = fetch(requested, limit)
+    candidates = retain(fetch(requested, limit))
     while limit < available_items:
         by_rank = Window.partitionBy("user_id").orderBy(
             F.desc("als_score"), F.asc("product_id")
@@ -207,19 +230,25 @@ def recommend_top_k(model, users, k: int = 20):
             break
         stable = candidates.join(ambiguous, "user_id", "left_anti")
         limit = min(available_items, limit * 2)
-        candidates = stable.unionByName(fetch(ambiguous, limit))
+        candidates = retain(stable.unionByName(fetch(ambiguous, limit)))
 
     ranking = Window.partitionBy("user_id").orderBy(
         F.desc("als_score"), F.asc("product_id")
     )
-    return candidates.where(
+    result = candidates.where(
         F.col("product_id").isNotNull()
         & F.col("als_score").isNotNull()
         & ~F.isnan("als_score")
         & (F.abs("als_score") != float("inf"))
     ).withColumn("als_rank", F.row_number().over(ranking)).select(
         "user_id", "product_id", "als_score", "als_rank"
-    ).where(F.col("als_rank") <= k)
+    ).where(F.col("als_rank") <= k).persist(StorageLevel.DISK_ONLY)
+    try:
+        result.count()
+        return result
+    except BaseException:
+        result.unpersist(blocking=False)
+        raise
 
 
 def recommend_with_fallback(model, users, interactions, k: int = 20):
@@ -236,7 +265,17 @@ def recommend_with_fallback(model, users, interactions, k: int = 20):
         return warm
     from .evaluation import global_popularity
 
-    return warm.unionByName(global_popularity(interactions, missing, k))
+    from pyspark import StorageLevel
+
+    result = warm.unionByName(global_popularity(interactions, missing, k)).persist(StorageLevel.DISK_ONLY)
+    try:
+        result.count()
+        return result
+    except BaseException:
+        result.unpersist(blocking=False)
+        raise
+    finally:
+        warm.unpersist(blocking=False)
 
 
 def save_model(model, path: str) -> None:

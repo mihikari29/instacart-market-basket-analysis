@@ -15,7 +15,7 @@
 | **Module 1** | Ingestion, cleaning, synthetic timestamps, HDFS staging, Kafka replay | Python, PyArrow, HDFS WebHDFS, Kafka Producer | **Complete and validated** |
 | **Module 2** | Batch Layer, historical analytics, MongoDB serving, join/pruning/cache benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Complete and validated on the full dataset** |
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
-| **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Fixture/integration validated; full-data acceptance pending. Stopped at user request, 08/10/2026.** |
+| **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Complete: 21/21 gates; full-data publication and same-version replay validated, 10/10/2026.** |
 
 ---
 
@@ -330,11 +330,47 @@ python scripts/module4.py all
 docker compose run --rm module4
 ```
 
-Evidence is written to `docs/evidence/module4/<run_id>/`, including input and
+The CLI writes artifacts to `results/module4/<run_id>/`; compact evidence and
+actual command/test logs are archived in `docs/evidence/module4/<run_id>/`, including input and
 split validation, ALS trials/model/evaluation, graph trials/metrics, Mongo
 validation, performance, and a manifest containing the source digest and
 versions. `--pilot-users` and `--max-trials` bound ALS tuning; `--graph-min-edge-weight`
 selects the published graph threshold while retaining the 2/5/10 experiment.
+
+Full-data acceptance can be repeated with the manual
+[`module4-full.yml`](../.github/workflows/module4-full.yml) workflow, or locally
+with the pinned image and full curated HDFS handoff already staged:
+
+```bash
+# Portable resource override for a fresh Linux Docker stack.
+export COMPOSE_FILE=compose.yaml:.github/module4-full.override.yml
+python scripts/module4.py all --scope full_data --source-receipt data/raw/source-receipt.json \
+  --run-id full-first --model-version als-full --graph-version graph-full \
+  --shuffle-partitions 32 --executor-memory 2g --executor-cores 4 --total-cores 4 \
+  --als-blocks 8 --pilot-users 5000 --max-trials 1 --graph-min-edge-weight 10
+docker compose run --rm --no-deps --entrypoint python3 module4 \
+  scripts/check_module4_run.py --run-dir results/module4/full-first \
+  --output results/module4/first-snapshot.json
+
+# Freeze source, input and config; use the same versions and a new run ID.
+python scripts/module4.py all --scope full_data --source-receipt data/raw/source-receipt.json \
+  --run-id full-replay --model-version als-full --graph-version graph-full \
+  --shuffle-partitions 32 --executor-memory 2g --executor-cores 4 --total-cores 4 \
+  --als-blocks 8 --pilot-users 5000 --max-trials 1 --graph-min-edge-weight 10
+docker compose run --rm --no-deps --entrypoint python3 module4 \
+  scripts/check_module4_run.py --run-dir results/module4/full-replay \
+  --compare-to results/module4/first-snapshot.json --output results/module4/replay-snapshot.json
+```
+
+The checker requires a full-data ready A/B pair, then checks active counts,
+versions, indexes and logical document digests. Replay keeps IDs/ranks/degree
+values exact and compares scores/PageRank rounded to six decimal places; run IDs
+and publication timestamps may change. One trial is a bounded baseline search,
+not exhaustive tuning. The accepted WSL engine uses the preserved storage image
+and [local runtime override](evidence/module4/acceptance-20261010/runtime.override.yml)
+instead of the portable override above. Mount its image before starting services;
+the [acceptance report](evidence/module4/acceptance-20261010/README.md) records the
+mount script, exact commands, runtime and source hashes.
 
 ### 5.6. Run the tests
 
@@ -382,31 +418,71 @@ docker run --rm -v "$PWD:/workspace" -w /workspace --entrypoint python3 \
   - [x] Measure throughput with real producer-rate control and a real Kafka 1/2/4/8 topic sweep.
   - [x] Pass the final hardening Docker suite: `51 passed`; Ruff, Compose, and whitespace checks passed.
   - [x] Store measured evidence in `docs/evidence/module3/`.
-- [x] **Module 4A — fixture/integration verified:** input validation, prior-only
-  interactions, last-order holdout, bounded pilot/full-internal tuning, final model
-  save/load, K=5/10/20 cohorts/baselines and warm-user Mongo publication.
-- [x] **Module 4B — fixture/integration verified:** canonical prior graph,
-  thresholds 2/5/10, degree conservation, real GraphFrames PageRank/isolation and
-  versioned Mongo publication.
-- [x] **Module 4 execution checks:** standalone worker/HDFS/Mongo smoke, live
-  insert/count/index/rename failure preservation, 78-test repository regression
-  and later 33-test Module 4 suite, with no skips.
+- [x] **Module 4A — complete and full-data validated:** prior-only interactions,
+  last-order holdout, pilot/full-internal validation, final model save/load,
+  official-train K=5/10/20 cohorts/baselines and all warm-user publication.
+- [x] **Module 4B — complete and full-data validated:** full catalog and all prior
+  baskets, thresholds 2/5/10, canonical edges, degree conservation, real
+  GraphFrames PageRank including isolates, and versioned Mongo publication.
+- [x] **Fresh execution checks (10/10/2026):** standalone worker/HDFS/Mongo smoke,
+  **91 tests passed, zero skipped**, five warnings, 165.09 seconds; Ruff passed.
+  The suite includes live Mongo insert/count/index/rename failure preservation.
 - [x] **Cross-module fixture:** Module 1 partition handoff → Module 2 validation
   and 4 user features → Module 4; 24 recommendations/6 graph documents validated.
-- [ ] Complete the host-wrapper full-input validation after worker resources free.
-- [ ] Repeat the whole staged model/publication replay with fixed source/config.
-- [ ] Observe the updated GitHub Actions runtime workflow.
-- [ ] Complete a full-data A/B run and validate both serving snapshots.
+- [x] **Full input contract:** 3,421,083 orders, 32,434,489 prior facts,
+  1,384,617 train facts and 49,688 products; source receipts/hashes reconciled
+  in both full-data runs. Official-train overlap in internal holdout is zero.
+- [x] **Full-data A/B serving:** `full-ab-20261010-fixed-first` passed all stages;
+  **4,124,180 recommendations** (20 each for **206,209 users**) and **49,688 graph
+  documents** passed pre/post-promote and independent Mongo read-back checks.
+- [x] **Same-version full-data replay:** `full-ab-20261010-fixed-replay` loaded
+  the saved model, passed all stages and matched both logical snapshot digests
+  with source/input/config unchanged. IDs/membership/ranks/degrees are exact;
+  floating scores/PageRank are compared at six decimal places.
+- [x] **Historical runtime CI:** [run 37798558046](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/37798558046)
+  passed for commit `11ac21c` on 09/10. Current workspace validation is local;
+  this historical CI run does not cover the uncommitted 10/10 changes.
+- [x] **Final evidence and handoff:** plan, progress and README agree on
+  **21/21 gates (100%)**, up from **20/21 (95.2%)** at this task's initial audit.
 
-  Work stopped at user request on 08/10/2026. Six complete source CSVs were
-  downloaded, cleaned and staged to HDFS. The full-input validate-only job was
-  interrupted while waiting for worker resources; full ALS/graph execution was
-  not started. Docker Desktop failed, so measured runtime checks used a separate
-  Docker Engine 28.5.1 in WSL with the same pinned Spark image. See
-  [Module 4 plan](module4-plan.md) and [actual evidence](evidence/module4/validation-20261008/README.md).
+  The initial 10/10 attempt exposed heap exhaustion when reloaded ALS factor
+  blocks were automatically broadcast into four tasks. Auto-broadcast is now
+  disabled; temporary disk caches avoid repeated recommendation computation and
+  are released after use. Tests exercise the actual Module 4 Spark session,
+  distributed reload plan, exact holdout baskets, boundary ties and cache release.
+  A separate full saved-model regression passed for 206,209 users and 4,330,389
+  finite candidate rows. Interrupted/failed artifacts from 09/10 and the first
+  10/10 attempt remain preserved with their original failure status.
+
+  Acceptance used four cores, a 2 GiB executor and native Linux shuffle. The
+  graph retains all 49,688 catalog vertices and all prior baskets, without
+  sampling. Final threshold 10 retains 3,492,837 canonical edges, 6,985,674
+  directed edges and 21,164 isolates: active-product coverage is 57.41%, prior
+  fact coverage 98.79%. PageRank is finite and weighted degree is conserved.
+  Thresholds 2/5/10 and exact coverage/runtime measurements are archived.
+
+  Official-train evaluation covers all 131,209 users. At K=10, ALS Recall is
+  0.121472 and NDCG is 0.137102; global popularity is 0.069843/0.097881 and
+  personal frequency is 0.319232/0.386763. **ALS does not exceed personal
+  frequency** in this one-configuration baseline. Completion demonstrates
+  correct, reproducible execution; it does not claim a tuned optimum or
+  production capacity. Full metrics, stage/resource measurements, source hashes,
+  actual commands and test/read-back logs are in the
+  [10/10 acceptance report](evidence/module4/acceptance-20261010/README.md).
 
 ---
 
-## 7. Next stage — Module 4
+## 7. Next stage — Module 4C–4D / Serving integration
 
-Module 4A–4B now uses `order_products_prior` and the HDFS handoff contract, retains `order_products_train` strictly as evaluation ground truth, builds versioned ALS recommendations and GraphFrames co-purchase metrics, and publishes both snapshots to MongoDB. API/dashboard blending with `realtime_trending` remains a separate serving-stage task outside the 4A–4B plan.
+Module 4A–4B is complete and validated on the full dataset. The active pair is
+model `als-full-20261010-fixed`, graph `graph-full-20261010-fixed`, run
+`full-ab-20261010-fixed-replay`; `module4_snapshot_readiness` (`_id=active`)
+reports `ready=true`. Consumers check this pointer and both versions before
+reading `user_recommendations` and `product_graph_metrics`, joining on
+`user_id`/`product_id`.
+
+API/dashboard integration and blending with `realtime_trending` belong to the
+separate Module 4C–4D backlog. Official evaluation involving trend needs an
+explicit time cutoff to prevent prior/train leakage. Connected Components and
+further model-quality tuning remain optional work outside the mandatory A/B
+checklist.

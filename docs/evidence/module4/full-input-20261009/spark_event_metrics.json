@@ -1,0 +1,15 @@
+{
+  "module4.input_validation": {
+    "discarded_task_attempts": 0,
+    "executor_run_time_ms": 319128,
+    "failed_task_attempts": 0,
+    "input_bytes": 961038634,
+    "input_records": 521635662,
+    "referenced_stages": 125,
+    "shuffle_read_bytes": 2472649573,
+    "shuffle_write_bytes": 2472649483,
+    "skipped_stages": 2,
+    "stages": 123,
+    "tasks": 1773
+  }
+}

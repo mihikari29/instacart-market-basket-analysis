@@ -1,0 +1,32 @@
+{
+  "backend": "graphframes",
+  "basket_count": 3214874,
+  "basket_size_quantiles": [
+    8.0,
+    20.0,
+    25.0,
+    35.0,
+    145.0
+  ],
+  "catalog_products": 49688,
+  "catalog_scope_coverage": 1.0,
+  "directed_edge_count": 6985674,
+  "edge_count": 3492837,
+  "graph_scope": "full_catalog_vertices_and_prior_baskets",
+  "isolated_vertices": 21164,
+  "max_iter": 10,
+  "pagerank_backend_validation": "passed",
+  "pagerank_finite": true,
+  "pair_expansion_count": 238428378.0,
+  "prior_fact_scope_coverage": 1.0,
+  "prior_facts_in_scope": 32434489,
+  "prior_facts_total": 32434489,
+  "raw_edge_count_at_weight_1": 40749010,
+  "reset_probability": 0.15,
+  "selected_product_ids_sha256": null,
+  "threshold_selection": "configured prior-only threshold; no official train signal used",
+  "top_products_requested": null,
+  "total_edge_weight": 162221254,
+  "vertex_count": 49688,
+  "weighted_degree_sum": 324442508
+}

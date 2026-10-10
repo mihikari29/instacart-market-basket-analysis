@@ -1,0 +1,22 @@
+Command: docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 -m pytest -q 
+........................................................................ [ 79%]
+...................                                                      [100%]
+=============================== warnings summary ===============================
+tests/test_module4.py::test_als_fixture_fit_and_recommend
+  /usr/local/lib/python3.10/dist-packages/pyspark/ml/image.py:31: DeprecationWarning: The distutils package is deprecated and slated for removal in Python 3.12. Use setuptools or check PEP 632 for potential alternatives
+    from distutils.version import LooseVersion
+
+tests/test_module4.py::test_graph_invariants_and_pagerank_include_isolated_vertex
+tests/test_module4.py::test_graphframes_empty_edges_preserve_all_isolated_vertices
+  /usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:168: UserWarning: DataFrame.sql_ctx is an internal property, and will be removed in future releases. Use DataFrame.sparkSession instead.
+    warnings.warn(
+
+tests/test_module4.py::test_graph_invariants_and_pagerank_include_isolated_vertex
+tests/test_module4.py::test_graphframes_empty_edges_preserve_all_isolated_vertices
+  /usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:147: UserWarning: DataFrame constructor is internal. Do not directly use it.
+    warnings.warn("DataFrame constructor is internal. Do not directly use it.")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+91 passed, 5 warnings in 165.09s (0:02:45)
+
+Exit code: 0

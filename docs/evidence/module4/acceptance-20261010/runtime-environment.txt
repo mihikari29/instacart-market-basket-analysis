@@ -1,0 +1,23 @@
+2026-10-10T12:26:02+07:00
+Linux LAPTOP-FUP6DBBO 6.6.114.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Dec  1 20:46:23 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sdd       1007G  7.8G  948G   1% /
+C:\             275G  237G   39G  87% /mnt/c
+D:\             200G  185G   16G  93% /mnt/d
+/dev/loop0      7.8G  986M  6.4G  14% /mnt/module4-storage-20261009
+               total        used        free      shared  buff/cache   available
+Mem:           5.6Gi       1.5Gi       3.5Gi       2.2Mi       776Mi       4.1Gi
+Swap:          2.0Gi       926Mi       1.1Gi
+28.5.1 /var/lib/module4-docker-20261008
+NAME                       IMAGE                                             COMMAND                  SERVICE        CREATED        STATUS                 PORTS
+instacart-datanode-1       bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8   "/entrypoint.sh /run…"   datanode       15 hours ago   Up 2 hours (healthy)   0.0.0.0:9864->9864/tcp, [::]:9864->9864/tcp
+instacart-mongodb-1        mongo:7.0.16                                      "docker-entrypoint.s…"   mongodb        15 hours ago   Up 2 hours (healthy)   27017/tcp
+instacart-namenode-1       bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8   "/entrypoint.sh /run…"   namenode       15 hours ago   Up 2 hours (healthy)   0.0.0.0:8020->8020/tcp, [::]:8020->8020/tcp, 0.0.0.0:9870->9870/tcp, [::]:9870->9870/tcp
+instacart-spark-master-1   instacart-spark:3.5.5                             "/opt/spark/bin/spar…"   spark-master   39 hours ago   Up 2 hours (healthy)   127.0.0.1:8080->8080/tcp
+instacart-spark-worker-1   instacart-spark:3.5.5                             "/opt/spark/bin/spar…"   spark-worker   2 hours ago    Up 2 hours (healthy)   
+CONTAINER ID   NAME                       CPU %     MEM USAGE / LIMIT     MEM %     NET I/O           BLOCK I/O         PIDS
+b2a1c879340a   instacart-spark-worker-1   0.11%     101.1MiB / 5.635GiB   1.75%     11.1GB / 2.91GB   7.38GB / 91.9GB   60
+2bc162cdaddd   instacart-datanode-1       0.30%     170.9MiB / 5.635GiB   2.96%     138MB / 10.3GB    1.63GB / 737MB    78
+ef618dea6575   instacart-namenode-1       0.26%     159.3MiB / 5.635GiB   2.76%     4.96MB / 4.85MB   549MB / 552MB     64
+117d81078a49   instacart-mongodb-1        0.46%     826.6MiB / 5.635GiB   14.33%    1.86GB / 1.9GB    1.81GB / 4.31GB   32
+1bda970c6299   instacart-spark-master-1   0.12%     114.1MiB / 5.635GiB   1.98%     816kB / 147kB     334MB / 308MB     55

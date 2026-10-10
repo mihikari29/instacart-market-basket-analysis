@@ -272,7 +272,7 @@ def tune_als(
                 trial["user_factors"] = model.userFactors.count()
                 trial["item_factors"] = model.itemFactors.count()
                 recommend_started = time.perf_counter()
-                recommendations = recommend_top_k(model, users, 10).cache()
+                recommendations = recommend_top_k(model, users, 10)
                 recommendations.count()
                 trial["recommendation_runtime_ms"] = round(
                     (time.perf_counter() - recommend_started) * 1000, 3
@@ -344,7 +344,7 @@ def tune_als(
                 trial["user_factors"] = model.userFactors.count()
                 trial["item_factors"] = model.itemFactors.count()
                 recommend_started = time.perf_counter()
-                recommendations = recommend_top_k(model, full_users, 10).cache()
+                recommendations = recommend_top_k(model, full_users, 10)
                 recommendations.count()
                 trial["recommendation_runtime_ms"] = round(
                     (time.perf_counter() - recommend_started) * 1000, 3
@@ -572,16 +572,20 @@ def run_als(
         else:
             model = fit_model(interactions, selected, config.seed, config.als_blocks)
             verification_users = interactions.select("user_id").distinct().orderBy("user_id").limit(5)
-            before_save = recommend_top_k(model, verification_users, config.recommendation_k).orderBy(
-                "user_id", "als_rank"
-            ).collect()
+            verification = recommend_top_k(model, verification_users, config.recommendation_k)
+            try:
+                before_save = verification.orderBy("user_id", "als_rank").collect()
+            finally:
+                verification.unpersist(blocking=False)
             save_model(model, model_path)
             _write_hdfs_json(spark, marker_path, expected_model_metadata)
             _unpersist_model(model)
             model = load_model(model_path)
-            after_load = recommend_top_k(model, verification_users, config.recommendation_k).orderBy(
-                "user_id", "als_rank"
-            ).collect()
+            verification = recommend_top_k(model, verification_users, config.recommendation_k)
+            try:
+                after_load = verification.orderBy("user_id", "als_rank").collect()
+            finally:
+                verification.unpersist(blocking=False)
             if len(before_save) != len(after_load) or any(
                 (left.user_id, left.product_id, left.als_rank) != (right.user_id, right.product_id, right.als_rank)
                 or abs(left.als_score - right.als_score) > 1e-6
@@ -639,7 +643,7 @@ def run_als(
         ).distinct()
         mixed_users = warm_truth_users_with_item.join(cold_truth_users, "user_id", "inner")
         evaluation_k = max(max(EVALUATION_KS), config.recommendation_k)
-        all_factor_recommendations = recommend_top_k(model, factor_users, evaluation_k).cache()
+        all_factor_recommendations = recommend_top_k(model, factor_users, evaluation_k)
         publish_recommendations_frame = all_factor_recommendations.where(
             F.col("als_rank") <= config.recommendation_k
         ).persist(StorageLevel.DISK_ONLY)
@@ -1160,7 +1164,9 @@ def main(argv=None):
                 pair_readiness={"ready": False, "status": "not_requested"},
             )
         else:
-            prior = enrich_prior(tables)
+            from pyspark import StorageLevel
+
+            prior = enrich_prior(tables).persist(StorageLevel.DISK_ONLY)
             if args.command in {"als", "all"}:
                 current_stage = "als_training_and_evaluation"
                 stage_started = time.perf_counter()
@@ -1378,6 +1384,13 @@ def main(argv=None):
         }
         print(f"[FAILED] {current_stage}: {type(exc).__name__}: {exc}", flush=True)
     finally:
+        if "prior" in locals():
+            try:
+                prior.unpersist(blocking=False)
+            except Exception as cleanup_error:
+                report.setdefault("cleanup_errors", []).append(
+                    f"prior: {type(cleanup_error).__name__}: {cleanup_error}"
+                )
         for result, name in ((als_result, "recommendations"), (graph_result, "metrics")):
             if result and result.get(name) is not None:
                 try:

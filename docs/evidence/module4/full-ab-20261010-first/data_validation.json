@@ -1,0 +1,81 @@
+{
+  "cohort": {
+    "prior_orders_without_facts": 0,
+    "train_orders_without_facts": 0,
+    "train_users_with_truth": 131209
+  },
+  "counts": {
+    "orders": 3421083,
+    "prior": 32434489,
+    "prior_users": 206209,
+    "products": 49688,
+    "train": 1384617,
+    "train_users": 131209
+  },
+  "distinct": {
+    "prior_orders": 3214874,
+    "prior_products": 49677,
+    "train_orders": 131209,
+    "train_products": 39123
+  },
+  "official_train_used_for_fit": false,
+  "official_train_used_for_tuning": false,
+  "prior_eval_set": "prior",
+  "purchase_distribution": {
+    "prior_purchases_per_user_product_quantiles": [
+      1.0,
+      1.0,
+      1.0,
+      2.0,
+      8.0,
+      99.0
+    ],
+    "prior_reordered": {
+      "False": 13307953,
+      "True": 19126536
+    },
+    "train_reordered": {
+      "False": 555793,
+      "True": 828824
+    }
+  },
+  "schema": {
+    "orders": "struct<order_id:int,user_id:int,eval_set:string,order_number:smallint,order_dow:smallint,order_hour_of_day:smallint,days_since_prior_order:float,dspo_raw:float,cap_recovered:boolean>",
+    "prior": "struct<order_id:int,product_id:int,add_to_cart_order:int,reordered:boolean>",
+    "products": "struct<product_id:int,product_name:string,aisle_id:smallint,department_id:tinyint>",
+    "train": "struct<order_id:int,product_id:int,add_to_cart_order:int,reordered:boolean>"
+  },
+  "source_receipt": {
+    "inputs": {
+      "order_products_prior": {
+        "file_bytes": 116688077,
+        "path": "hdfs://namenode:8020/instacart/curated/order_products_prior/order_products__prior.parquet",
+        "rows": 32434489,
+        "sha256": "91ecaa17bf1db4d1f99d73e0d1fb195b12dac7f31c0570c2540a3dae2d833550"
+      },
+      "order_products_train": {
+        "file_bytes": 4961613,
+        "path": "hdfs://namenode:8020/instacart/curated/order_products_train/order_products__train.parquet",
+        "rows": 1384617,
+        "sha256": "7d8782a9c4ad76bad9504046cc36c3df170c02355d06a6aa5f22d85db427cec5"
+      },
+      "orders": {
+        "file_bytes": 28213135,
+        "path": "hdfs://namenode:8020/instacart/curated/orders/orders.parquet",
+        "rows": 3421083,
+        "sha256": "7624e7f703e5dd894f3f4dd4c65f5317579888ee7fc364ac090607f99c6642b8"
+      },
+      "products": {
+        "file_bytes": 1478155,
+        "path": "hdfs://namenode:8020/instacart/curated/dimensions/products/products.parquet",
+        "rows": 49688,
+        "sha256": "15cab0d57dc9d6edac1da690cd4a0131f9558029896ca9d809020af00cf8f90c"
+      }
+    },
+    "receipt_path": "hdfs://namenode:8020/instacart/curated/_sources.json",
+    "receipt_sha256": "5b85a0eb459ffa3c1efd5aa96ebc4eefa86f04b00e8e6a25f855076ff98d57e7",
+    "source_scope": "staged_curated",
+    "validated_at_utc": "2026-10-10T03:18:37.646156+00:00"
+  },
+  "train_eval_set": "train"
+}

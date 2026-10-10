@@ -1,0 +1,48 @@
+Command: docker compose run --rm --no-deps --entrypoint python3 module4 scripts/check_module4_run.py --run-dir results/module4/full-ab-20261010-fixed-replay --output results/module4/acceptance-20261010-fixed/replay-snapshot.json --compare-to results/module4/acceptance-20261010-fixed/first-snapshot.json 
+{
+  "checked_at_utc": "2026-10-10T05:22:00.583366+00:00",
+  "compared_to_run_id": "full-ab-20261010-fixed-first",
+  "config": {
+    "als_blocks": 8,
+    "executor_cores": 4,
+    "executor_memory": "2g",
+    "graph_backend": "graphframes",
+    "graph_max_iter": 10,
+    "graph_min_edge_weight": 10,
+    "graph_reset_probability": 0.15,
+    "graph_top_products": null,
+    "master": "spark://spark-master:7077",
+    "mongo_database": "instacart",
+    "mongo_graph_collection": "product_graph_metrics",
+    "mongo_recommendation_collection": "user_recommendations",
+    "mongodb_uri": "mongodb://mongodb:27017/instacart",
+    "recommendation_k": 20,
+    "root": "hdfs://namenode:8020/instacart",
+    "seed": 42,
+    "shuffle_partitions": 32,
+    "total_cores": 4
+  },
+  "graph_scope": "full_catalog_vertices_and_prior_baskets",
+  "graph_version": "graph-full-20261010-fixed",
+  "model_version": "als-full-20261010-fixed",
+  "reused_existing_model": true,
+  "run_id": "full-ab-20261010-fixed-replay",
+  "same_version_replay": "passed",
+  "snapshots": {
+    "product_graph_metrics": {
+      "documents": 49688,
+      "float_decimal_places": 6,
+      "logical_sha256": "d903b483ab100a3a6724a7f2e01135caa9c62798e1e20e0ded3195cdf428d98f"
+    },
+    "user_recommendations": {
+      "documents": 4124180,
+      "float_decimal_places": 6,
+      "logical_sha256": "0e2ff07fb5b5448cbd68fc9e3a91f8606ccbc01e02943e66c4909747bda11a05"
+    }
+  },
+  "source_code_sha256": "e4b91d0b6e525f3f82b4463fd660e732232042cb3cb07c60054eac780111fbd5",
+  "source_receipt_sha256": "5b85a0eb459ffa3c1efd5aa96ebc4eefa86f04b00e8e6a25f855076ff98d57e7",
+  "status": "passed"
+}
+
+Exit code: 0

@@ -1,0 +1,11 @@
+{
+  "graph": {},
+  "pair_readiness": {
+    "graph_published": false,
+    "ready": false,
+    "recommendation_published": false,
+    "run_id": "full-ab-20261009-optimized",
+    "status": "failed_or_partial_publication"
+  },
+  "recommendations": {}
+}

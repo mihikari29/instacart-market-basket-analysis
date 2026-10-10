@@ -1,0 +1,28 @@
+Command: docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 scripts/module4_runtime_smoke.py 
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/10/09 14:25:10 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+/usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:168: UserWarning: DataFrame.sql_ctx is an internal property, and will be removed in future releases. Use DataFrame.sparkSession instead.
+  warnings.warn(
+[Stage 0:>                                                          (0 + 2) / 2][Stage 0:>                  (0 + 2) / 2][Stage 1:>                  (0 + 0) / 2][Stage 0:>                  (0 + 2) / 2][Stage 1:>                  (0 + 1) / 2][Stage 1:>                                                          (0 + 2) / 2][Stage 2:>                                                          (0 + 2) / 8][Stage 2:>                  (0 + 2) / 8][Stage 4:>                  (0 + 0) / 8][Stage 2:>    (0 + 2) / 8][Stage 3:>    (0 + 0) / 8][Stage 4:>    (0 + 0) / 8][Stage 4:>                                                          (0 + 2) / 8][Stage 4:==============>                                            (2 + 2) / 8][Stage 4:====================================>                      (5 + 2) / 8][Stage 5:====>              (2 + 2) / 8][Stage 6:>                  (0 + 0) / 8][Stage 5:=========>         (4 + 2) / 8][Stage 6:>                  (0 + 0) / 8][Stage 5:==============>    (6 + 2) / 8][Stage 6:>                  (0 + 0) / 8][Stage 6:>                                                          (0 + 2) / 8][Stage 6:=======>                                                   (1 + 2) / 8][Stage 6:=============================>                             (4 + 2) / 8][Stage 6:============================================>              (6 + 2) / 8][Stage 7:=============================>                             (4 + 2) / 8][Stage 7:====================================>                      (5 + 2) / 8][Stage 7:===================================================>       (7 + 1) / 8][Stage 8:=============================>                             (4 + 2) / 8][Stage 8:============================================>              (6 + 2) / 8]                                                                                [Stage 20:=====================>                                    (3 + 2) / 8][Stage 20:=============================>                            (4 + 2) / 8][Stage 20:==================================================>       (7 + 1) / 8]                                                                                [Stage 34:=============================>                            (4 + 2) / 8][Stage 34:===========================================>              (6 + 2) / 8]                                                                                [Stage 50:=============================>                            (4 + 2) / 8][Stage 50:==================================================>       (7 + 1) / 8]                                                                                [Stage 68:====================================>                     (5 + 2) / 8]                                                                                [Stage 88:===========================================>              (6 + 2) / 8]                                                                                [Stage 110:==========================================>              (6 + 2) / 8]                                                                                [Stage 134:============================>                            (4 + 2) / 8][Stage 134:==========================================>              (6 + 2) / 8]                                                                                [Stage 160:==========================================>              (6 + 2) / 8]                                                                                [Stage 188:===================================>                     (5 + 2) / 8]                                                                                /usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:147: UserWarning: DataFrame constructor is internal. Do not directly use it.
+  warnings.warn("DataFrame constructor is internal. Do not directly use it.")
+[Stage 275:>                                                        (0 + 2) / 2]                                                                                {
+  "graphframes_backend": "graphframes",
+  "graphframes_jars": [
+    {
+      "file": "graphframes-0.8.3-spark3.5-s_2.12.jar",
+      "sha256": "239f659ee3047a464eb4e011566447865d2e304844055f628deae4fbdd25b1ff"
+    }
+  ],
+  "graphframes_python_version": "0.6",
+  "hdfs_rows_round_tripped": 2,
+  "mongodb_ping": "passed",
+  "pagerank_vertices": 3,
+  "run_id": "53639862d02248c987ae3f5bb9f93c6d",
+  "scala_version": "2.12.18",
+  "spark_master": "spark://spark-master:7077",
+  "spark_version": "3.5.5",
+  "status": "passed"
+}
+
+Exit code: 0
