@@ -9,6 +9,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .ruff_cache/
+/.codex-full-test-tmp-*/
 .env
 .env.*
 !.env.example
@@ -16,9 +17,16 @@ venv/
 /results/module3/
 /results/module3-smoke/
 /results/module3-hardening/
+/results/module4/
+/results/module4-flow/
+/results/module4-cross/
+/results/spark-local/
 /results/*.json
 /spark-warehouse/
 /metastore_db/
 derby.log
 /work/
 *.log
+
+# local review report
+/review123.md

@@ -1,0 +1,28 @@
+Command: docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 scripts/module4_runtime_smoke.py 
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/10/10 03:50:30 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+/usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:168: UserWarning: DataFrame.sql_ctx is an internal property, and will be removed in future releases. Use DataFrame.sparkSession instead.
+  warnings.warn(
+/usr/local/lib/python3.10/dist-packages/pyspark/sql/dataframe.py:147: UserWarning: DataFrame constructor is internal. Do not directly use it.
+  warnings.warn("DataFrame constructor is internal. Do not directly use it.")
+{
+  "graphframes_backend": "graphframes",
+  "graphframes_jars": [
+    {
+      "file": "graphframes-0.8.3-spark3.5-s_2.12.jar",
+      "sha256": "239f659ee3047a464eb4e011566447865d2e304844055f628deae4fbdd25b1ff"
+    }
+  ],
+  "graphframes_python_version": "0.6",
+  "hdfs_rows_round_tripped": 2,
+  "mongodb_ping": "passed",
+  "pagerank_vertices": 3,
+  "run_id": "6222cae0548f48d6b1a04d01668b3c8c",
+  "scala_version": "2.12.18",
+  "spark_master": "spark://spark-master:7077",
+  "spark_version": "3.5.5",
+  "status": "passed"
+}
+
+Exit code: 0

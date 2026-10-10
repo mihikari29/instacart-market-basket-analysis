@@ -1,0 +1,103 @@
+{
+  "graph": {
+    "collection": "product_graph_metrics",
+    "documents": 5,
+    "duration_ms": 1176.216,
+    "expected_documents": 5,
+    "graph_version": "graph-flow-923e255d911244e2b368be3809cc2bd7",
+    "min_edge_weight": 2,
+    "published": true,
+    "run_id": "flow-923e255d911244e2b368be3809cc2bd7-first",
+    "temporary": "product_graph_metrics__staging_d96e2fc568b04f5cb9442ca57feb50e3",
+    "validation_after_promote": {
+      "documents": 5,
+      "duplicate_keys": 0,
+      "expected_documents": 5,
+      "indexes": [
+        "_id_",
+        "idx_graph_pagerank",
+        "idx_graph_weighted_degree",
+        "uq_graph_product"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    },
+    "validation_before_promote": {
+      "documents": 5,
+      "duplicate_keys": 0,
+      "expected_documents": 5,
+      "indexes": [
+        "_id_",
+        "idx_graph_pagerank",
+        "idx_graph_weighted_degree",
+        "uq_graph_product"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    }
+  },
+  "pair_readiness": {
+    "graph_published": true,
+    "graph_version": "graph-flow-923e255d911244e2b368be3809cc2bd7",
+    "model_version": "als-flow-923e255d911244e2b368be3809cc2bd7",
+    "pair_rename_is_atomic": false,
+    "readiness_collection": "module4_snapshot_readiness",
+    "readiness_document": {
+      "_id": "active",
+      "graph_published": true,
+      "graph_version": "graph-flow-923e255d911244e2b368be3809cc2bd7",
+      "model_version": "als-flow-923e255d911244e2b368be3809cc2bd7",
+      "ready": true,
+      "recommendation_published": true,
+      "run_id": "flow-923e255d911244e2b368be3809cc2bd7-first",
+      "single_writer_policy": "module4_publication_lock",
+      "status": "ready"
+    },
+    "ready": true,
+    "recommendation_published": true,
+    "run_id": "flow-923e255d911244e2b368be3809cc2bd7-first",
+    "single_snapshot_ready": false,
+    "single_writer_policy": "module4_publication_lock",
+    "status": "both_snapshots_validated"
+  },
+  "recommendations": {
+    "collection": "user_recommendations",
+    "documents": 9,
+    "duration_ms": 2099.179,
+    "expected_documents": 9,
+    "model_version": "als-flow-923e255d911244e2b368be3809cc2bd7",
+    "published": true,
+    "run_id": "flow-923e255d911244e2b368be3809cc2bd7-first",
+    "temporary": "user_recommendations__staging_94e8361717cf47d6821f1952a8b62fc1",
+    "validation_after_promote": {
+      "documents": 9,
+      "duplicate_keys": 0,
+      "expected_documents": 9,
+      "indexes": [
+        "_id_",
+        "idx_model_user",
+        "uq_model_user_product",
+        "uq_model_user_rank"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    },
+    "validation_before_promote": {
+      "documents": 9,
+      "duplicate_keys": 0,
+      "expected_documents": 9,
+      "indexes": [
+        "_id_",
+        "idx_model_user",
+        "uq_model_user_product",
+        "uq_model_user_rank"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    }
+  }
+}

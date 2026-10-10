@@ -1,0 +1,6 @@
+orders.csv 3421083
+order_products__prior.csv 32434489
+order_products__train.csv 1384617
+products.csv 49688
+aisles.csv 134
+departments.csv 21

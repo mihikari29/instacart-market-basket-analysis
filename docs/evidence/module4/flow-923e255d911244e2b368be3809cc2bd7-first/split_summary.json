@@ -1,0 +1,14 @@
+{
+  "cold_start_validation_products": 1,
+  "eligible_prior_rows": 8,
+  "eligible_users": 2,
+  "excluded_users": 1,
+  "heldout_orders": 2,
+  "official_train_overlap": 0,
+  "order_sets_disjoint": true,
+  "total_users": 3,
+  "training_orders": 2,
+  "training_rows": 4,
+  "validation_rows": 4,
+  "validation_users": 2
+}

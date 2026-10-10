@@ -1,0 +1,10 @@
+{
+  "actual_rows": 4124180,
+  "expected_rows": 4124180,
+  "generated_users": 206209,
+  "product_foreign_keys_valid": true,
+  "products_per_user": 20,
+  "rank_product_keys_unique": true,
+  "requested_users": 206209,
+  "user_set_exact": true
+}

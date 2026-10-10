@@ -1,0 +1,80 @@
+{
+  "cohort": {
+    "prior_orders_without_facts": 0,
+    "train_orders_without_facts": 0,
+    "train_users_with_truth": 4
+  },
+  "counts": {
+    "orders": 16,
+    "prior": 24,
+    "prior_users": 4,
+    "products": 6,
+    "train": 12,
+    "train_users": 4
+  },
+  "distinct": {
+    "prior_orders": 8,
+    "prior_products": 6,
+    "train_orders": 4,
+    "train_products": 6
+  },
+  "official_train_used_for_fit": false,
+  "official_train_used_for_tuning": false,
+  "prior_eval_set": "prior",
+  "purchase_distribution": {
+    "prior_purchases_per_user_product_quantiles": [
+      2.0,
+      2.0,
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ],
+    "prior_reordered": {
+      "False": 12,
+      "True": 12
+    },
+    "train_reordered": {
+      "True": 12
+    }
+  },
+  "schema": {
+    "orders": "struct<order_id:bigint,user_id:bigint,eval_set:string,order_number:bigint,order_dow:bigint,order_hour_of_day:bigint,days_since_prior_order:double>",
+    "prior": "struct<order_id:bigint,product_id:bigint,add_to_cart_order:bigint,reordered:boolean>",
+    "products": "struct<product_id:bigint,product_name:string,aisle_id:bigint,department_id:bigint>",
+    "train": "struct<order_id:bigint,product_id:bigint,add_to_cart_order:bigint,reordered:boolean>"
+  },
+  "source_receipt": {
+    "inputs": {
+      "order_products_prior": {
+        "file_bytes": 1443,
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_prior/part.parquet",
+        "rows": 24,
+        "sha256": "d7bb714e9841634acffb62b995d77587d44fd85bd0f4a6ba1b90cf5c30700914"
+      },
+      "order_products_train": {
+        "file_bytes": 1415,
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_train/part.parquet",
+        "rows": 12,
+        "sha256": "911b530603a51e2b7c15448df902dabadaa947eda9f9b39cd49341a2f395205d"
+      },
+      "orders": {
+        "file_bytes": 2546,
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/orders/part.parquet",
+        "rows": 16,
+        "sha256": "eebacc9952f7e436b866bb032af4014b58c8d44698c5ed740414cb2c3cc68d2f"
+      },
+      "products": {
+        "file_bytes": 1502,
+        "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/dimensions/products/part.parquet",
+        "rows": 6,
+        "sha256": "cc3c0f605e1c24b31a96bdc89071a0916498d9b85d65a76a621e9ed6d4dca233"
+      }
+    },
+    "receipt_path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/_sources.json",
+    "receipt_sha256": "6b9527052485f9bce9b7b8fe3f2ced395c7bd2fb46f7accf270ac8d1fd5804af",
+    "source_scope": "staged_curated",
+    "validated_at_utc": "2026-10-08T15:00:11.916420+00:00"
+  },
+  "train_eval_set": "train"
+}

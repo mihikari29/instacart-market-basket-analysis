@@ -12,13 +12,13 @@ Instacart CSV
   -> cleaning + deterministic event-time synthesis
   -> HDFS curated data -> Spark batch analytics -> batch MongoDB collections
   -> Kafka replay -> Spark Structured Streaming -> realtime_trending MongoDB
-  -> Module 4 (next): ALS + product graph + batch/stream recommendation blend
+  -> Module 4A–4B: ALS + product graph; C/D serving blend planned
 ```
 
 The batch layer provides reproducible historical aggregates and user features.
 The speed layer processes event time with validation, deduplication, watermarking
 and finalized-window trend ranking. MongoDB exposes bounded serving collections;
-Module 4 will add recommendation and graph outputs without changing the validated
+Module 4A–4B implements recommendation and graph outputs without changing the validated
 Modules 1–3 contracts.
 
 ## Repo layout
@@ -28,6 +28,8 @@ src/module1/             data cleaning, synthetic timestamp generator, staging, 
 src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
 src/module3/             Spark Structured Streaming, watermarking, deduplication,
                          finalized-window trending, Mongo serving, recovery and benchmarks
+src/module4/             ALS tuning/evaluation, GraphFrames co-purchase graph,
+                         versioned MongoDB snapshots and acceptance evidence
 data/raw/*.csv           original Kaggle files (archive — only read by clean.py)
 data/clean/*.parquet     batch source of truth (facts + dims)
 data/synthesized/        reproducible synthetic feeds (scatter_1w, scatter_1m, scatter_3m)
@@ -142,7 +144,7 @@ runtime joins. Join `products/aisles/departments` (tiny, broadcast) only for nam
 | 1 | Ingestion & Storage: clean → synthesize timestamps → Kafka → HDFS | `data/raw/*`, `data/clean/*`, `data/synthesized/scatter_*/events.parquet` | Implemented; corrected full-data HDFS handoff validated |
 | 2 | Batch layer (Spark): stats, SparkSQL/join benchmarks + optimization | `data/clean/*.parquet`, `/instacart/curated/` | Complete; full-data Docker/Spark/HDFS run passed |
 | 3 | Stream processing + serving data: Kafka → Spark Structured Streaming → `realtime_trending` MongoDB output | Kafka topic `instacart-purchase-events` | Complete and validated |
-| 4 | ML/ALS recommendation + product graph + visualization | `order_products__prior/train`, `orders.eval_set` split | Next; not yet implemented |
+| 4 | ML/ALS recommendation + product graph; serving/visualization tracked separately | `order_products__prior/train`, `orders.eval_set` split | A/B complete; full-data publication + same-version replay validated (10/10/2026) |
 
 ## Team Onboarding & Environment Setup
 
@@ -364,11 +366,25 @@ idempotency/index/TTL behavior, weights, and checkpoint identity. It is marked
   leaderboard.
 - MongoDB snapshot replacement is logically idempotent but not transactionally
   atomic for concurrent readers.
-- Module 4 has not yet been implemented.
+- Module 4 ALS used one bounded baseline configuration. On full official-train
+evaluation it exceeds global popularity but remains below personal frequency.
+Graph threshold 10 retains all catalog vertices, with 57.41% active-product
+coverage and 98.79% prior-fact coverage; low-frequency products may be isolated.
+See [the Module 4 plan](docs/module4-plan.md) and
+[measured evidence](docs/evidence/module4/acceptance-20261010/README.md).
 
-## Next step: Module 4
+## Module 4A–4B completed
 
-**Module 4 (ML & Serving)**: ALS recommendation from `order_products__prior`
-(history) with `order_products__train` as ground truth, GraphFrames
-co-purchase graph (weighted degree + PageRank), and Serving Layer
-blending `λ·norm(ALS) + (1-λ)·norm(Trend)` into `final_recommendations`.
+Full-data first/replay passed on 10/10/2026: **4,124,180 recommendations** for
+**206,209 users** and **49,688 graph documents**, with independent MongoDB
+read-back and matching logical snapshot digests. The current repository suite
+passed **91 tests, zero skipped**; Ruff and standalone runtime smoke passed.
+The [progress report](docs/progress.md) records **21/21 acceptance gates** and
+links to reproducible commands, metrics and evidence.
+
+## Next step: Module 4C–4D
+
+Integrate the accepted ALS/graph snapshots with `realtime_trending` in the
+Serving Layer, then expose API/dashboard outputs and the planned
+`λ·norm(ALS) + (1-λ)·norm(Trend)` blend in `final_recommendations`.
+Evaluation involving trend requires an explicit time cutoff to prevent leakage.

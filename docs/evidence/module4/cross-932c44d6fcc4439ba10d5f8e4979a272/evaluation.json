@@ -1,0 +1,732 @@
+{
+  "als_vs_baseline_deltas": {
+    "all_official_train_users": {
+      "global_popularity": {
+        "10": {
+          "map_at_k": 0.2069444444444445,
+          "ndcg_at_k": 0.12043060562668206,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "20": {
+          "map_at_k": 0.2069444444444445,
+          "ndcg_at_k": 0.12043060562668206,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "5": {
+          "map_at_k": 0.24861111111111112,
+          "ndcg_at_k": 0.16222071936823257,
+          "precision_at_k": 0.050000000000000044,
+          "recall_at_k": 0.08333333333333337
+        }
+      },
+      "personal_frequency": {
+        "10": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "20": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "5": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        }
+      }
+    },
+    "warm_users_and_all_truth_items": {
+      "global_popularity": {
+        "10": {
+          "map_at_k": 0.2069444444444445,
+          "ndcg_at_k": 0.12043060562668206,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "20": {
+          "map_at_k": 0.2069444444444445,
+          "ndcg_at_k": 0.12043060562668206,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "5": {
+          "map_at_k": 0.24861111111111112,
+          "ndcg_at_k": 0.16222071936823257,
+          "precision_at_k": 0.050000000000000044,
+          "recall_at_k": 0.08333333333333337
+        }
+      },
+      "personal_frequency": {
+        "10": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "20": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        },
+        "5": {
+          "map_at_k": 0.0,
+          "ndcg_at_k": 0.0,
+          "precision_at_k": 0.0,
+          "recall_at_k": 0.0
+        }
+      }
+    }
+  },
+  "cohort_exclusion": "users with empty official train truth are excluded and counted in data report",
+  "cohorts": {
+    "all_official_train_users": {
+      "definition": "all users with non-empty official train truth; cold items remain in denominator",
+      "metrics": {
+        "als": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "global_popularity": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 5,
+            "catalog_coverage_rate": 0.8333333333333334,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 0.7513888888888889,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 0.8377792806317674,
+            "precision_at_k": 0.5499999999999999,
+            "recall_at_k": 0.9166666666666666,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "personal_frequency": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        }
+      },
+      "users": 4
+    },
+    "warm_users_and_all_truth_items": {
+      "definition": "user factor exists and every official train truth product has an item factor",
+      "metrics": {
+        "als": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "global_popularity": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 5,
+            "catalog_coverage_rate": 0.8333333333333334,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 0.7513888888888889,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 0.8377792806317674,
+            "precision_at_k": 0.5499999999999999,
+            "recall_at_k": 0.9166666666666666,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "personal_frequency": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        }
+      },
+      "users": 4
+    }
+  },
+  "fallback": "global prior popularity for users without ALS user factors in all-user evaluation only",
+  "ground_truth": "official order_products_train, distinct product IDs per user",
+  "history_subgroups": {
+    "new_to_user": {
+      "metrics": {
+        "als": {
+          "10": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 10,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 20,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 5,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "global_popularity": {
+          "10": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 10,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 20,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 5,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "personal_frequency": {
+          "10": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 10,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 20,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": null,
+            "catalog_coverage": 0,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 0,
+            "k": 5,
+            "map_at_k": null,
+            "max_recommendations_per_user": null,
+            "min_recommendations_per_user": null,
+            "ndcg_at_k": null,
+            "precision_at_k": null,
+            "recall_at_k": null,
+            "status": "not_applicable_empty_cohort",
+            "user_coverage": 0.0,
+            "users_with_no_recommendations": 0
+          }
+        }
+      },
+      "users": 0
+    },
+    "reordered": {
+      "metrics": {
+        "als": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "global_popularity": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 0.7930555555555555,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 0.8795693943733179,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 5,
+            "catalog_coverage_rate": 0.8333333333333334,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 0.7513888888888889,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 0.8377792806317674,
+            "precision_at_k": 0.5499999999999999,
+            "recall_at_k": 0.9166666666666666,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        },
+        "personal_frequency": {
+          "10": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "20": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 20,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.15,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "5": {
+            "average_recommendations_per_user": 5.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 1.0,
+            "evaluated_users": 4,
+            "k": 5,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 5,
+            "min_recommendations_per_user": 5,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.6,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          }
+        }
+      },
+      "users": 4
+    }
+  },
+  "ks": [
+    5,
+    10,
+    20
+  ],
+  "official_test_truth_available": false,
+  "truth_summary": {
+    "cold_truth_products": 0,
+    "truth_products": 6,
+    "truth_products_with_item_factors": 6,
+    "users": 4,
+    "users_with_mixed_warm_and_cold_truth": 0,
+    "users_with_user_factors": 4,
+    "users_without_user_factors": 0
+  }
+}

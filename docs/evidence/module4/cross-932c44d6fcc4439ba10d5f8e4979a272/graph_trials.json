@@ -1,0 +1,77 @@
+[
+  {
+    "active_product_count": 6,
+    "catalog_product_coverage": 1.0,
+    "directed_edge_count": 18,
+    "edge_count": 9,
+    "edge_weight_quantiles": [
+      2.0,
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 0,
+    "min_edge_weight": 2,
+    "neighbor_count_quantiles": [
+      3.0,
+      4.0,
+      4.0,
+      4.0,
+      4.0
+    ],
+    "prior_fact_coverage": 1.0,
+    "runtime_ms": 2981.702,
+    "scope_product_coverage": 1.0,
+    "status": "passed",
+    "total_weight": 24,
+    "vertex_count": 6
+  },
+  {
+    "active_product_count": 0,
+    "catalog_product_coverage": 0.0,
+    "directed_edge_count": 0,
+    "edge_count": 0,
+    "edge_weight_quantiles": [],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 6,
+    "min_edge_weight": 5,
+    "neighbor_count_quantiles": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "prior_fact_coverage": 0.0,
+    "runtime_ms": 2150.628,
+    "scope_product_coverage": 0.0,
+    "status": "passed",
+    "total_weight": 0,
+    "vertex_count": 6
+  },
+  {
+    "active_product_count": 0,
+    "catalog_product_coverage": 0.0,
+    "directed_edge_count": 0,
+    "edge_count": 0,
+    "edge_weight_quantiles": [],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 6,
+    "min_edge_weight": 10,
+    "neighbor_count_quantiles": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "prior_fact_coverage": 0.0,
+    "runtime_ms": 3770.273,
+    "scope_product_coverage": 0.0,
+    "status": "passed",
+    "total_weight": 0,
+    "vertex_count": 6
+  }
+]

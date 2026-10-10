@@ -1,0 +1,74 @@
+name: Module 4A-4B runtime validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spark-graphframes-mongo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned Spark image
+        run: docker compose build spark-master spark-worker
+
+      - name: Start HDFS, MongoDB and standalone Spark
+        run: docker compose up -d --wait namenode datanode mongodb spark-master spark-worker
+
+      - name: Verify standalone worker, GraphFrames, HDFS and MongoDB
+        run: |
+          set -o pipefail
+          docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+            scripts/module4_runtime_smoke.py 2>&1 | tee module4-runtime-smoke.log
+
+      - name: Run repository, Spark and live MongoDB tests
+        run: |
+          set -o pipefail
+          docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+            -m pytest -q 2>&1 | tee module4-pytest.log
+
+      - name: Verify staged flow and same-version A/B publication replay
+        run: |
+          set -o pipefail
+          docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+            scripts/module4_flow_smoke.py 2>&1 | tee module4-flow-smoke.log
+          docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+            scripts/module4_cross_module_smoke.py 2>&1 | tee module4-cross-module-smoke.log
+
+      - name: Check style, syntax and Compose configuration
+        run: |
+          docker compose run --rm --no-deps --entrypoint python3 module4 \
+            -m ruff check .
+          docker compose run --rm --no-deps --entrypoint python3 module4 \
+            -m compileall -q src/module4 scripts/module4.py
+          docker compose config --quiet
+
+      - name: Save service logs after a failed runtime check
+        if: failure()
+        run: docker compose logs --no-color > module4-services.log
+
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: module4-runtime-${{ github.run_id }}
+          path: |
+            module4-runtime-smoke.log
+            module4-pytest.log
+            module4-flow-smoke.log
+            module4-cross-module-smoke.log
+            module4-services.log
+            results/module4-flow/**/manifest.json
+            results/module4-flow/**/summary.json
+            results/module4-flow/**/flow-command.log
+          if-no-files-found: warn
+
+      - name: Stop validation services
+        if: always()
+        run: docker compose down

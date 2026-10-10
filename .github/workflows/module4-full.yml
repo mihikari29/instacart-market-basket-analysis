@@ -1,0 +1,90 @@
+name: Module 4A-4B full-data acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: module4-full-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-data:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      COMPOSE_FILE: compose.yaml:.github/module4-full.override.yml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare verified full source and runtime
+        run: |
+          python -m pip install -r requirements.txt
+          python scripts/fetch_instacart.py
+          python -m src.module1.clean --validate
+          docker compose build spark-master spark-worker
+          docker compose up -d --wait namenode datanode mongodb spark-master spark-worker
+          docker compose exec -T namenode hdfs dfsadmin -safemode wait
+      - name: Stage Module 4 curated handoff with Module 1
+        run: |
+          python - <<'PY'
+          from hdfs import InsecureClient
+          from src.module1.stage_hdfs import stage_curated, stage_places
+          client = InsecureClient('http://localhost:9870', user='root')
+          stage_curated(client, 'http://localhost:9870', 'root')
+          stage_places(client)
+          PY
+      - name: Run repository and live integration tests
+        run: |
+          set -o pipefail
+          mkdir -p results/module4/acceptance-ci
+          docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+            -m pytest -q 2>&1 | tee results/module4/acceptance-ci/tests.txt
+      - name: Validate full input through host wrapper
+        run: |
+          set -o pipefail
+          python scripts/module4.py validate --run-id ci-input --scope full_data \
+            --source-receipt data/raw/source-receipt.json --shuffle-partitions 32 \
+            2>&1 | tee results/module4/acceptance-ci/validate.log
+      - name: Run full A/B publication and same-version replay
+        run: |
+          set -o pipefail
+          for attempt in first replay; do
+            python scripts/module4.py all --run-id ci-full-$attempt --scope full_data \
+              --source-receipt data/raw/source-receipt.json --shuffle-partitions 32 \
+              --executor-memory 2g --executor-cores 4 --total-cores 4 --als-blocks 8 \
+              --graph-min-edge-weight 10 \
+              --pilot-users 5000 --max-trials 1 --model-version als-ci-full --graph-version graph-ci-full \
+              2>&1 | tee results/module4/acceptance-ci/$attempt.log
+            comparison=()
+            if [ "$attempt" = replay ]; then
+              comparison=(--compare-to results/module4/acceptance-ci/first-check.json)
+            fi
+            docker compose run --rm --no-deps --entrypoint python3 module4 \
+              scripts/check_module4_run.py --run-dir results/module4/ci-full-$attempt \
+              --output results/module4/acceptance-ci/$attempt-check.json "${comparison[@]}"
+          done
+      - name: Capture service diagnostics
+        if: always()
+        run: |
+          mkdir -p results/module4/acceptance-ci
+          docker compose ps -a > results/module4/acceptance-ci/services.txt
+          docker compose logs --no-color --tail 200 > results/module4/acceptance-ci/services.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: module4-full-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            results/module4/acceptance-ci/
+            results/module4/ci-*/**/*.json
+            results/module4/ci-*/**/*.txt
+            docs/evidence/module4/ci-*/
+            data/raw/source-receipt.json
+      - name: Stop ephemeral services
+        if: always()
+        run: docker compose down

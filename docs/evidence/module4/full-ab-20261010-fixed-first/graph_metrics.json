@@ -1,0 +1,462 @@
+{
+  "top20": {
+    "neighbor_count": [
+      {
+        "neighbor_count": 23516,
+        "pagerank": 863.4331412542681,
+        "product_id": 24852,
+        "product_name": "Banana",
+        "weighted_degree": 6113628
+      },
+      {
+        "neighbor_count": 17489,
+        "pagerank": 352.9895458251657,
+        "product_id": 13176,
+        "product_name": "Bag of Organic Bananas",
+        "weighted_degree": 4762878
+      },
+      {
+        "neighbor_count": 14474,
+        "pagerank": 181.9809286715254,
+        "product_id": 16797,
+        "product_name": "Strawberries",
+        "weighted_degree": 1799241
+      },
+      {
+        "neighbor_count": 14404,
+        "pagerank": 173.57315927294107,
+        "product_id": 21137,
+        "product_name": "Organic Strawberries",
+        "weighted_degree": 3695145
+      },
+      {
+        "neighbor_count": 14192,
+        "pagerank": 157.46525333243548,
+        "product_id": 47626,
+        "product_name": "Large Lemon",
+        "weighted_degree": 2219015
+      },
+      {
+        "neighbor_count": 13210,
+        "pagerank": 143.2584675767957,
+        "product_id": 47766,
+        "product_name": "Organic Avocado",
+        "weighted_degree": 2453833
+      },
+      {
+        "neighbor_count": 13205,
+        "pagerank": 122.49615473777628,
+        "product_id": 26209,
+        "product_name": "Limes",
+        "weighted_degree": 2132145
+      },
+      {
+        "neighbor_count": 12887,
+        "pagerank": 164.17893440349806,
+        "product_id": 47209,
+        "product_name": "Organic Hass Avocado",
+        "weighted_degree": 3071643
+      },
+      {
+        "neighbor_count": 12429,
+        "pagerank": 147.42219697466524,
+        "product_id": 21903,
+        "product_name": "Organic Baby Spinach",
+        "weighted_degree": 3320424
+      },
+      {
+        "neighbor_count": 12094,
+        "pagerank": 107.85543997673199,
+        "product_id": 27966,
+        "product_name": "Organic Raspberries",
+        "weighted_degree": 2021029
+      },
+      {
+        "neighbor_count": 11165,
+        "pagerank": 80.70697493023725,
+        "product_id": 39275,
+        "product_name": "Organic Blueberries",
+        "weighted_degree": 1301448
+      },
+      {
+        "neighbor_count": 11090,
+        "pagerank": 84.518426274039,
+        "product_id": 28204,
+        "product_name": "Organic Fuji Apple",
+        "weighted_degree": 1181663
+      },
+      {
+        "neighbor_count": 10944,
+        "pagerank": 83.43678253722636,
+        "product_id": 49683,
+        "product_name": "Cucumber Kirby",
+        "weighted_degree": 1392071
+      },
+      {
+        "neighbor_count": 10497,
+        "pagerank": 70.76402904457485,
+        "product_id": 4920,
+        "product_name": "Seedless Red Grapes",
+        "weighted_degree": 1150226
+      },
+      {
+        "neighbor_count": 10274,
+        "pagerank": 87.25498090136166,
+        "product_id": 5077,
+        "product_name": "100% Whole Wheat Bread",
+        "weighted_degree": 854943
+      },
+      {
+        "neighbor_count": 10171,
+        "pagerank": 77.2972267872637,
+        "product_id": 22935,
+        "product_name": "Organic Yellow Onion",
+        "weighted_degree": 1710454
+      },
+      {
+        "neighbor_count": 9973,
+        "pagerank": 72.96467046611087,
+        "product_id": 45007,
+        "product_name": "Organic Zucchini",
+        "weighted_degree": 1579813
+      },
+      {
+        "neighbor_count": 9872,
+        "pagerank": 74.43353548199295,
+        "product_id": 4605,
+        "product_name": "Yellow Onions",
+        "weighted_degree": 1055543
+      },
+      {
+        "neighbor_count": 9866,
+        "pagerank": 75.91289073506736,
+        "product_id": 27845,
+        "product_name": "Organic Whole Milk",
+        "weighted_degree": 1752127
+      },
+      {
+        "neighbor_count": 9625,
+        "pagerank": 72.93542140765477,
+        "product_id": 9076,
+        "product_name": "Blueberries",
+        "weighted_degree": 718725
+      }
+    ],
+    "pagerank": [
+      {
+        "neighbor_count": 23516,
+        "pagerank": 863.4331412542681,
+        "product_id": 24852,
+        "product_name": "Banana",
+        "weighted_degree": 6113628
+      },
+      {
+        "neighbor_count": 17489,
+        "pagerank": 352.9895458251657,
+        "product_id": 13176,
+        "product_name": "Bag of Organic Bananas",
+        "weighted_degree": 4762878
+      },
+      {
+        "neighbor_count": 14474,
+        "pagerank": 181.9809286715254,
+        "product_id": 16797,
+        "product_name": "Strawberries",
+        "weighted_degree": 1799241
+      },
+      {
+        "neighbor_count": 14404,
+        "pagerank": 173.57315927294107,
+        "product_id": 21137,
+        "product_name": "Organic Strawberries",
+        "weighted_degree": 3695145
+      },
+      {
+        "neighbor_count": 12887,
+        "pagerank": 164.17893440349806,
+        "product_id": 47209,
+        "product_name": "Organic Hass Avocado",
+        "weighted_degree": 3071643
+      },
+      {
+        "neighbor_count": 14192,
+        "pagerank": 157.46525333243548,
+        "product_id": 47626,
+        "product_name": "Large Lemon",
+        "weighted_degree": 2219015
+      },
+      {
+        "neighbor_count": 12429,
+        "pagerank": 147.42219697466524,
+        "product_id": 21903,
+        "product_name": "Organic Baby Spinach",
+        "weighted_degree": 3320424
+      },
+      {
+        "neighbor_count": 13210,
+        "pagerank": 143.2584675767957,
+        "product_id": 47766,
+        "product_name": "Organic Avocado",
+        "weighted_degree": 2453833
+      },
+      {
+        "neighbor_count": 13205,
+        "pagerank": 122.49615473777628,
+        "product_id": 26209,
+        "product_name": "Limes",
+        "weighted_degree": 2132145
+      },
+      {
+        "neighbor_count": 12094,
+        "pagerank": 107.85543997673199,
+        "product_id": 27966,
+        "product_name": "Organic Raspberries",
+        "weighted_degree": 2021029
+      },
+      {
+        "neighbor_count": 7718,
+        "pagerank": 94.35814188012056,
+        "product_id": 23909,
+        "product_name": "2% Reduced Fat Milk",
+        "weighted_degree": 413748
+      },
+      {
+        "neighbor_count": 10274,
+        "pagerank": 87.25498090136166,
+        "product_id": 5077,
+        "product_name": "100% Whole Wheat Bread",
+        "weighted_degree": 854943
+      },
+      {
+        "neighbor_count": 11090,
+        "pagerank": 84.518426274039,
+        "product_id": 28204,
+        "product_name": "Organic Fuji Apple",
+        "weighted_degree": 1181663
+      },
+      {
+        "neighbor_count": 10944,
+        "pagerank": 83.43678253722636,
+        "product_id": 49683,
+        "product_name": "Cucumber Kirby",
+        "weighted_degree": 1392071
+      },
+      {
+        "neighbor_count": 11165,
+        "pagerank": 80.70697493023725,
+        "product_id": 39275,
+        "product_name": "Organic Blueberries",
+        "weighted_degree": 1301448
+      },
+      {
+        "neighbor_count": 10171,
+        "pagerank": 77.2972267872637,
+        "product_id": 22935,
+        "product_name": "Organic Yellow Onion",
+        "weighted_degree": 1710454
+      },
+      {
+        "neighbor_count": 9866,
+        "pagerank": 75.91289073506736,
+        "product_id": 27845,
+        "product_name": "Organic Whole Milk",
+        "weighted_degree": 1752127
+      },
+      {
+        "neighbor_count": 9872,
+        "pagerank": 74.43353548199295,
+        "product_id": 4605,
+        "product_name": "Yellow Onions",
+        "weighted_degree": 1055543
+      },
+      {
+        "neighbor_count": 9973,
+        "pagerank": 72.96467046611087,
+        "product_id": 45007,
+        "product_name": "Organic Zucchini",
+        "weighted_degree": 1579813
+      },
+      {
+        "neighbor_count": 9625,
+        "pagerank": 72.93542140765477,
+        "product_id": 9076,
+        "product_name": "Blueberries",
+        "weighted_degree": 718725
+      }
+    ],
+    "weighted_degree": [
+      {
+        "neighbor_count": 23516,
+        "pagerank": 863.4331412542681,
+        "product_id": 24852,
+        "product_name": "Banana",
+        "weighted_degree": 6113628
+      },
+      {
+        "neighbor_count": 17489,
+        "pagerank": 352.9895458251657,
+        "product_id": 13176,
+        "product_name": "Bag of Organic Bananas",
+        "weighted_degree": 4762878
+      },
+      {
+        "neighbor_count": 14404,
+        "pagerank": 173.57315927294107,
+        "product_id": 21137,
+        "product_name": "Organic Strawberries",
+        "weighted_degree": 3695145
+      },
+      {
+        "neighbor_count": 12429,
+        "pagerank": 147.42219697466524,
+        "product_id": 21903,
+        "product_name": "Organic Baby Spinach",
+        "weighted_degree": 3320424
+      },
+      {
+        "neighbor_count": 12887,
+        "pagerank": 164.17893440349806,
+        "product_id": 47209,
+        "product_name": "Organic Hass Avocado",
+        "weighted_degree": 3071643
+      },
+      {
+        "neighbor_count": 13210,
+        "pagerank": 143.2584675767957,
+        "product_id": 47766,
+        "product_name": "Organic Avocado",
+        "weighted_degree": 2453833
+      },
+      {
+        "neighbor_count": 14192,
+        "pagerank": 157.46525333243548,
+        "product_id": 47626,
+        "product_name": "Large Lemon",
+        "weighted_degree": 2219015
+      },
+      {
+        "neighbor_count": 13205,
+        "pagerank": 122.49615473777628,
+        "product_id": 26209,
+        "product_name": "Limes",
+        "weighted_degree": 2132145
+      },
+      {
+        "neighbor_count": 12094,
+        "pagerank": 107.85543997673199,
+        "product_id": 27966,
+        "product_name": "Organic Raspberries",
+        "weighted_degree": 2021029
+      },
+      {
+        "neighbor_count": 14474,
+        "pagerank": 181.9809286715254,
+        "product_id": 16797,
+        "product_name": "Strawberries",
+        "weighted_degree": 1799241
+      },
+      {
+        "neighbor_count": 9866,
+        "pagerank": 75.91289073506736,
+        "product_id": 27845,
+        "product_name": "Organic Whole Milk",
+        "weighted_degree": 1752127
+      },
+      {
+        "neighbor_count": 10171,
+        "pagerank": 77.2972267872637,
+        "product_id": 22935,
+        "product_name": "Organic Yellow Onion",
+        "weighted_degree": 1710454
+      },
+      {
+        "neighbor_count": 8997,
+        "pagerank": 67.450781993355,
+        "product_id": 24964,
+        "product_name": "Organic Garlic",
+        "weighted_degree": 1683727
+      },
+      {
+        "neighbor_count": 9973,
+        "pagerank": 72.96467046611087,
+        "product_id": 45007,
+        "product_name": "Organic Zucchini",
+        "weighted_degree": 1579813
+      },
+      {
+        "neighbor_count": 10944,
+        "pagerank": 83.43678253722636,
+        "product_id": 49683,
+        "product_name": "Cucumber Kirby",
+        "weighted_degree": 1392071
+      },
+      {
+        "neighbor_count": 11165,
+        "pagerank": 80.70697493023725,
+        "product_id": 39275,
+        "product_name": "Organic Blueberries",
+        "weighted_degree": 1301448
+      },
+      {
+        "neighbor_count": 9168,
+        "pagerank": 58.69544608910739,
+        "product_id": 40706,
+        "product_name": "Organic Grape Tomatoes",
+        "weighted_degree": 1288574
+      },
+      {
+        "neighbor_count": 9209,
+        "pagerank": 64.95382831938677,
+        "product_id": 5876,
+        "product_name": "Organic Lemon",
+        "weighted_degree": 1267782
+      },
+      {
+        "neighbor_count": 9090,
+        "pagerank": 60.81091237399743,
+        "product_id": 30391,
+        "product_name": "Organic Cucumber",
+        "weighted_degree": 1241004
+      },
+      {
+        "neighbor_count": 8756,
+        "pagerank": 57.764520377303754,
+        "product_id": 8277,
+        "product_name": "Apple Honeycrisp Organic",
+        "weighted_degree": 1230716
+      }
+    ]
+  },
+  "validation": {
+    "backend": "graphframes",
+    "basket_count": 3214874,
+    "basket_size_quantiles": [
+      8.0,
+      20.0,
+      25.0,
+      35.0,
+      145.0
+    ],
+    "catalog_products": 49688,
+    "catalog_scope_coverage": 1.0,
+    "directed_edge_count": 6985674,
+    "edge_count": 3492837,
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 21164,
+    "max_iter": 10,
+    "pagerank_backend_validation": "passed",
+    "pagerank_finite": true,
+    "pair_expansion_count": 238428378.0,
+    "prior_fact_scope_coverage": 1.0,
+    "prior_facts_in_scope": 32434489,
+    "prior_facts_total": 32434489,
+    "raw_edge_count_at_weight_1": 40749010,
+    "reset_probability": 0.15,
+    "selected_product_ids_sha256": null,
+    "threshold_selection": "configured prior-only threshold; no official train signal used",
+    "top_products_requested": null,
+    "total_edge_weight": 162221254,
+    "vertex_count": 49688,
+    "weighted_degree_sum": 324442508
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "graph": {
+    "collection": "product_graph_metrics",
+    "documents": 49688,
+    "duration_ms": 4661.58,
+    "expected_documents": 49688,
+    "graph_version": "graph-full-20261010-fixed",
+    "min_edge_weight": 10,
+    "published": true,
+    "run_id": "full-ab-20261010-fixed-replay",
+    "temporary": "product_graph_metrics__staging_69352e7dd9fe417c8e17eb773c778c1e",
+    "validation_after_promote": {
+      "documents": 49688,
+      "duplicate_keys": 0,
+      "expected_documents": 49688,
+      "indexes": [
+        "_id_",
+        "idx_graph_pagerank",
+        "idx_graph_weighted_degree",
+        "uq_graph_product"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    },
+    "validation_before_promote": {
+      "documents": 49688,
+      "duplicate_keys": 0,
+      "expected_documents": 49688,
+      "indexes": [
+        "_id_",
+        "idx_graph_pagerank",
+        "idx_graph_weighted_degree",
+        "uq_graph_product"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    }
+  },
+  "pair_readiness": {
+    "graph_published": true,
+    "graph_version": "graph-full-20261010-fixed",
+    "model_version": "als-full-20261010-fixed",
+    "pair_rename_is_atomic": false,
+    "readiness_collection": "module4_snapshot_readiness",
+    "readiness_document": {
+      "_id": "active",
+      "graph_published": true,
+      "graph_version": "graph-full-20261010-fixed",
+      "model_version": "als-full-20261010-fixed",
+      "ready": true,
+      "recommendation_published": true,
+      "run_id": "full-ab-20261010-fixed-replay",
+      "single_writer_policy": "module4_publication_lock",
+      "status": "ready"
+    },
+    "ready": true,
+    "recommendation_published": true,
+    "run_id": "full-ab-20261010-fixed-replay",
+    "single_snapshot_ready": false,
+    "single_writer_policy": "module4_publication_lock",
+    "status": "both_snapshots_validated"
+  },
+  "recommendations": {
+    "collection": "user_recommendations",
+    "documents": 4124180,
+    "duration_ms": 383592.348,
+    "expected_documents": 4124180,
+    "model_version": "als-full-20261010-fixed",
+    "published": true,
+    "run_id": "full-ab-20261010-fixed-replay",
+    "temporary": "user_recommendations__staging_7607ecbe36e146799fb6e267f3a960fa",
+    "validation_after_promote": {
+      "documents": 4124180,
+      "duplicate_keys": 0,
+      "expected_documents": 4124180,
+      "indexes": [
+        "_id_",
+        "idx_model_user",
+        "uq_model_user_product",
+        "uq_model_user_rank"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    },
+    "validation_before_promote": {
+      "documents": 4124180,
+      "duplicate_keys": 0,
+      "expected_documents": 4124180,
+      "indexes": [
+        "_id_",
+        "idx_model_user",
+        "uq_model_user_product",
+        "uq_model_user_rank"
+      ],
+      "invalid_indexes": [],
+      "missing_indexes": [],
+      "valid": true
+    }
+  }
+}

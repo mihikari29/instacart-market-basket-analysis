@@ -1,0 +1,244 @@
+Command: python3 scripts/module4.py all --run-id full-ab-20261010-first --model-version als-full-20261010 --graph-version graph-full-20261010 --shuffle-partitions 32 --executor-memory 2g --executor-cores 4 --total-cores 4 --als-blocks 8 --pilot-users 5000 --max-trials 1 --graph-min-edge-weight 10 --scope full_data --source-receipt data/raw/source-receipt.json 
+ Container instacart-datanode-1  Running
+ Container instacart-namenode-1  Running
+ Container instacart-mongodb-1  Running
+ Container instacart-spark-master-1  Running
+ Container instacart-spark-worker-1  Running
+ Container instacart-namenode-1  Waiting
+ Container instacart-datanode-1  Waiting
+ Container instacart-namenode-1  Healthy
+ Container instacart-datanode-1  Healthy
+ Container instacart-spark-master-1  Waiting
+ Container instacart-spark-master-1  Healthy
+ Container instacart-datanode-1  Waiting
+ Container instacart-mongodb-1  Waiting
+ Container instacart-spark-master-1  Waiting
+ Container instacart-spark-worker-1  Waiting
+ Container instacart-namenode-1  Waiting
+ Container instacart-mongodb-1  Healthy
+ Container instacart-datanode-1  Healthy
+ Container instacart-spark-master-1  Healthy
+ Container instacart-namenode-1  Healthy
+ Container instacart-spark-worker-1  Healthy
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/10/10 03:15:26 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+26/10/10 03:21:06 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:07 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:09 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:12 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:19 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:23 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:25 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:27 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:21:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.JNIBLAS
+26/10/10 03:21:36 WARN InstanceBuilder: Failed to load implementation from:dev.ludovic.netlib.blas.VectorBLAS
+26/10/10 03:22:06 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:09 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:11 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:11 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:24 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:38 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:47 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:22:59 WARN WindowExec: No Partition Defined for Window operation! Moving all data to a single partition, this can cause serious performance degradation.
+26/10/10 03:37:25 WARN TaskSetManager: Lost task 0.0 in stage 3050.0 (TID 11605) (172.18.0.6 executor 0): java.lang.OutOfMemoryError: Java heap space
+	at java.base/java.nio.HeapByteBuffer.<init>(HeapByteBuffer.java:64)
+	at java.base/java.nio.ByteBuffer.allocate(ByteBuffer.java:363)
+	at org.apache.spark.io.ReadAheadInputStream.<init>(ReadAheadInputStream.java:106)
+	at org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillReader.<init>(UnsafeSorterSpillReader.java:77)
+	at org.apache.spark.util.collection.unsafe.sort.UnsafeSorterSpillWriter.getReader(UnsafeSorterSpillWriter.java:159)
+	at org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter.getSortedIterator(UnsafeExternalSorter.java:555)
+	at org.apache.spark.sql.execution.UnsafeKVExternalSorter.sortedIterator(UnsafeKVExternalSorter.java:206)
+	at org.apache.spark.sql.execution.aggregate.SortBasedAggregator$$anon$1.<init>(ObjectAggregationIterator.scala:251)
+	at org.apache.spark.sql.execution.aggregate.SortBasedAggregator.destructiveIterator(ObjectAggregationIterator.scala:250)
+	at org.apache.spark.sql.execution.aggregate.ObjectAggregationIterator.processInputs(ObjectAggregationIterator.scala:209)
+	at org.apache.spark.sql.execution.aggregate.ObjectAggregationIterator.<init>(ObjectAggregationIterator.scala:84)
+	at org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec.$anonfun$doExecute$1(ObjectHashAggregateExec.scala:114)
+	at org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec.$anonfun$doExecute$1$adapted(ObjectHashAggregateExec.scala:90)
+	at org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec$$Lambda$2247/0x00007c3b24aaa000.apply(Unknown Source)
+	at org.apache.spark.rdd.RDD.$anonfun$mapPartitionsWithIndexInternal$2(RDD.scala:880)
+	at org.apache.spark.rdd.RDD.$anonfun$mapPartitionsWithIndexInternal$2$adapted(RDD.scala:880)
+	at org.apache.spark.rdd.RDD$$Lambda$887/0x00007c3b247b4000.apply(Unknown Source)
+	at org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)
+	at org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:367)
+	at org.apache.spark.rdd.RDD.iterator(RDD.scala:331)
+	at org.apache.spark.rdd.MapPartitionsRDD.compute(MapPartitionsRDD.scala:52)
+	at org.apache.spark.rdd.RDD.computeOrReadCheckpoint(RDD.scala:367)
+	at org.apache.spark.rdd.RDD.iterator(RDD.scala:331)
+	at org.apache.spark.shuffle.ShuffleWriteProcessor.write(ShuffleWriteProcessor.scala:59)
+	at org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:104)
+	at org.apache.spark.scheduler.ShuffleMapTask.runTask(ShuffleMapTask.scala:54)
+	at org.apache.spark.TaskContext.runTaskWithListeners(TaskContext.scala:166)
+	at org.apache.spark.scheduler.Task.run(Task.scala:141)
+	at org.apache.spark.executor.Executor$TaskRunner.$anonfun$run$4(Executor.scala:620)
+	at org.apache.spark.executor.Executor$TaskRunner$$Lambda$552/0x00007c3b244a5e30.apply(Unknown Source)
+	at org.apache.spark.util.SparkErrorUtils.tryWithSafeFinally(SparkErrorUtils.scala:64)
+	at org.apache.spark.util.SparkErrorUtils.tryWithSafeFinally$(SparkErrorUtils.scala:61)
+
+26/10/10 03:37:27 ERROR TaskSchedulerImpl: Lost executor 0 on 172.18.0.6: Command exited with code 52
+26/10/10 03:37:27 WARN TaskSetManager: Lost task 1.0 in stage 3050.0 (TID 11606) (172.18.0.6 executor 0): ExecutorLostFailure (executor 0 exited caused by one of the running tasks) Reason: Command exited with code 52
+26/10/10 03:37:27 WARN TaskSetManager: Lost task 3.0 in stage 3050.0 (TID 11608) (172.18.0.6 executor 0): ExecutorLostFailure (executor 0 exited caused by one of the running tasks) Reason: Command exited with code 52
+26/10/10 03:37:27 WARN TaskSetManager: Lost task 2.0 in stage 3050.0 (TID 11607) (172.18.0.6 executor 0): ExecutorLostFailure (executor 0 exited caused by one of the running tasks) Reason: Command exited with code 52
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_8 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_27 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_19 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_18 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_17 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_13 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_16 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_19 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_23 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_14 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_26 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_25 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_28 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_22 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_10 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_19 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_13 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_11 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_12 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_30 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_28 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_12 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_8 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_29 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_14 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_17 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_22 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_20 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_27 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_31 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_24 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_9 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_21 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_9 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_27 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_29 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_31 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_21 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_16 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_17 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_14 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_22 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_28 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_24 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_24 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_20 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_23 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_15 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_26 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_20 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_19 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_26 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_26 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_15 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_13 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_15 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_24 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_12 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_30 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_31 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1627_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_17 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_9 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_15 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_16 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_22 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_10 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_8 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_25 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_11 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_27 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_4 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_10 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_30 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_25 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_16 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_18 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_29 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_10 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_14 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_18 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_23 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_6 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_13 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_1622_1 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_12 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_25 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_21 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_21 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_28 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_30 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_23 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_31 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_7 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_29 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_20 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3096_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_489_11 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3091_2 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_18 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_11 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_5 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3422_0 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_3 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_9 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_3410_8 !
+26/10/10 03:37:27 WARN BlockManagerMasterEndpoint: No more replicas available for rdd_2791_1 !
+
+
+Exit code: 137

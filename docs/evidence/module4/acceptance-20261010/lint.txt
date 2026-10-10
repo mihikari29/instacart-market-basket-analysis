@@ -1,0 +1,4 @@
+Command: docker compose run --rm --no-deps --entrypoint python3 module4 -m ruff check . 
+All checks passed!
+
+Exit code: 0

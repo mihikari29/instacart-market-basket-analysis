@@ -1,0 +1,32 @@
+*(10) Project [_1#90 AS user_id#95, cast(_2#91 as array<struct<product_id:int,rating:float>>) AS recommendations#99]
++- *(10) SerializeFromObject [knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._1 AS _1#90, mapobjects(lambdavariable(MapObject, ObjectType(class java.lang.Object), true, -1), if (isnull(validateexternaltype(lambdavariable(MapObject, ObjectType(class java.lang.Object), true, -1), StructField(_1,IntegerType,false), StructField(_2,FloatType,false), ObjectType(class scala.Tuple2)))) null else named_struct(_1, knownnotnull(validateexternaltype(lambdavariable(MapObject, ObjectType(class java.lang.Object), true, -1), StructField(_1,IntegerType,false), StructField(_2,FloatType,false), ObjectType(class scala.Tuple2)))._1, _2, knownnotnull(validateexternaltype(lambdavariable(MapObject, ObjectType(class java.lang.Object), true, -1), StructField(_1,IntegerType,false), StructField(_2,FloatType,false), ObjectType(class scala.Tuple2)))._2), knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._2, None) AS _2#91]
+   +- *(10) MapElements org.apache.spark.ml.recommendation.ALSModel$$Lambda$2618/0x0000737944e2fa48@63819365, obj#89: scala.Tuple2
+      +- *(10) DeserializeToObject newInstance(class scala.Tuple2), obj#88: scala.Tuple2
+         +- ObjectHashAggregate(keys=[user_id#68], functions=[collect_top_k(struct(rating, rating#70, product_id, product_id#69), 21, false, 0, 0)], output=[user_id#68, collect_top_k(struct(rating, product_id))#78])
+            +- Exchange hashpartitioning(user_id#68, 32), ENSURE_REQUIREMENTS, [plan_id=198]
+               +- ObjectHashAggregate(keys=[user_id#68], functions=[partial_collect_top_k(struct(rating, rating#70, product_id, product_id#69), 21, false, 0, 0)], output=[user_id#68, buf#103])
+                  +- *(9) Project [_1#65 AS user_id#68, _2#66 AS product_id#69, _3#67 AS rating#70]
+                     +- *(9) SerializeFromObject [knownnotnull(assertnotnull(input[0, scala.Tuple3, true]))._1 AS _1#65, knownnotnull(assertnotnull(input[0, scala.Tuple3, true]))._2 AS _2#66, knownnotnull(assertnotnull(input[0, scala.Tuple3, true]))._3 AS _3#67]
+                        +- MapPartitions org.apache.spark.ml.recommendation.ALSModel$$Lambda$2561/0x0000737944e12c00@7400f826, obj#64: scala.Tuple3
+                           +- DeserializeToObject newInstance(class scala.Tuple4), obj#63: scala.Tuple4
+                              +- CartesianProduct
+                                 :- *(6) SerializeFromObject [staticinvoke(class org.apache.spark.sql.catalyst.expressions.UnsafeArrayData, ArrayType(IntegerType,false), fromPrimitiveArray, knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._1, true, false, true) AS _1#33, staticinvoke(class org.apache.spark.sql.catalyst.expressions.UnsafeArrayData, ArrayType(FloatType,false), fromPrimitiveArray, knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._2, true, false, true) AS _2#34]
+                                 :  +- MapPartitions org.apache.spark.ml.recommendation.ALSModel$$Lambda$2553/0x0000737944e10000@6723bfab, obj#32: scala.Tuple2
+                                 :     +- DeserializeToObject newInstance(class scala.Tuple2), obj#31: scala.Tuple2
+                                 :        +- *(5) SortMergeJoin [id#0], [user_id#11], LeftSemi
+                                 :           :- *(2) Sort [id#0 ASC NULLS FIRST], false, 0
+                                 :           :  +- Exchange hashpartitioning(id#0, 32), ENSURE_REQUIREMENTS, [plan_id=160]
+                                 :           :     +- *(1) Filter isnotnull(id#0)
+                                 :           :        +- *(1) ColumnarToRow
+                                 :           :           +- FileScan parquet [id#0,features#1] Batched: true, DataFilters: [isnotnull(id#0)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/models/als/als-full-20261010/userFactors], PartitionFilters: [], PushedFilters: [IsNotNull(id)], ReadSchema: struct<id:int,features:array<float>>
+                                 :           +- *(4) Sort [user_id#11 ASC NULLS FIRST], false, 0
+                                 :              +- Exchange hashpartitioning(user_id#11, 32), ENSURE_REQUIREMENTS, [plan_id=170]
+                                 :                 +- *(3) Project [id#15 AS user_id#11]
+                                 :                    +- *(3) Filter isnotnull(id#15)
+                                 :                       +- *(3) ColumnarToRow
+                                 :                          +- FileScan parquet [id#15] Batched: true, DataFilters: [isnotnull(id#15)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/models/als/als-full-20261010/userFactors], PartitionFilters: [], PushedFilters: [IsNotNull(id)], ReadSchema: struct<id:int>
+                                 +- *(8) SerializeFromObject [staticinvoke(class org.apache.spark.sql.catalyst.expressions.UnsafeArrayData, ArrayType(IntegerType,false), fromPrimitiveArray, knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._1, true, false, true) AS _1#44, staticinvoke(class org.apache.spark.sql.catalyst.expressions.UnsafeArrayData, ArrayType(FloatType,false), fromPrimitiveArray, knownnotnull(assertnotnull(input[0, scala.Tuple2, true]))._2, true, false, true) AS _2#45]
+                                    +- MapPartitions org.apache.spark.ml.recommendation.ALSModel$$Lambda$2553/0x0000737944e10000@3b21237, obj#43: scala.Tuple2
+                                       +- DeserializeToObject newInstance(class scala.Tuple2), obj#42: scala.Tuple2
+                                          +- *(7) ColumnarToRow
+                                             +- FileScan parquet [id#4,features#5] Batched: true, DataFilters: [], Format: Parquet, Location: InMemoryFileIndex(1 paths)[hdfs://namenode:8020/instacart/models/als/als-full-20261010/itemFactors], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<id:int,features:array<float>>

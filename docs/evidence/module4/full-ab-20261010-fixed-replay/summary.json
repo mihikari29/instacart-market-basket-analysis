@@ -1,0 +1,2099 @@
+{
+  "acceptance_status": "full_data_pair_validated",
+  "als": {
+    "duration_ms": 1534880.704,
+    "evaluation": {
+      "als_vs_baseline_deltas": {
+        "all_official_train_users": {
+          "global_popularity": {
+            "10": {
+              "map_at_k": 0.025876309972132548,
+              "ndcg_at_k": 0.03922108490284122,
+              "precision_at_k": 0.023263648072923304,
+              "recall_at_k": 0.05162893122030639
+            },
+            "20": {
+              "map_at_k": 0.03112844179243872,
+              "ndcg_at_k": 0.055573860967159605,
+              "precision_at_k": 0.02516367017506522,
+              "recall_at_k": 0.08520841845480374
+            },
+            "5": {
+              "map_at_k": 0.021691188612570383,
+              "ndcg_at_k": 0.028039184441321557,
+              "precision_at_k": 0.021522913824508202,
+              "recall_at_k": 0.03246509135982538
+            }
+          },
+          "personal_frequency": {
+            "10": {
+              "map_at_k": -0.19176575939653423,
+              "ndcg_at_k": -0.24966148422788054,
+              "precision_at_k": -0.17114222347552493,
+              "recall_at_k": -0.1977601293957873
+            },
+            "20": {
+              "map_at_k": -0.18470032069033054,
+              "ndcg_at_k": -0.24947408805217988,
+              "precision_at_k": -0.11645885571873675,
+              "recall_at_k": -0.24579644613310422
+            },
+            "5": {
+              "map_at_k": -0.22427182332512735,
+              "ndcg_at_k": -0.2683020818909815,
+              "precision_at_k": -0.22778620369030417,
+              "recall_at_k": -0.144130424180584
+            }
+          }
+        },
+        "warm_users_and_all_truth_items": {
+          "global_popularity": {
+            "10": {
+              "map_at_k": 0.02587442225288098,
+              "ndcg_at_k": 0.03921779442764571,
+              "precision_at_k": 0.023260670731708802,
+              "recall_at_k": 0.05162799252836163
+            },
+            "20": {
+              "map_at_k": 0.03112710811329234,
+              "ndcg_at_k": 0.055571900726480924,
+              "precision_at_k": 0.025161966463415654,
+              "recall_at_k": 0.08520907972619879
+            },
+            "5": {
+              "map_at_k": 0.02168833206300874,
+              "ndcg_at_k": 0.028033505859030874,
+              "precision_at_k": 0.021515243902438252,
+              "recall_at_k": 0.03246340266418651
+            }
+          },
+          "personal_frequency": {
+            "10": {
+              "map_at_k": -0.19177400758003904,
+              "ndcg_at_k": -0.2496705475419946,
+              "precision_at_k": -0.1711455792682939,
+              "recall_at_k": -0.19777058870172848
+            },
+            "20": {
+              "map_at_k": -0.18470995225318618,
+              "ndcg_at_k": -0.24948477547290157,
+              "precision_at_k": -0.11646112804877844,
+              "recall_at_k": -0.24580943476611564
+            },
+            "5": {
+              "map_at_k": -0.22428172002032493,
+              "ndcg_at_k": -0.26831379892858875,
+              "precision_at_k": -0.22779573170732553,
+              "recall_at_k": -0.1441396826557668
+            }
+          }
+        }
+      },
+      "cohort_exclusion": "users with empty official train truth are excluded and counted in data report",
+      "cohorts": {
+        "all_official_train_users": {
+          "definition": "all users with non-empty official train truth; cold items remain in denominator",
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 2382,
+                "catalog_coverage_rate": 0.04793914023506682,
+                "evaluated_users": 131209,
+                "k": 10,
+                "map_at_k": 0.06988428671987636,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.13710192304026791,
+                "precision_at_k": 0.09578611223315568,
+                "recall_at_k": 0.12147208248298487,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 2969,
+                "catalog_coverage_rate": 0.059752857832877156,
+                "evaluated_users": 131209,
+                "k": 20,
+                "map_at_k": 0.06975051176644442,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.15285411214195618,
+                "precision_at_k": 0.07621009229549948,
+                "recall_at_k": 0.18012288588470818,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 1923,
+                "catalog_coverage_rate": 0.03870149734342296,
+                "evaluated_users": 131209,
+                "k": 5,
+                "map_at_k": 0.08317985681876484,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.13704960756363752,
+                "precision_at_k": 0.1162984246507451,
+                "recall_at_k": 0.07933671752035709,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 10,
+                "catalog_coverage_rate": 0.00020125583641925616,
+                "evaluated_users": 131209,
+                "k": 10,
+                "map_at_k": 0.04400797674774381,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.09788083813742669,
+                "precision_at_k": 0.07252246416023238,
+                "recall_at_k": 0.06984315126267848,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 20,
+                "catalog_coverage_rate": 0.0004025116728385123,
+                "evaluated_users": 131209,
+                "k": 20,
+                "map_at_k": 0.038622069974005704,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.09728025117479658,
+                "precision_at_k": 0.05104642212043426,
+                "recall_at_k": 0.09491446742990443,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.00010062791820962808,
+                "evaluated_users": 131209,
+                "k": 5,
+                "map_at_k": 0.06148866820619446,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.10901042312231596,
+                "precision_at_k": 0.09477551082623689,
+                "recall_at_k": 0.04687162616053171,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 34881,
+                "catalog_coverage_rate": 0.7020004830140074,
+                "evaluated_users": 131209,
+                "k": 10,
+                "map_at_k": 0.2616500461164106,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.38676340726814845,
+                "precision_at_k": 0.26692833570868063,
+                "recall_at_k": 0.31923221187877215,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 41915,
+                "catalog_coverage_rate": 0.8435638383513122,
+                "evaluated_users": 131209,
+                "k": 20,
+                "map_at_k": 0.25445083245677497,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.40232820019413607,
+                "precision_at_k": 0.19266894801423623,
+                "recall_at_k": 0.4259193320178124,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 27588,
+                "catalog_coverage_rate": 0.5552246015134439,
+                "evaluated_users": 131209,
+                "k": 5,
+                "map_at_k": 0.3074516801438922,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.40535168945461897,
+                "precision_at_k": 0.34408462834104925,
+                "recall_at_k": 0.2234671417009411,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 131209
+        },
+        "warm_users_and_all_truth_items": {
+          "definition": "user factor exists and every official train truth product has an item factor",
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 2382,
+                "catalog_coverage_rate": 0.04793914023506682,
+                "evaluated_users": 131200,
+                "k": 10,
+                "map_at_k": 0.06988370290146877,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.13710102015118655,
+                "precision_at_k": 0.09578429878048875,
+                "recall_at_k": 0.12147247675336986,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 2969,
+                "catalog_coverage_rate": 0.059752857832877156,
+                "evaluated_users": 131200,
+                "k": 20,
+                "map_at_k": 0.06975018774469757,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.15285416126256804,
+                "precision_at_k": 0.07620922256097708,
+                "recall_at_k": 0.18012494852680824,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 1923,
+                "catalog_coverage_rate": 0.03870149734342296,
+                "evaluated_users": 131200,
+                "k": 5,
+                "map_at_k": 0.08317931275406491,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.13704770844211653,
+                "precision_at_k": 0.11629420731707023,
+                "recall_at_k": 0.07933633861614692,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 10,
+                "catalog_coverage_rate": 0.00020125583641925616,
+                "evaluated_users": 131200,
+                "k": 10,
+                "map_at_k": 0.044009280648587785,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.09788322572354084,
+                "precision_at_k": 0.07252362804877995,
+                "recall_at_k": 0.06984448422500823,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 20,
+                "catalog_coverage_rate": 0.0004025116728385123,
+                "evaluated_users": 131200,
+                "k": 20,
+                "map_at_k": 0.03862307963140523,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.09728226053608711,
+                "precision_at_k": 0.05104725609756142,
+                "recall_at_k": 0.09491586880060945,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.00010062791820962808,
+                "evaluated_users": 131200,
+                "k": 5,
+                "map_at_k": 0.06149098069105617,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.10901420258308565,
+                "precision_at_k": 0.09477896341463198,
+                "recall_at_k": 0.04687293595196041,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 34880,
+                "catalog_coverage_rate": 0.7019803574303655,
+                "evaluated_users": 131200,
+                "k": 10,
+                "map_at_k": 0.2616577104815078,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.38677156769318116,
+                "precision_at_k": 0.26692987804878265,
+                "recall_at_k": 0.31924306545509834,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 41913,
+                "catalog_coverage_rate": 0.8435235871840283,
+                "evaluated_users": 131200,
+                "k": 20,
+                "map_at_k": 0.25446013999788375,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.4023389367354696,
+                "precision_at_k": 0.19267035060975551,
+                "recall_at_k": 0.4259343832929239,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 27586,
+                "catalog_coverage_rate": 0.5551843503461601,
+                "evaluated_users": 131200,
+                "k": 5,
+                "map_at_k": 0.30746103277438985,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.40536150737070525,
+                "precision_at_k": 0.3440899390243958,
+                "recall_at_k": 0.2234760212719137,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 131200
+        }
+      },
+      "fallback": "global prior popularity for users without ALS user factors in all-user evaluation only",
+      "ground_truth": "official order_products_train, distinct product IDs per user",
+      "history_subgroups": {
+        "new_to_user": {
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 2264,
+                "catalog_coverage_rate": 0.04556432136531959,
+                "evaluated_users": 107008,
+                "k": 10,
+                "map_at_k": 0.011941008742910372,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.026450934557713884,
+                "precision_at_k": 0.016343637858851803,
+                "recall_at_k": 0.03615188562543063,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 2850,
+                "catalog_coverage_rate": 0.05735791337948801,
+                "evaluated_users": 107008,
+                "k": 20,
+                "map_at_k": 0.013871118306665356,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.036601199409366555,
+                "precision_at_k": 0.014968974282296548,
+                "recall_at_k": 0.06439858501235492,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 1832,
+                "catalog_coverage_rate": 0.03687006923200773,
+                "evaluated_users": 107008,
+                "k": 5,
+                "map_at_k": 0.01135154225229267,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.020769605347291463,
+                "precision_at_k": 0.01714451255980868,
+                "recall_at_k": 0.01933835853148654,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 10,
+                "catalog_coverage_rate": 0.00020125583641925616,
+                "evaluated_users": 107008,
+                "k": 10,
+                "map_at_k": 0.012025510720016175,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.02622581441272202,
+                "precision_at_k": 0.01606795753588529,
+                "recall_at_k": 0.03234486243209091,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 20,
+                "catalog_coverage_rate": 0.0004025116728385123,
+                "evaluated_users": 107008,
+                "k": 20,
+                "map_at_k": 0.013114867905500047,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.03280114440653207,
+                "precision_at_k": 0.013051827900717662,
+                "recall_at_k": 0.050711388304177,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.00010062791820962808,
+                "evaluated_users": 107008,
+                "k": 5,
+                "map_at_k": 0.01225541807881447,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.02218350282866922,
+                "precision_at_k": 0.017864084928229742,
+                "recall_at_k": 0.01906731197982039,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 33619,
+                "catalog_coverage_rate": 0.6766019964578973,
+                "evaluated_users": 107008,
+                "k": 10,
+                "map_at_k": 0.00020302348421841494,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.0006028869794914351,
+                "precision_at_k": 0.00039529754784689,
+                "recall_at_k": 0.0013888564506582682,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 40862,
+                "catalog_coverage_rate": 0.8223715987763646,
+                "evaluated_users": 107008,
+                "k": 20,
+                "map_at_k": 0.0005077105273076889,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.0021398696040952647,
+                "precision_at_k": 0.000998990729665071,
+                "recall_at_k": 0.005845728906565731,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 26306,
+                "catalog_coverage_rate": 0.5294236032844952,
+                "evaluated_users": 107008,
+                "k": 5,
+                "map_at_k": 5.268557283359913e-05,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.00012028061800364214,
+                "precision_at_k": 0.00011961722488038278,
+                "recall_at_k": 0.0001866336874388804,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 107008
+        },
+        "reordered": {
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 2320,
+                "catalog_coverage_rate": 0.04669135404926743,
+                "evaluated_users": 122607,
+                "k": 10,
+                "map_at_k": 0.0914916129721219,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.15989019067040317,
+                "precision_at_k": 0.08824210689438633,
+                "recall_at_k": 0.1787035664126866,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 2906,
+                "catalog_coverage_rate": 0.05848494606343584,
+                "evaluated_users": 122607,
+                "k": 20,
+                "map_at_k": 0.09839005248110548,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.18775492477884417,
+                "precision_at_k": 0.0684924188667868,
+                "recall_at_k": 0.2566499929596603,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 1874,
+                "catalog_coverage_rate": 0.037715343744968606,
+                "evaluated_users": 122607,
+                "k": 5,
+                "map_at_k": 0.09405115758299096,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.14596455183680435,
+                "precision_at_k": 0.10949456393190987,
+                "recall_at_k": 0.1200408229773556,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 10,
+                "catalog_coverage_rate": 0.00020125583641925616,
+                "evaluated_users": 122607,
+                "k": 10,
+                "map_at_k": 0.05288411176261797,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.10474130485873193,
+                "precision_at_k": 0.06358690776219823,
+                "recall_at_k": 0.09800210346139042,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 20,
+                "catalog_coverage_rate": 0.0004025116728385123,
+                "evaluated_users": 122607,
+                "k": 20,
+                "map_at_k": 0.05225505736152945,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.1116072140621903,
+                "precision_at_k": 0.04323651993768711,
+                "recall_at_k": 0.1284628776338431,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.00010062791820962808,
+                "evaluated_users": 122607,
+                "k": 5,
+                "map_at_k": 0.06307410624551923,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.10704797948677111,
+                "precision_at_k": 0.0858335984079196,
+                "recall_at_k": 0.06706496101175488,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 10.0,
+                "catalog_coverage": 33832,
+                "catalog_coverage_rate": 0.6808887457736275,
+                "evaluated_users": 122607,
+                "k": 10,
+                "map_at_k": 0.36108545124933966,
+                "max_recommendations_per_user": 10,
+                "min_recommendations_per_user": 10,
+                "ndcg_at_k": 0.49609974122491046,
+                "precision_at_k": 0.2853107897591515,
+                "recall_at_k": 0.5186347791030398,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 20.0,
+                "catalog_coverage": 41146,
+                "catalog_coverage_rate": 0.8280872645306714,
+                "evaluated_users": 122607,
+                "k": 20,
+                "map_at_k": 0.3853204814318932,
+                "max_recommendations_per_user": 20,
+                "min_recommendations_per_user": 20,
+                "ndcg_at_k": 0.5524803274837659,
+                "precision_at_k": 0.20531454158408513,
+                "recall_at_k": 0.6970207764329253,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 26574,
+                "catalog_coverage_rate": 0.5348172597005313,
+                "evaluated_users": 122607,
+                "k": 5,
+                "map_at_k": 0.37242222666278696,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.47401572430821076,
+                "precision_at_k": 0.3681209066366581,
+                "recall_at_k": 0.36122635092787825,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 122607
+        }
+      },
+      "ks": [
+        5,
+        10,
+        20
+      ],
+      "official_test_truth_available": false,
+      "truth_summary": {
+        "cold_truth_products": 8,
+        "truth_products": 39123,
+        "truth_products_with_item_factors": 39115,
+        "users": 131209,
+        "users_with_mixed_warm_and_cold_truth": 9,
+        "users_with_user_factors": 131209,
+        "users_without_user_factors": 0
+      }
+    },
+    "model": {
+      "als_blocks": 8,
+      "checkpoint_interval": 10,
+      "cold_start_strategy": "drop",
+      "factors_finite": true,
+      "final_storage_level": "MEMORY_AND_DISK",
+      "implicit_prefs": true,
+      "input_products": 49677,
+      "input_rows": 13307953,
+      "input_users": 206209,
+      "interaction_products": 49677,
+      "interaction_rows": 13307953,
+      "interaction_users": 206209,
+      "intermediate_storage_level": "MEMORY_AND_DISK",
+      "model_bytes": 33842508,
+      "model_path": "hdfs://namenode:8020/instacart/models/als/als-full-20261010-fixed",
+      "model_version": "als-full-20261010-fixed",
+      "num_item_blocks": 8,
+      "num_user_blocks": 8,
+      "params": {
+        "alpha": 10.0,
+        "max_iter": 10,
+        "rank": 32,
+        "reg_param": 0.1,
+        "strength_col": "strength_raw"
+      },
+      "product_factors": 49677,
+      "recommendation_block_size": 512,
+      "reused_existing_model": true,
+      "save_load_recommendation_tolerance": 1e-06,
+      "save_load_verified": true,
+      "seed": 42,
+      "source_code_sha256": "e4b91d0b6e525f3f82b4463fd660e732232042cb3cb07c60054eac780111fbd5",
+      "source_receipt_sha256": "5b85a0eb459ffa3c1efd5aa96ebc4eefa86f04b00e8e6a25f855076ff98d57e7",
+      "user_factors": 206209
+    },
+    "mongo": {
+      "collection": "user_recommendations",
+      "documents": 4124180,
+      "duration_ms": 383592.348,
+      "expected_documents": 4124180,
+      "model_version": "als-full-20261010-fixed",
+      "published": true,
+      "run_id": "full-ab-20261010-fixed-replay",
+      "temporary": "user_recommendations__staging_7607ecbe36e146799fb6e267f3a960fa",
+      "validation_after_promote": {
+        "documents": 4124180,
+        "duplicate_keys": 0,
+        "expected_documents": 4124180,
+        "indexes": [
+          "_id_",
+          "idx_model_user",
+          "uq_model_user_product",
+          "uq_model_user_rank"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      },
+      "validation_before_promote": {
+        "documents": 4124180,
+        "duplicate_keys": 0,
+        "expected_documents": 4124180,
+        "indexes": [
+          "_id_",
+          "idx_model_user",
+          "uq_model_user_product",
+          "uq_model_user_rank"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      }
+    },
+    "recommendation_validation": {
+      "actual_rows": 4124180,
+      "expected_rows": 4124180,
+      "generated_users": 206209,
+      "product_foreign_keys_valid": true,
+      "products_per_user": 20,
+      "rank_product_keys_unique": true,
+      "requested_users": 206209,
+      "user_set_exact": true
+    },
+    "split_summary": {
+      "cold_start_validation_products": 25,
+      "eligible_prior_rows": 32434489,
+      "eligible_users": 206209,
+      "excluded_users": 0,
+      "heldout_orders": 206209,
+      "official_train_overlap": 0,
+      "order_sets_disjoint": true,
+      "total_users": 206209,
+      "training_orders": 3008665,
+      "training_rows": 30294701,
+      "validation_rows": 2139788,
+      "validation_users": 206209
+    },
+    "tuning": {
+      "executor_shuffle_config": {
+        "shuffle_partitions": 32,
+        "spark_master": "spark://spark-master:7077"
+      },
+      "final_model": {
+        "als_blocks": 8,
+        "checkpoint_interval": 10,
+        "cold_start_strategy": "drop",
+        "factors_finite": true,
+        "final_storage_level": "MEMORY_AND_DISK",
+        "implicit_prefs": true,
+        "input_products": 49677,
+        "input_rows": 13307953,
+        "input_users": 206209,
+        "interaction_products": 49677,
+        "interaction_rows": 13307953,
+        "interaction_users": 206209,
+        "intermediate_storage_level": "MEMORY_AND_DISK",
+        "model_bytes": 33842508,
+        "model_path": "hdfs://namenode:8020/instacart/models/als/als-full-20261010-fixed",
+        "model_version": "als-full-20261010-fixed",
+        "num_item_blocks": 8,
+        "num_user_blocks": 8,
+        "params": {
+          "alpha": 10.0,
+          "max_iter": 10,
+          "rank": 32,
+          "reg_param": 0.1,
+          "strength_col": "strength_raw"
+        },
+        "product_factors": 49677,
+        "recommendation_block_size": 512,
+        "reused_existing_model": true,
+        "save_load_recommendation_tolerance": 1e-06,
+        "save_load_verified": true,
+        "seed": 42,
+        "source_code_sha256": "e4b91d0b6e525f3f82b4463fd660e732232042cb3cb07c60054eac780111fbd5",
+        "source_receipt_sha256": "5b85a0eb459ffa3c1efd5aa96ebc4eefa86f04b00e8e6a25f855076ff98d57e7",
+        "user_factors": 206209
+      },
+      "full_validation_baselines": {
+        "global_popularity": {
+          "average_recommendations_per_user": 10.0,
+          "catalog_coverage": 10,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 206209,
+          "k": 10,
+          "map_at_k": 0.04351725598714219,
+          "max_recommendations_per_user": 10,
+          "min_recommendations_per_user": 10,
+          "ndcg_at_k": 0.09676139755420937,
+          "precision_at_k": 0.07108225150211822,
+          "recall_at_k": 0.06994131799735356,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        },
+        "personal_frequency": {
+          "average_recommendations_per_user": 10.0,
+          "catalog_coverage": 38715,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 206209,
+          "k": 10,
+          "map_at_k": 0.26313214633001525,
+          "max_recommendations_per_user": 10,
+          "min_recommendations_per_user": 10,
+          "ndcg_at_k": 0.3882791286865051,
+          "precision_at_k": 0.26622746824823146,
+          "recall_at_k": 0.32425068750596264,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        }
+      },
+      "full_validation_trials": [
+        {
+          "evaluation_runtime_ms": 13876.844,
+          "fit_runtime_ms": 130787.913,
+          "input_interactions": 12422758,
+          "input_products": 49652,
+          "input_users": 206209,
+          "item_factors": 49652,
+          "metrics": {
+            "average_recommendations_per_user": 10.0,
+            "catalog_coverage": 2579,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 206209,
+            "k": 10,
+            "map_at_k": 0.0719624125360081,
+            "max_recommendations_per_user": 10,
+            "min_recommendations_per_user": 10,
+            "ndcg_at_k": 0.1399651591997651,
+            "precision_at_k": 0.09613498925847433,
+            "recall_at_k": 0.12368665638880434,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "params": {
+            "alpha": 10.0,
+            "max_iter": 10,
+            "rank": 32,
+            "reg_param": 0.1,
+            "strength_col": "strength_raw"
+          },
+          "phase": "full_internal_validation",
+          "pilot_trial_id": 1,
+          "recommendation_runtime_ms": 173163.188,
+          "seed": 42,
+          "status": "passed",
+          "total_runtime_ms": 318251.164,
+          "trial_id": 1,
+          "user_factors": 206209
+        }
+      ],
+      "internal_training_interactions": 12422758,
+      "max_pilot_trials": 1,
+      "official_train_used": false,
+      "pilot_baselines": {
+        "global_popularity": {
+          "average_recommendations_per_user": 10.0,
+          "catalog_coverage": 10,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 5000,
+          "k": 10,
+          "map_at_k": 0.04430186936255984,
+          "max_recommendations_per_user": 10,
+          "min_recommendations_per_user": 10,
+          "ndcg_at_k": 0.09860634247897455,
+          "precision_at_k": 0.07273999999999993,
+          "recall_at_k": 0.0717447098132488,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        },
+        "personal_frequency": {
+          "average_recommendations_per_user": 10.0,
+          "catalog_coverage": 10550,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 5000,
+          "k": 10,
+          "map_at_k": 0.2640795889707735,
+          "max_recommendations_per_user": 10,
+          "min_recommendations_per_user": 10,
+          "ndcg_at_k": 0.39086381571539835,
+          "precision_at_k": 0.26660000000000006,
+          "recall_at_k": 0.3265317073954645,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        }
+      },
+      "pilot_sampling": {
+        "method": "xxhash64(user_id, seed), then user_id",
+        "seed": 42
+      },
+      "pilot_training_interactions": 309101,
+      "pilot_trials": [
+        {
+          "evaluation_runtime_ms": 10117.636,
+          "fit_runtime_ms": 14197.775,
+          "input_interactions": 309101,
+          "input_products": 28543,
+          "input_users": 5000,
+          "item_factors": 28543,
+          "metrics": {
+            "average_recommendations_per_user": 10.0,
+            "catalog_coverage": 1459,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 5000,
+            "k": 10,
+            "map_at_k": 0.07318028521038045,
+            "max_recommendations_per_user": 10,
+            "min_recommendations_per_user": 10,
+            "ndcg_at_k": 0.14029252224994412,
+            "precision_at_k": 0.0957999999999999,
+            "recall_at_k": 0.12452105860467323,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "params": {
+            "alpha": 10.0,
+            "max_iter": 10,
+            "rank": 32,
+            "reg_param": 0.1,
+            "strength_col": "strength_raw"
+          },
+          "phase": "pilot",
+          "recommendation_runtime_ms": 11631.719,
+          "seed": 42,
+          "status": "passed",
+          "total_runtime_ms": 36284.112,
+          "trial_id": 1,
+          "user_factors": 5000
+        }
+      ],
+      "pilot_users_actual": 5000,
+      "pilot_users_requested": 5000,
+      "seed": 42,
+      "selected_params": {
+        "alpha": 10.0,
+        "max_iter": 10,
+        "rank": 32,
+        "reg_param": 0.1,
+        "strength_col": "strength_raw"
+      },
+      "selected_pilot_trial_id": 1,
+      "selected_trial_id": 1,
+      "selection_metric": "full internal Recall@10, then Precision@10, then runtime",
+      "shortlist_passed": 1,
+      "shortlist_requested": 1,
+      "shortlist_trial_ids": [
+        1
+      ],
+      "status": "passed",
+      "total_runtime_ms": 533646.628
+    }
+  },
+  "checkpoint": {
+    "ownership": "full-ab-20261010-fixed-replay",
+    "path": "hdfs://namenode:8020/instacart/checkpoints/module4/full-ab-20261010-fixed-replay",
+    "retention": "retained for audit"
+  },
+  "environment": {
+    "command": [
+      "module4",
+      "all",
+      "--run-id",
+      "full-ab-20261010-fixed-replay",
+      "--model-version",
+      "als-full-20261010-fixed",
+      "--graph-version",
+      "graph-full-20261010-fixed",
+      "--shuffle-partitions",
+      "32",
+      "--executor-memory",
+      "2g",
+      "--executor-cores",
+      "4",
+      "--total-cores",
+      "4",
+      "--als-blocks",
+      "8",
+      "--pilot-users",
+      "5000",
+      "--max-trials",
+      "1",
+      "--graph-min-edge-weight",
+      "10",
+      "--scope",
+      "full_data",
+      "--source-receipt",
+      "data/raw/source-receipt.json"
+    ],
+    "commit": "11ac21cc134f1de54bb16bbae6f593a0ebf57038",
+    "config": {
+      "als_blocks": 8,
+      "executor_cores": 4,
+      "executor_memory": "2g",
+      "graph_backend": "graphframes",
+      "graph_max_iter": 10,
+      "graph_min_edge_weight": 10,
+      "graph_reset_probability": 0.15,
+      "graph_top_products": null,
+      "master": "spark://spark-master:7077",
+      "mongo_database": "instacart",
+      "mongo_graph_collection": "product_graph_metrics",
+      "mongo_recommendation_collection": "user_recommendations",
+      "mongodb_uri": "mongodb://mongodb:27017/instacart",
+      "recommendation_k": 20,
+      "root": "hdfs://namenode:8020/instacart",
+      "seed": 42,
+      "shuffle_partitions": 32,
+      "total_cores": 4
+    },
+    "dirty": null,
+    "graph_version": "graph-full-20261010-fixed",
+    "graphframes_jars": [
+      {
+        "file": "graphframes-0.8.3-spark3.5-s_2.12.jar",
+        "sha512": "0778fb638a84f43de4e9a7d5ebeb8fb489bf0ed0542183e443a1b7a1f67051362095a7dfe98f6aabf16ccb8c77f59d14a09f744bf588a8711964424eb39927e5"
+      }
+    ],
+    "graphframes_python": "0.6",
+    "java": "17.0.14",
+    "model_version": "als-full-20261010-fixed",
+    "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "scala": "2.12.18",
+    "source_code_sha256": "e4b91d0b6e525f3f82b4463fd660e732232042cb3cb07c60054eac780111fbd5",
+    "spark": "3.5.5",
+    "spark_conf": {
+      "spark.cores.max": "4",
+      "spark.driver.memory": "1g",
+      "spark.executor.cores": "4",
+      "spark.executor.extraJavaOptions": "-Djava.net.preferIPv6Addresses=false -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false",
+      "spark.executor.id": "driver",
+      "spark.executor.memory": "2g",
+      "spark.master": "spark://spark-master:7077",
+      "spark.sql.adaptive.enabled": "false",
+      "spark.sql.ansi.enabled": "true",
+      "spark.sql.autoBroadcastJoinThreshold": "-1",
+      "spark.sql.debug.maxToStringFields": "200",
+      "spark.sql.maxMetadataStringLength": "10000",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "32"
+    },
+    "timestamp_utc": "2026-10-10T04:40:20.791389+00:00"
+  },
+  "eventlog": {
+    "directory": "/workspace/results/module4/full-ab-20261010-fixed-replay/eventlog",
+    "groups": [
+      "module4.als.final",
+      "module4.als.full_baseline",
+      "module4.als.full_validation.1",
+      "module4.als.pilot.1",
+      "module4.als.pilot_baseline",
+      "module4.graph.final_metrics",
+      "module4.graph.raw_edges",
+      "module4.graph.threshold.10",
+      "module4.graph.threshold.2",
+      "module4.graph.threshold.5",
+      "module4.input_validation",
+      "module4.mongo.graph",
+      "module4.mongo.recommendations"
+    ],
+    "status": "parsed"
+  },
+  "finished_at_utc": "2026-10-10T05:21:58.242112+00:00",
+  "graph": {
+    "duration_ms": 465715.07,
+    "graph_runtime_ms": 465709.538,
+    "graph_version": "graph-full-20261010-fixed",
+    "mongo": {
+      "collection": "product_graph_metrics",
+      "documents": 49688,
+      "duration_ms": 4661.58,
+      "expected_documents": 49688,
+      "graph_version": "graph-full-20261010-fixed",
+      "min_edge_weight": 10,
+      "published": true,
+      "run_id": "full-ab-20261010-fixed-replay",
+      "temporary": "product_graph_metrics__staging_69352e7dd9fe417c8e17eb773c778c1e",
+      "validation_after_promote": {
+        "documents": 49688,
+        "duplicate_keys": 0,
+        "expected_documents": 49688,
+        "indexes": [
+          "_id_",
+          "idx_graph_pagerank",
+          "idx_graph_weighted_degree",
+          "uq_graph_product"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      },
+      "validation_before_promote": {
+        "documents": 49688,
+        "duplicate_keys": 0,
+        "expected_documents": 49688,
+        "indexes": [
+          "_id_",
+          "idx_graph_pagerank",
+          "idx_graph_weighted_degree",
+          "uq_graph_product"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      }
+    },
+    "top20": {
+      "neighbor_count": [
+        {
+          "neighbor_count": 23516,
+          "pagerank": 863.4331412542679,
+          "product_id": 24852,
+          "product_name": "Banana",
+          "weighted_degree": 6113628
+        },
+        {
+          "neighbor_count": 17489,
+          "pagerank": 352.9895458251656,
+          "product_id": 13176,
+          "product_name": "Bag of Organic Bananas",
+          "weighted_degree": 4762878
+        },
+        {
+          "neighbor_count": 14474,
+          "pagerank": 181.98092867152533,
+          "product_id": 16797,
+          "product_name": "Strawberries",
+          "weighted_degree": 1799241
+        },
+        {
+          "neighbor_count": 14404,
+          "pagerank": 173.573159272941,
+          "product_id": 21137,
+          "product_name": "Organic Strawberries",
+          "weighted_degree": 3695145
+        },
+        {
+          "neighbor_count": 14192,
+          "pagerank": 157.46525333243542,
+          "product_id": 47626,
+          "product_name": "Large Lemon",
+          "weighted_degree": 2219015
+        },
+        {
+          "neighbor_count": 13210,
+          "pagerank": 143.25846757679568,
+          "product_id": 47766,
+          "product_name": "Organic Avocado",
+          "weighted_degree": 2453833
+        },
+        {
+          "neighbor_count": 13205,
+          "pagerank": 122.49615473777624,
+          "product_id": 26209,
+          "product_name": "Limes",
+          "weighted_degree": 2132145
+        },
+        {
+          "neighbor_count": 12887,
+          "pagerank": 164.17893440349803,
+          "product_id": 47209,
+          "product_name": "Organic Hass Avocado",
+          "weighted_degree": 3071643
+        },
+        {
+          "neighbor_count": 12429,
+          "pagerank": 147.42219697466518,
+          "product_id": 21903,
+          "product_name": "Organic Baby Spinach",
+          "weighted_degree": 3320424
+        },
+        {
+          "neighbor_count": 12094,
+          "pagerank": 107.85543997673196,
+          "product_id": 27966,
+          "product_name": "Organic Raspberries",
+          "weighted_degree": 2021029
+        },
+        {
+          "neighbor_count": 11165,
+          "pagerank": 80.70697493023722,
+          "product_id": 39275,
+          "product_name": "Organic Blueberries",
+          "weighted_degree": 1301448
+        },
+        {
+          "neighbor_count": 11090,
+          "pagerank": 84.51842627403899,
+          "product_id": 28204,
+          "product_name": "Organic Fuji Apple",
+          "weighted_degree": 1181663
+        },
+        {
+          "neighbor_count": 10944,
+          "pagerank": 83.43678253722634,
+          "product_id": 49683,
+          "product_name": "Cucumber Kirby",
+          "weighted_degree": 1392071
+        },
+        {
+          "neighbor_count": 10497,
+          "pagerank": 70.76402904457483,
+          "product_id": 4920,
+          "product_name": "Seedless Red Grapes",
+          "weighted_degree": 1150226
+        },
+        {
+          "neighbor_count": 10274,
+          "pagerank": 87.25498090136163,
+          "product_id": 5077,
+          "product_name": "100% Whole Wheat Bread",
+          "weighted_degree": 854943
+        },
+        {
+          "neighbor_count": 10171,
+          "pagerank": 77.29722678726368,
+          "product_id": 22935,
+          "product_name": "Organic Yellow Onion",
+          "weighted_degree": 1710454
+        },
+        {
+          "neighbor_count": 9973,
+          "pagerank": 72.96467046611086,
+          "product_id": 45007,
+          "product_name": "Organic Zucchini",
+          "weighted_degree": 1579813
+        },
+        {
+          "neighbor_count": 9872,
+          "pagerank": 74.43353548199292,
+          "product_id": 4605,
+          "product_name": "Yellow Onions",
+          "weighted_degree": 1055543
+        },
+        {
+          "neighbor_count": 9866,
+          "pagerank": 75.91289073506735,
+          "product_id": 27845,
+          "product_name": "Organic Whole Milk",
+          "weighted_degree": 1752127
+        },
+        {
+          "neighbor_count": 9625,
+          "pagerank": 72.93542140765476,
+          "product_id": 9076,
+          "product_name": "Blueberries",
+          "weighted_degree": 718725
+        }
+      ],
+      "pagerank": [
+        {
+          "neighbor_count": 23516,
+          "pagerank": 863.4331412542679,
+          "product_id": 24852,
+          "product_name": "Banana",
+          "weighted_degree": 6113628
+        },
+        {
+          "neighbor_count": 17489,
+          "pagerank": 352.9895458251656,
+          "product_id": 13176,
+          "product_name": "Bag of Organic Bananas",
+          "weighted_degree": 4762878
+        },
+        {
+          "neighbor_count": 14474,
+          "pagerank": 181.98092867152533,
+          "product_id": 16797,
+          "product_name": "Strawberries",
+          "weighted_degree": 1799241
+        },
+        {
+          "neighbor_count": 14404,
+          "pagerank": 173.573159272941,
+          "product_id": 21137,
+          "product_name": "Organic Strawberries",
+          "weighted_degree": 3695145
+        },
+        {
+          "neighbor_count": 12887,
+          "pagerank": 164.17893440349803,
+          "product_id": 47209,
+          "product_name": "Organic Hass Avocado",
+          "weighted_degree": 3071643
+        },
+        {
+          "neighbor_count": 14192,
+          "pagerank": 157.46525333243542,
+          "product_id": 47626,
+          "product_name": "Large Lemon",
+          "weighted_degree": 2219015
+        },
+        {
+          "neighbor_count": 12429,
+          "pagerank": 147.42219697466518,
+          "product_id": 21903,
+          "product_name": "Organic Baby Spinach",
+          "weighted_degree": 3320424
+        },
+        {
+          "neighbor_count": 13210,
+          "pagerank": 143.25846757679568,
+          "product_id": 47766,
+          "product_name": "Organic Avocado",
+          "weighted_degree": 2453833
+        },
+        {
+          "neighbor_count": 13205,
+          "pagerank": 122.49615473777624,
+          "product_id": 26209,
+          "product_name": "Limes",
+          "weighted_degree": 2132145
+        },
+        {
+          "neighbor_count": 12094,
+          "pagerank": 107.85543997673196,
+          "product_id": 27966,
+          "product_name": "Organic Raspberries",
+          "weighted_degree": 2021029
+        },
+        {
+          "neighbor_count": 7718,
+          "pagerank": 94.35814188012053,
+          "product_id": 23909,
+          "product_name": "2% Reduced Fat Milk",
+          "weighted_degree": 413748
+        },
+        {
+          "neighbor_count": 10274,
+          "pagerank": 87.25498090136163,
+          "product_id": 5077,
+          "product_name": "100% Whole Wheat Bread",
+          "weighted_degree": 854943
+        },
+        {
+          "neighbor_count": 11090,
+          "pagerank": 84.51842627403899,
+          "product_id": 28204,
+          "product_name": "Organic Fuji Apple",
+          "weighted_degree": 1181663
+        },
+        {
+          "neighbor_count": 10944,
+          "pagerank": 83.43678253722634,
+          "product_id": 49683,
+          "product_name": "Cucumber Kirby",
+          "weighted_degree": 1392071
+        },
+        {
+          "neighbor_count": 11165,
+          "pagerank": 80.70697493023722,
+          "product_id": 39275,
+          "product_name": "Organic Blueberries",
+          "weighted_degree": 1301448
+        },
+        {
+          "neighbor_count": 10171,
+          "pagerank": 77.29722678726368,
+          "product_id": 22935,
+          "product_name": "Organic Yellow Onion",
+          "weighted_degree": 1710454
+        },
+        {
+          "neighbor_count": 9866,
+          "pagerank": 75.91289073506735,
+          "product_id": 27845,
+          "product_name": "Organic Whole Milk",
+          "weighted_degree": 1752127
+        },
+        {
+          "neighbor_count": 9872,
+          "pagerank": 74.43353548199292,
+          "product_id": 4605,
+          "product_name": "Yellow Onions",
+          "weighted_degree": 1055543
+        },
+        {
+          "neighbor_count": 9973,
+          "pagerank": 72.96467046611086,
+          "product_id": 45007,
+          "product_name": "Organic Zucchini",
+          "weighted_degree": 1579813
+        },
+        {
+          "neighbor_count": 9625,
+          "pagerank": 72.93542140765476,
+          "product_id": 9076,
+          "product_name": "Blueberries",
+          "weighted_degree": 718725
+        }
+      ],
+      "weighted_degree": [
+        {
+          "neighbor_count": 23516,
+          "pagerank": 863.4331412542679,
+          "product_id": 24852,
+          "product_name": "Banana",
+          "weighted_degree": 6113628
+        },
+        {
+          "neighbor_count": 17489,
+          "pagerank": 352.9895458251656,
+          "product_id": 13176,
+          "product_name": "Bag of Organic Bananas",
+          "weighted_degree": 4762878
+        },
+        {
+          "neighbor_count": 14404,
+          "pagerank": 173.573159272941,
+          "product_id": 21137,
+          "product_name": "Organic Strawberries",
+          "weighted_degree": 3695145
+        },
+        {
+          "neighbor_count": 12429,
+          "pagerank": 147.42219697466518,
+          "product_id": 21903,
+          "product_name": "Organic Baby Spinach",
+          "weighted_degree": 3320424
+        },
+        {
+          "neighbor_count": 12887,
+          "pagerank": 164.17893440349803,
+          "product_id": 47209,
+          "product_name": "Organic Hass Avocado",
+          "weighted_degree": 3071643
+        },
+        {
+          "neighbor_count": 13210,
+          "pagerank": 143.25846757679568,
+          "product_id": 47766,
+          "product_name": "Organic Avocado",
+          "weighted_degree": 2453833
+        },
+        {
+          "neighbor_count": 14192,
+          "pagerank": 157.46525333243542,
+          "product_id": 47626,
+          "product_name": "Large Lemon",
+          "weighted_degree": 2219015
+        },
+        {
+          "neighbor_count": 13205,
+          "pagerank": 122.49615473777624,
+          "product_id": 26209,
+          "product_name": "Limes",
+          "weighted_degree": 2132145
+        },
+        {
+          "neighbor_count": 12094,
+          "pagerank": 107.85543997673196,
+          "product_id": 27966,
+          "product_name": "Organic Raspberries",
+          "weighted_degree": 2021029
+        },
+        {
+          "neighbor_count": 14474,
+          "pagerank": 181.98092867152533,
+          "product_id": 16797,
+          "product_name": "Strawberries",
+          "weighted_degree": 1799241
+        },
+        {
+          "neighbor_count": 9866,
+          "pagerank": 75.91289073506735,
+          "product_id": 27845,
+          "product_name": "Organic Whole Milk",
+          "weighted_degree": 1752127
+        },
+        {
+          "neighbor_count": 10171,
+          "pagerank": 77.29722678726368,
+          "product_id": 22935,
+          "product_name": "Organic Yellow Onion",
+          "weighted_degree": 1710454
+        },
+        {
+          "neighbor_count": 8997,
+          "pagerank": 67.45078199335497,
+          "product_id": 24964,
+          "product_name": "Organic Garlic",
+          "weighted_degree": 1683727
+        },
+        {
+          "neighbor_count": 9973,
+          "pagerank": 72.96467046611086,
+          "product_id": 45007,
+          "product_name": "Organic Zucchini",
+          "weighted_degree": 1579813
+        },
+        {
+          "neighbor_count": 10944,
+          "pagerank": 83.43678253722634,
+          "product_id": 49683,
+          "product_name": "Cucumber Kirby",
+          "weighted_degree": 1392071
+        },
+        {
+          "neighbor_count": 11165,
+          "pagerank": 80.70697493023722,
+          "product_id": 39275,
+          "product_name": "Organic Blueberries",
+          "weighted_degree": 1301448
+        },
+        {
+          "neighbor_count": 9168,
+          "pagerank": 58.69544608910738,
+          "product_id": 40706,
+          "product_name": "Organic Grape Tomatoes",
+          "weighted_degree": 1288574
+        },
+        {
+          "neighbor_count": 9209,
+          "pagerank": 64.95382831938676,
+          "product_id": 5876,
+          "product_name": "Organic Lemon",
+          "weighted_degree": 1267782
+        },
+        {
+          "neighbor_count": 9090,
+          "pagerank": 60.81091237399742,
+          "product_id": 30391,
+          "product_name": "Organic Cucumber",
+          "weighted_degree": 1241004
+        },
+        {
+          "neighbor_count": 8756,
+          "pagerank": 57.76452037730374,
+          "product_id": 8277,
+          "product_name": "Apple Honeycrisp Organic",
+          "weighted_degree": 1230716
+        }
+      ]
+    },
+    "trials": [
+      {
+        "active_product_count": 47980,
+        "catalog_product_coverage": 0.9656255031395911,
+        "directed_edge_count": 37609684,
+        "edge_count": 18804842,
+        "edge_weight_quantiles": [
+          3.0,
+          17.0,
+          32.0,
+          124.0,
+          62341.0
+        ],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 1708,
+        "min_edge_weight": 2,
+        "neighbor_count_quantiles": [
+          128.0,
+          2122.0,
+          3706.0,
+          8201.0,
+          37848.0
+        ],
+        "prior_fact_coverage": 0.9997964512405298,
+        "runtime_ms": 114753.729,
+        "scope_product_coverage": 0.9656255031395911,
+        "status": "passed",
+        "total_weight": 216484210,
+        "vertex_count": 49688
+      },
+      {
+        "active_product_count": 37173,
+        "catalog_product_coverage": 0.7481283207213009,
+        "directed_edge_count": 14486774,
+        "edge_count": 7243387,
+        "edge_weight_quantiles": [
+          9.0,
+          40.0,
+          73.0,
+          257.0,
+          62341.0
+        ],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 12515,
+        "min_edge_weight": 5,
+        "neighbor_count_quantiles": [
+          15.0,
+          708.0,
+          1530.0,
+          4274.0,
+          29678.0
+        ],
+        "prior_fact_coverage": 0.9959408023971027,
+        "runtime_ms": 39125.874,
+        "scope_product_coverage": 0.7481283207213009,
+        "status": "passed",
+        "total_weight": 186434820,
+        "vertex_count": 49688
+      },
+      {
+        "active_product_count": 28524,
+        "catalog_product_coverage": 0.5740621478022863,
+        "directed_edge_count": 6985674,
+        "edge_count": 3492837,
+        "edge_weight_quantiles": [
+          18.0,
+          75.0,
+          132.0,
+          445.0,
+          62341.0
+        ],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 21164,
+        "min_edge_weight": 10,
+        "neighbor_count_quantiles": [
+          2.0,
+          268.0,
+          701.0,
+          2452.0,
+          23516.0
+        ],
+        "prior_fact_coverage": 0.9878709974434929,
+        "runtime_ms": 25120.019,
+        "scope_product_coverage": 0.5740621478022863,
+        "status": "passed",
+        "total_weight": 162221254,
+        "vertex_count": 49688
+      }
+    ],
+    "validation": {
+      "backend": "graphframes",
+      "basket_count": 3214874,
+      "basket_size_quantiles": [
+        8.0,
+        20.0,
+        25.0,
+        35.0,
+        145.0
+      ],
+      "catalog_products": 49688,
+      "catalog_scope_coverage": 1.0,
+      "directed_edge_count": 6985674,
+      "edge_count": 3492837,
+      "graph_scope": "full_catalog_vertices_and_prior_baskets",
+      "isolated_vertices": 21164,
+      "max_iter": 10,
+      "pagerank_backend_validation": "passed",
+      "pagerank_finite": true,
+      "pair_expansion_count": 238428378.0,
+      "prior_fact_scope_coverage": 1.0,
+      "prior_facts_in_scope": 32434489,
+      "prior_facts_total": 32434489,
+      "raw_edge_count_at_weight_1": 40749010,
+      "reset_probability": 0.15,
+      "selected_product_ids_sha256": null,
+      "threshold_selection": "configured prior-only threshold; no official train signal used",
+      "top_products_requested": null,
+      "total_edge_weight": 162221254,
+      "vertex_count": 49688,
+      "weighted_degree_sum": 324442508
+    }
+  },
+  "input_source_receipt": {
+    "file": "data/raw/source-receipt.json",
+    "receipt": {
+      "archive_sha256": "c347cd7fa301c068ed391c7c77620f0e26e18f65d04cb907b6389c670db03038",
+      "files": {
+        "aisles.csv": {
+          "rows": 134,
+          "sha256": "2c5f4677761907d3a3ca01edd2d2abe67c147cc60e4905e68736d5f9f3046067"
+        },
+        "departments.csv": {
+          "rows": 21,
+          "sha256": "e6829cea3da95ec22eeb4e0294094a68b929f3bcfda48fdd7d1e33403110fc43"
+        },
+        "order_products__prior.csv": {
+          "rows": 32434489,
+          "sha256": "27b59dc9cf0d485f55e64e0bc9c5d6fb077ae167f8dfeab9246a03b5b0186359"
+        },
+        "order_products__train.csv": {
+          "rows": 1384617,
+          "sha256": "d27c4034883051c85e37c2cb0379fecbbeccad932970e171461aa99f18f75aea"
+        },
+        "orders.csv": {
+          "rows": 3421083,
+          "sha256": "92a60ced67ac33bd82271f66ff9675374f69482d17a0e1442ba42caa8b3bff89"
+        },
+        "products.csv": {
+          "rows": 49688,
+          "sha256": "abc61fdd748003d280ae49cc5d71b65380805ab1ca55dba96fd9a49295ea78b9"
+        }
+      },
+      "mirror": "psparks/instacart-market-basket-analysis",
+      "url": "https://www.kaggle.com/api/v1/datasets/download/psparks/instacart-market-basket-analysis?datasetVersionNumber=1",
+      "version": 1
+    },
+    "sha256": "f3e09109b052ac848e5f259b22c54610ee0c91babd98d27e9a77e977078bb9a5"
+  },
+  "pair_readiness": {
+    "graph_published": true,
+    "graph_version": "graph-full-20261010-fixed",
+    "model_version": "als-full-20261010-fixed",
+    "pair_rename_is_atomic": false,
+    "readiness_collection": "module4_snapshot_readiness",
+    "readiness_document": {
+      "_id": "active",
+      "graph_published": true,
+      "graph_version": "graph-full-20261010-fixed",
+      "model_version": "als-full-20261010-fixed",
+      "ready": true,
+      "recommendation_published": true,
+      "run_id": "full-ab-20261010-fixed-replay",
+      "single_writer_policy": "module4_publication_lock",
+      "status": "ready"
+    },
+    "ready": true,
+    "recommendation_published": true,
+    "run_id": "full-ab-20261010-fixed-replay",
+    "single_snapshot_ready": false,
+    "single_writer_policy": "module4_publication_lock",
+    "status": "both_snapshots_validated"
+  },
+  "preflight": {
+    "mongo": {
+      "insert_index_rename_readback": "passed",
+      "ping": "passed"
+    }
+  },
+  "run_id": "full-ab-20261010-fixed-replay",
+  "scope": "full_data",
+  "serving_status": "published_and_validated",
+  "source_stability_check": "passed",
+  "spark_event_metrics": {
+    "module4.als.final": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 3003062,
+      "failed_task_attempts": 0,
+      "input_bytes": 12885413491,
+      "input_records": 9414899,
+      "referenced_stages": 1560,
+      "shuffle_read_bytes": 12044935818,
+      "shuffle_write_bytes": 6330295246,
+      "skipped_stages": 1093,
+      "stages": 467,
+      "tasks": 14960
+    },
+    "module4.als.full_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 288810,
+      "failed_task_attempts": 0,
+      "input_bytes": 2328794392,
+      "input_records": 26208,
+      "referenced_stages": 235,
+      "shuffle_read_bytes": 565715142,
+      "shuffle_write_bytes": 504215936,
+      "skipped_stages": 171,
+      "stages": 64,
+      "tasks": 2250
+    },
+    "module4.als.full_validation.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 1181730,
+      "failed_task_attempts": 0,
+      "input_bytes": 3995706319,
+      "input_records": 2108961,
+      "referenced_stages": 791,
+      "shuffle_read_bytes": 3345055938,
+      "shuffle_write_bytes": 3145978297,
+      "skipped_stages": 699,
+      "stages": 92,
+      "tasks": 1623
+    },
+    "module4.als.pilot.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 78750,
+      "failed_task_attempts": 0,
+      "input_bytes": 343563403,
+      "input_records": 981749,
+      "referenced_stages": 1077,
+      "shuffle_read_bytes": 196178592,
+      "shuffle_write_bytes": 191019760,
+      "skipped_stages": 984,
+      "stages": 93,
+      "tasks": 1624
+    },
+    "module4.als.pilot_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 87251,
+      "failed_task_attempts": 0,
+      "input_bytes": 193827016,
+      "input_records": 1281,
+      "referenced_stages": 272,
+      "shuffle_read_bytes": 28915190,
+      "shuffle_write_bytes": 27114630,
+      "skipped_stages": 203,
+      "stages": 69,
+      "tasks": 2007
+    },
+    "module4.graph.final_metrics": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 160814,
+      "failed_task_attempts": 0,
+      "input_bytes": 4022658566,
+      "input_records": 60881,
+      "referenced_stages": 764,
+      "shuffle_read_bytes": 520459299,
+      "shuffle_write_bytes": 371424461,
+      "skipped_stages": 677,
+      "stages": 87,
+      "tasks": 2324
+    },
+    "module4.graph.raw_edges": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 811922,
+      "failed_task_attempts": 0,
+      "input_bytes": 327183594,
+      "input_records": 6508,
+      "referenced_stages": 5,
+      "shuffle_read_bytes": 1146084176,
+      "shuffle_write_bytes": 1146084176,
+      "skipped_stages": 2,
+      "stages": 3,
+      "tasks": 65
+    },
+    "module4.graph.threshold.10": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 88577,
+      "failed_task_attempts": 0,
+      "input_bytes": 786702309,
+      "input_records": 13046,
+      "referenced_stages": 65,
+      "shuffle_read_bytes": 363079212,
+      "shuffle_write_bytes": 363079212,
+      "skipped_stages": 35,
+      "stages": 30,
+      "tasks": 819
+    },
+    "module4.graph.threshold.2": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 396989,
+      "failed_task_attempts": 0,
+      "input_bytes": 2278600549,
+      "input_records": 37622,
+      "referenced_stages": 65,
+      "shuffle_read_bytes": 1245433445,
+      "shuffle_write_bytes": 1245433445,
+      "skipped_stages": 35,
+      "stages": 30,
+      "tasks": 819
+    },
+    "module4.graph.threshold.5": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 143847,
+      "failed_task_attempts": 0,
+      "input_bytes": 1153817573,
+      "input_records": 19190,
+      "referenced_stages": 65,
+      "shuffle_read_bytes": 580976119,
+      "shuffle_write_bytes": 580976119,
+      "skipped_stages": 35,
+      "stages": 30,
+      "tasks": 819
+    },
+    "module4.input_validation": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 676272,
+      "failed_task_attempts": 0,
+      "input_bytes": 961750924,
+      "input_records": 521656142,
+      "referenced_stages": 125,
+      "shuffle_read_bytes": 2435767112,
+      "shuffle_write_bytes": 2435766886,
+      "skipped_stages": 2,
+      "stages": 123,
+      "tasks": 1288
+    },
+    "module4.mongo.graph": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 1254,
+      "failed_task_attempts": 0,
+      "input_bytes": 10508160,
+      "input_records": 128,
+      "referenced_stages": 1263,
+      "shuffle_read_bytes": 1888,
+      "shuffle_write_bytes": 1888,
+      "skipped_stages": 1225,
+      "stages": 38,
+      "tasks": 131
+    },
+    "module4.mongo.recommendations": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 10867,
+      "failed_task_attempts": 0,
+      "input_bytes": 169941380,
+      "input_records": 2110,
+      "referenced_stages": 472,
+      "shuffle_read_bytes": 1886,
+      "shuffle_write_bytes": 1886,
+      "skipped_stages": 432,
+      "stages": 40,
+      "tasks": 164
+    }
+  },
+  "stage_timings_ms": {
+    "als_compute": 1534922.014,
+    "graph_compute": 465715.745,
+    "graph_publication": 4662.832,
+    "input_validation": 214436.216,
+    "recommendation_publication": 383598.066
+  },
+  "stages": {
+    "als_compute": "passed",
+    "graph_compute": "passed",
+    "graph_publication": "passed",
+    "input_validation": "passed",
+    "recommendation_publication": "passed",
+    "serving": "passed",
+    "source_stability_check": "passed"
+  },
+  "started_at_utc": "2026-10-10T04:40:20.791389+00:00",
+  "status": "passed",
+  "validation": {
+    "cohort": {
+      "prior_orders_without_facts": 0,
+      "train_orders_without_facts": 0,
+      "train_users_with_truth": 131209
+    },
+    "counts": {
+      "orders": 3421083,
+      "prior": 32434489,
+      "prior_users": 206209,
+      "products": 49688,
+      "train": 1384617,
+      "train_users": 131209
+    },
+    "distinct": {
+      "prior_orders": 3214874,
+      "prior_products": 49677,
+      "train_orders": 131209,
+      "train_products": 39123
+    },
+    "official_train_used_for_fit": false,
+    "official_train_used_for_tuning": false,
+    "prior_eval_set": "prior",
+    "purchase_distribution": {
+      "prior_purchases_per_user_product_quantiles": [
+        1.0,
+        1.0,
+        1.0,
+        2.0,
+        8.0,
+        99.0
+      ],
+      "prior_reordered": {
+        "False": 13307953,
+        "True": 19126536
+      },
+      "train_reordered": {
+        "False": 555793,
+        "True": 828824
+      }
+    },
+    "schema": {
+      "orders": "struct<order_id:int,user_id:int,eval_set:string,order_number:smallint,order_dow:smallint,order_hour_of_day:smallint,days_since_prior_order:float,dspo_raw:float,cap_recovered:boolean>",
+      "prior": "struct<order_id:int,product_id:int,add_to_cart_order:int,reordered:boolean>",
+      "products": "struct<product_id:int,product_name:string,aisle_id:smallint,department_id:tinyint>",
+      "train": "struct<order_id:int,product_id:int,add_to_cart_order:int,reordered:boolean>"
+    },
+    "source_receipt": {
+      "inputs": {
+        "order_products_prior": {
+          "file_bytes": 116688077,
+          "path": "hdfs://namenode:8020/instacart/curated/order_products_prior/order_products__prior.parquet",
+          "rows": 32434489,
+          "sha256": "91ecaa17bf1db4d1f99d73e0d1fb195b12dac7f31c0570c2540a3dae2d833550"
+        },
+        "order_products_train": {
+          "file_bytes": 4961613,
+          "path": "hdfs://namenode:8020/instacart/curated/order_products_train/order_products__train.parquet",
+          "rows": 1384617,
+          "sha256": "7d8782a9c4ad76bad9504046cc36c3df170c02355d06a6aa5f22d85db427cec5"
+        },
+        "orders": {
+          "file_bytes": 28213135,
+          "path": "hdfs://namenode:8020/instacart/curated/orders/orders.parquet",
+          "rows": 3421083,
+          "sha256": "7624e7f703e5dd894f3f4dd4c65f5317579888ee7fc364ac090607f99c6642b8"
+        },
+        "products": {
+          "file_bytes": 1478155,
+          "path": "hdfs://namenode:8020/instacart/curated/dimensions/products/products.parquet",
+          "rows": 49688,
+          "sha256": "15cab0d57dc9d6edac1da690cd4a0131f9558029896ca9d809020af00cf8f90c"
+        }
+      },
+      "receipt_path": "hdfs://namenode:8020/instacart/curated/_sources.json",
+      "receipt_sha256": "5b85a0eb459ffa3c1efd5aa96ebc4eefa86f04b00e8e6a25f855076ff98d57e7",
+      "source_scope": "staged_curated",
+      "validated_at_utc": "2026-10-10T04:43:52.012921+00:00"
+    },
+    "train_eval_set": "train"
+  }
+}

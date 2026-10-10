@@ -1,0 +1,89 @@
+[
+  {
+    "active_product_count": 47980,
+    "catalog_product_coverage": 0.9656255031395911,
+    "directed_edge_count": 37609684,
+    "edge_count": 18804842,
+    "edge_weight_quantiles": [
+      3.0,
+      17.0,
+      32.0,
+      124.0,
+      62341.0
+    ],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 1708,
+    "min_edge_weight": 2,
+    "neighbor_count_quantiles": [
+      128.0,
+      2122.0,
+      3706.0,
+      8201.0,
+      37848.0
+    ],
+    "prior_fact_coverage": 0.9997964512405298,
+    "runtime_ms": 114753.729,
+    "scope_product_coverage": 0.9656255031395911,
+    "status": "passed",
+    "total_weight": 216484210,
+    "vertex_count": 49688
+  },
+  {
+    "active_product_count": 37173,
+    "catalog_product_coverage": 0.7481283207213009,
+    "directed_edge_count": 14486774,
+    "edge_count": 7243387,
+    "edge_weight_quantiles": [
+      9.0,
+      40.0,
+      73.0,
+      257.0,
+      62341.0
+    ],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 12515,
+    "min_edge_weight": 5,
+    "neighbor_count_quantiles": [
+      15.0,
+      708.0,
+      1530.0,
+      4274.0,
+      29678.0
+    ],
+    "prior_fact_coverage": 0.9959408023971027,
+    "runtime_ms": 39125.874,
+    "scope_product_coverage": 0.7481283207213009,
+    "status": "passed",
+    "total_weight": 186434820,
+    "vertex_count": 49688
+  },
+  {
+    "active_product_count": 28524,
+    "catalog_product_coverage": 0.5740621478022863,
+    "directed_edge_count": 6985674,
+    "edge_count": 3492837,
+    "edge_weight_quantiles": [
+      18.0,
+      75.0,
+      132.0,
+      445.0,
+      62341.0
+    ],
+    "graph_scope": "full_catalog_vertices_and_prior_baskets",
+    "isolated_vertices": 21164,
+    "min_edge_weight": 10,
+    "neighbor_count_quantiles": [
+      2.0,
+      268.0,
+      701.0,
+      2452.0,
+      23516.0
+    ],
+    "prior_fact_coverage": 0.9878709974434929,
+    "runtime_ms": 25120.019,
+    "scope_product_coverage": 0.5740621478022863,
+    "status": "passed",
+    "total_weight": 162221254,
+    "vertex_count": 49688
+  }
+]

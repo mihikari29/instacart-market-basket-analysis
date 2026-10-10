@@ -1,0 +1,27 @@
+wsl : Setting default log level to "WARN".
+At line:2 char:1
++ wsl -d Ubuntu-24.04 -u root -- bash /mnt/d/instacart-market-basket-an ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Setting default log level to "WARN".:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+26/10/08 14:51:48 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java
+classes where applicable
+
+[Stage 0:>                                                          (0 + 1) / 1]
+
+
+
+[Stage 3:>                                                          (0 + 1) / 1]
+
+
+Traceback (most recent call last):
+  File "/workspace/scripts/module4_flow_smoke.py", line 223, in <module>
+
+  File "/workspace/scripts/module4_flow_smoke.py", line 165, in main
+    )
+  File "/workspace/scripts/module4_flow_smoke.py", line 125, in _run_cli
+    log_path.write_text(result.stdout + "\n--- STDERR ---\n" + result.stderr, encoding="utf-8")
+RuntimeError: Module 4 flow flow-923e255d911244e2b368be3809cc2bd7-replay failed with exit 1; see
+/workspace/results/module4-flow/flow-923e255d911244e2b368be3809cc2bd7-replay/flow-command.log

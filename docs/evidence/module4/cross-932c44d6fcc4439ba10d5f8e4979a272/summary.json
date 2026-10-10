@@ -1,0 +1,1745 @@
+{
+  "acceptance_status": "run_passed_full_data_acceptance_not_claimed",
+  "als": {
+    "duration_ms": 137960.431,
+    "evaluation": {
+      "als_vs_baseline_deltas": {
+        "all_official_train_users": {
+          "global_popularity": {
+            "10": {
+              "map_at_k": 0.2069444444444445,
+              "ndcg_at_k": 0.12043060562668206,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "20": {
+              "map_at_k": 0.2069444444444445,
+              "ndcg_at_k": 0.12043060562668206,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "5": {
+              "map_at_k": 0.24861111111111112,
+              "ndcg_at_k": 0.16222071936823257,
+              "precision_at_k": 0.050000000000000044,
+              "recall_at_k": 0.08333333333333337
+            }
+          },
+          "personal_frequency": {
+            "10": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "20": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "5": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            }
+          }
+        },
+        "warm_users_and_all_truth_items": {
+          "global_popularity": {
+            "10": {
+              "map_at_k": 0.2069444444444445,
+              "ndcg_at_k": 0.12043060562668206,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "20": {
+              "map_at_k": 0.2069444444444445,
+              "ndcg_at_k": 0.12043060562668206,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "5": {
+              "map_at_k": 0.24861111111111112,
+              "ndcg_at_k": 0.16222071936823257,
+              "precision_at_k": 0.050000000000000044,
+              "recall_at_k": 0.08333333333333337
+            }
+          },
+          "personal_frequency": {
+            "10": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "20": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            },
+            "5": {
+              "map_at_k": 0.0,
+              "ndcg_at_k": 0.0,
+              "precision_at_k": 0.0,
+              "recall_at_k": 0.0
+            }
+          }
+        }
+      },
+      "cohort_exclusion": "users with empty official train truth are excluded and counted in data report",
+      "cohorts": {
+        "all_official_train_users": {
+          "definition": "all users with non-empty official train truth; cold items remain in denominator",
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.8333333333333334,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 0.7513888888888889,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.8377792806317674,
+                "precision_at_k": 0.5499999999999999,
+                "recall_at_k": 0.9166666666666666,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 4
+        },
+        "warm_users_and_all_truth_items": {
+          "definition": "user factor exists and every official train truth product has an item factor",
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.8333333333333334,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 0.7513888888888889,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.8377792806317674,
+                "precision_at_k": 0.5499999999999999,
+                "recall_at_k": 0.9166666666666666,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 4
+        }
+      },
+      "fallback": "global prior popularity for users without ALS user factors in all-user evaluation only",
+      "ground_truth": "official order_products_train, distinct product IDs per user",
+      "history_subgroups": {
+        "new_to_user": {
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 10,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 20,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 5,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 10,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 20,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 5,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 10,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 20,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": null,
+                "catalog_coverage": 0,
+                "catalog_coverage_rate": 0.0,
+                "evaluated_users": 0,
+                "k": 5,
+                "map_at_k": null,
+                "max_recommendations_per_user": null,
+                "min_recommendations_per_user": null,
+                "ndcg_at_k": null,
+                "precision_at_k": null,
+                "recall_at_k": null,
+                "status": "not_applicable_empty_cohort",
+                "user_coverage": 0.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 0
+        },
+        "reordered": {
+          "metrics": {
+            "als": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "global_popularity": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 0.7930555555555555,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 0.8795693943733179,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 5,
+                "catalog_coverage_rate": 0.8333333333333334,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 0.7513888888888889,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 0.8377792806317674,
+                "precision_at_k": 0.5499999999999999,
+                "recall_at_k": 0.9166666666666666,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            },
+            "personal_frequency": {
+              "10": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 10,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.3,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "20": {
+                "average_recommendations_per_user": 6.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 20,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 6,
+                "min_recommendations_per_user": 6,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.15,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              },
+              "5": {
+                "average_recommendations_per_user": 5.0,
+                "catalog_coverage": 6,
+                "catalog_coverage_rate": 1.0,
+                "evaluated_users": 4,
+                "k": 5,
+                "map_at_k": 1.0,
+                "max_recommendations_per_user": 5,
+                "min_recommendations_per_user": 5,
+                "ndcg_at_k": 1.0,
+                "precision_at_k": 0.6,
+                "recall_at_k": 1.0,
+                "status": "evaluated",
+                "user_coverage": 1.0,
+                "users_with_no_recommendations": 0
+              }
+            }
+          },
+          "users": 4
+        }
+      },
+      "ks": [
+        5,
+        10,
+        20
+      ],
+      "official_test_truth_available": false,
+      "truth_summary": {
+        "cold_truth_products": 0,
+        "truth_products": 6,
+        "truth_products_with_item_factors": 6,
+        "users": 4,
+        "users_with_mixed_warm_and_cold_truth": 0,
+        "users_with_user_factors": 4,
+        "users_without_user_factors": 0
+      }
+    },
+    "model": {
+      "als_blocks": 4,
+      "checkpoint_interval": 10,
+      "cold_start_strategy": "drop",
+      "factors_finite": true,
+      "final_storage_level": "MEMORY_AND_DISK",
+      "implicit_prefs": true,
+      "input_products": 6,
+      "input_rows": 12,
+      "input_users": 4,
+      "interaction_products": 6,
+      "interaction_rows": 12,
+      "interaction_users": 4,
+      "intermediate_storage_level": "MEMORY_AND_DISK",
+      "model_bytes": 7967,
+      "model_path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/models/als/als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "num_item_blocks": 4,
+      "num_user_blocks": 4,
+      "params": {
+        "alpha": 10.0,
+        "max_iter": 10,
+        "rank": 32,
+        "reg_param": 0.1,
+        "strength_col": "strength_raw"
+      },
+      "product_factors": 6,
+      "recommendation_block_size": 512,
+      "reused_existing_model": false,
+      "save_load_recommendation_tolerance": 1e-06,
+      "save_load_verified": true,
+      "seed": 42,
+      "source_code_sha256": "3240042ffdbf25970efe40e2e402f441ecb48519f78bd1ef4aa98d62707f90de",
+      "source_receipt_sha256": "6b9527052485f9bce9b7b8fe3f2ced395c7bd2fb46f7accf270ac8d1fd5804af",
+      "user_factors": 4
+    },
+    "mongo": {
+      "collection": "user_recommendations",
+      "documents": 24,
+      "duration_ms": 1302.555,
+      "expected_documents": 24,
+      "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "published": true,
+      "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "temporary": "user_recommendations__staging_834eb40e57a04254920ba1b73cc6881d",
+      "validation_after_promote": {
+        "documents": 24,
+        "duplicate_keys": 0,
+        "expected_documents": 24,
+        "indexes": [
+          "_id_",
+          "idx_model_user",
+          "uq_model_user_product",
+          "uq_model_user_rank"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      },
+      "validation_before_promote": {
+        "documents": 24,
+        "duplicate_keys": 0,
+        "expected_documents": 24,
+        "indexes": [
+          "_id_",
+          "idx_model_user",
+          "uq_model_user_product",
+          "uq_model_user_rank"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      }
+    },
+    "recommendation_validation": {
+      "actual_rows": 24,
+      "expected_rows": 24,
+      "generated_users": 4,
+      "product_foreign_keys_valid": true,
+      "products_per_user": 6,
+      "rank_product_keys_unique": true,
+      "requested_users": 4,
+      "user_set_exact": true
+    },
+    "split_summary": {
+      "cold_start_validation_products": 0,
+      "eligible_prior_rows": 24,
+      "eligible_users": 4,
+      "excluded_users": 0,
+      "heldout_orders": 4,
+      "official_train_overlap": 0,
+      "order_sets_disjoint": true,
+      "total_users": 4,
+      "training_orders": 4,
+      "training_rows": 12,
+      "validation_rows": 12,
+      "validation_users": 4
+    },
+    "tuning": {
+      "executor_shuffle_config": {
+        "shuffle_partitions": 8,
+        "spark_master": "spark://spark-master:7077"
+      },
+      "final_model": {
+        "als_blocks": 4,
+        "checkpoint_interval": 10,
+        "cold_start_strategy": "drop",
+        "factors_finite": true,
+        "final_storage_level": "MEMORY_AND_DISK",
+        "implicit_prefs": true,
+        "input_products": 6,
+        "input_rows": 12,
+        "input_users": 4,
+        "interaction_products": 6,
+        "interaction_rows": 12,
+        "interaction_users": 4,
+        "intermediate_storage_level": "MEMORY_AND_DISK",
+        "model_bytes": 7967,
+        "model_path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/models/als/als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+        "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+        "num_item_blocks": 4,
+        "num_user_blocks": 4,
+        "params": {
+          "alpha": 10.0,
+          "max_iter": 10,
+          "rank": 32,
+          "reg_param": 0.1,
+          "strength_col": "strength_raw"
+        },
+        "product_factors": 6,
+        "recommendation_block_size": 512,
+        "reused_existing_model": false,
+        "save_load_recommendation_tolerance": 1e-06,
+        "save_load_verified": true,
+        "seed": 42,
+        "source_code_sha256": "3240042ffdbf25970efe40e2e402f441ecb48519f78bd1ef4aa98d62707f90de",
+        "source_receipt_sha256": "6b9527052485f9bce9b7b8fe3f2ced395c7bd2fb46f7accf270ac8d1fd5804af",
+        "user_factors": 4
+      },
+      "full_validation_baselines": {
+        "global_popularity": {
+          "average_recommendations_per_user": 6.0,
+          "catalog_coverage": 6,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 4,
+          "k": 10,
+          "map_at_k": 0.7930555555555555,
+          "max_recommendations_per_user": 6,
+          "min_recommendations_per_user": 6,
+          "ndcg_at_k": 0.8795693943733179,
+          "precision_at_k": 0.3,
+          "recall_at_k": 1.0,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        },
+        "personal_frequency": {
+          "average_recommendations_per_user": 6.0,
+          "catalog_coverage": 6,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 4,
+          "k": 10,
+          "map_at_k": 1.0,
+          "max_recommendations_per_user": 6,
+          "min_recommendations_per_user": 6,
+          "ndcg_at_k": 1.0,
+          "precision_at_k": 0.3,
+          "recall_at_k": 1.0,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        }
+      },
+      "full_validation_trials": [
+        {
+          "evaluation_runtime_ms": 2868.115,
+          "fit_runtime_ms": 3938.177,
+          "input_interactions": 12,
+          "input_products": 6,
+          "input_users": 4,
+          "item_factors": 6,
+          "metrics": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "params": {
+            "alpha": 10.0,
+            "max_iter": 10,
+            "rank": 32,
+            "reg_param": 0.1,
+            "strength_col": "strength_raw"
+          },
+          "phase": "full_internal_validation",
+          "pilot_trial_id": 1,
+          "recommendation_runtime_ms": 1279.62,
+          "seed": 42,
+          "status": "passed",
+          "total_runtime_ms": 8249.857,
+          "trial_id": 1,
+          "user_factors": 4
+        }
+      ],
+      "internal_training_interactions": 12,
+      "max_pilot_trials": 1,
+      "official_train_used": false,
+      "pilot_baselines": {
+        "global_popularity": {
+          "average_recommendations_per_user": 6.0,
+          "catalog_coverage": 6,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 4,
+          "k": 10,
+          "map_at_k": 0.7930555555555555,
+          "max_recommendations_per_user": 6,
+          "min_recommendations_per_user": 6,
+          "ndcg_at_k": 0.8795693943733179,
+          "precision_at_k": 0.3,
+          "recall_at_k": 1.0,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        },
+        "personal_frequency": {
+          "average_recommendations_per_user": 6.0,
+          "catalog_coverage": 6,
+          "catalog_coverage_rate": 0.0,
+          "evaluated_users": 4,
+          "k": 10,
+          "map_at_k": 1.0,
+          "max_recommendations_per_user": 6,
+          "min_recommendations_per_user": 6,
+          "ndcg_at_k": 1.0,
+          "precision_at_k": 0.3,
+          "recall_at_k": 1.0,
+          "status": "evaluated",
+          "user_coverage": 1.0,
+          "users_with_no_recommendations": 0
+        }
+      },
+      "pilot_sampling": {
+        "method": "xxhash64(user_id, seed), then user_id",
+        "seed": 42
+      },
+      "pilot_training_interactions": 12,
+      "pilot_trials": [
+        {
+          "evaluation_runtime_ms": 3212.704,
+          "fit_runtime_ms": 6040.752,
+          "input_interactions": 12,
+          "input_products": 6,
+          "input_users": 4,
+          "item_factors": 6,
+          "metrics": {
+            "average_recommendations_per_user": 6.0,
+            "catalog_coverage": 6,
+            "catalog_coverage_rate": 0.0,
+            "evaluated_users": 4,
+            "k": 10,
+            "map_at_k": 1.0,
+            "max_recommendations_per_user": 6,
+            "min_recommendations_per_user": 6,
+            "ndcg_at_k": 1.0,
+            "precision_at_k": 0.3,
+            "recall_at_k": 1.0,
+            "status": "evaluated",
+            "user_coverage": 1.0,
+            "users_with_no_recommendations": 0
+          },
+          "params": {
+            "alpha": 10.0,
+            "max_iter": 10,
+            "rank": 32,
+            "reg_param": 0.1,
+            "strength_col": "strength_raw"
+          },
+          "phase": "pilot",
+          "recommendation_runtime_ms": 1710.843,
+          "seed": 42,
+          "status": "passed",
+          "total_runtime_ms": 11189.983,
+          "trial_id": 1,
+          "user_factors": 4
+        }
+      ],
+      "pilot_users_actual": 4,
+      "pilot_users_requested": 20,
+      "seed": 42,
+      "selected_params": {
+        "alpha": 10.0,
+        "max_iter": 10,
+        "rank": 32,
+        "reg_param": 0.1,
+        "strength_col": "strength_raw"
+      },
+      "selected_pilot_trial_id": 1,
+      "selected_trial_id": 1,
+      "selection_metric": "full internal Recall@10, then Precision@10, then runtime",
+      "shortlist_passed": 1,
+      "shortlist_requested": 1,
+      "shortlist_trial_ids": [
+        1
+      ],
+      "status": "passed",
+      "total_runtime_ms": 49517.458
+    }
+  },
+  "checkpoint": {
+    "ownership": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/checkpoints/module4/cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "retention": "retained for audit"
+  },
+  "environment": {
+    "command": [
+      "module4",
+      "all",
+      "--root",
+      "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272",
+      "--output",
+      "results/module4-cross",
+      "--run-id",
+      "cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "--model-version",
+      "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "--graph-version",
+      "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "--pilot-users",
+      "20",
+      "--max-trials",
+      "1",
+      "--scope",
+      "staged_fixture"
+    ],
+    "commit": "unavailable",
+    "config": {
+      "als_blocks": 4,
+      "executor_cores": 2,
+      "executor_memory": "1g",
+      "graph_backend": "graphframes",
+      "graph_max_iter": 10,
+      "graph_min_edge_weight": 2,
+      "graph_reset_probability": 0.15,
+      "graph_top_products": null,
+      "master": "spark://spark-master:7077",
+      "mongo_database": "module4_cross_932c44d6fcc4439ba10d5f8e4979a272",
+      "mongo_graph_collection": "product_graph_metrics",
+      "mongo_recommendation_collection": "user_recommendations",
+      "mongodb_uri": "mongodb://mongodb:27017/instacart",
+      "recommendation_k": 20,
+      "root": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272",
+      "seed": 42,
+      "shuffle_partitions": 8,
+      "total_cores": 2
+    },
+    "dirty": null,
+    "graph_version": "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "graphframes_jars": [
+      {
+        "file": "graphframes-0.8.3-spark3.5-s_2.12.jar",
+        "sha512": "0778fb638a84f43de4e9a7d5ebeb8fb489bf0ed0542183e443a1b7a1f67051362095a7dfe98f6aabf16ccb8c77f59d14a09f744bf588a8711964424eb39927e5"
+      }
+    ],
+    "graphframes_python": "0.6",
+    "java": "17.0.14",
+    "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "platform": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "scala": "2.12.18",
+    "source_code_sha256": "3240042ffdbf25970efe40e2e402f441ecb48519f78bd1ef4aa98d62707f90de",
+    "spark": "3.5.5",
+    "spark_conf": {
+      "spark.cores.max": "2",
+      "spark.executor.cores": "2",
+      "spark.executor.extraJavaOptions": "-Djava.net.preferIPv6Addresses=false -XX:+IgnoreUnrecognizedVMOptions --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/jdk.internal.ref=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED -Djdk.reflect.useDirectMethodHandle=false",
+      "spark.executor.id": "driver",
+      "spark.executor.memory": "1g",
+      "spark.master": "spark://spark-master:7077",
+      "spark.sql.adaptive.enabled": "false",
+      "spark.sql.ansi.enabled": "true",
+      "spark.sql.autoBroadcastJoinThreshold": "-1",
+      "spark.sql.debug.maxToStringFields": "200",
+      "spark.sql.maxMetadataStringLength": "10000",
+      "spark.sql.session.timeZone": "UTC",
+      "spark.sql.shuffle.partitions": "8"
+    },
+    "timestamp_utc": "2026-10-08T14:59:32.173688+00:00"
+  },
+  "eventlog": {
+    "directory": "/workspace/results/module4-cross/cross-932c44d6fcc4439ba10d5f8e4979a272/eventlog",
+    "groups": [
+      "module4.als.final",
+      "module4.als.full_baseline",
+      "module4.als.full_validation.1",
+      "module4.als.pilot.1",
+      "module4.als.pilot_baseline",
+      "module4.graph.final_metrics",
+      "module4.graph.raw_edges",
+      "module4.graph.threshold.10",
+      "module4.graph.threshold.2",
+      "module4.graph.threshold.5",
+      "module4.input_validation",
+      "module4.mongo.graph",
+      "module4.mongo.recommendations"
+    ],
+    "status": "parsed"
+  },
+  "finished_at_utc": "2026-10-08T15:02:58.025554+00:00",
+  "graph": {
+    "duration_ms": 21094.433,
+    "graph_runtime_ms": 21089.93,
+    "graph_version": "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "mongo": {
+      "collection": "product_graph_metrics",
+      "documents": 6,
+      "duration_ms": 1106.758,
+      "expected_documents": 6,
+      "graph_version": "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "min_edge_weight": 2,
+      "published": true,
+      "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "temporary": "product_graph_metrics__staging_266a89f6ac3e4ae0b752ee4360ae41bc",
+      "validation_after_promote": {
+        "documents": 6,
+        "duplicate_keys": 0,
+        "expected_documents": 6,
+        "indexes": [
+          "_id_",
+          "idx_graph_pagerank",
+          "idx_graph_weighted_degree",
+          "uq_graph_product"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      },
+      "validation_before_promote": {
+        "documents": 6,
+        "duplicate_keys": 0,
+        "expected_documents": 6,
+        "indexes": [
+          "_id_",
+          "idx_graph_pagerank",
+          "idx_graph_weighted_degree",
+          "uq_graph_product"
+        ],
+        "invalid_indexes": [],
+        "missing_indexes": [],
+        "valid": true
+      }
+    },
+    "top20": {
+      "neighbor_count": [
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.292096165089019,
+          "product_id": 5,
+          "product_name": "Product 5",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.2920961650890193,
+          "product_id": 6,
+          "product_name": "Product 6",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 1,
+          "product_name": "Product 1",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 4,
+          "product_name": "Product 4",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 2,
+          "product_name": "Product 2",
+          "weighted_degree": 4
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 3,
+          "product_name": "Product 3",
+          "weighted_degree": 4
+        }
+      ],
+      "pagerank": [
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.2920961650890193,
+          "product_id": 6,
+          "product_name": "Product 6",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.292096165089019,
+          "product_id": 5,
+          "product_name": "Product 5",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 1,
+          "product_name": "Product 1",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 4,
+          "product_name": "Product 4",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 2,
+          "product_name": "Product 2",
+          "weighted_degree": 4
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 3,
+          "product_name": "Product 3",
+          "weighted_degree": 4
+        }
+      ],
+      "weighted_degree": [
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.292096165089019,
+          "product_id": 5,
+          "product_name": "Product 5",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 4,
+          "pagerank": 1.2920961650890193,
+          "product_id": 6,
+          "product_name": "Product 6",
+          "weighted_degree": 12
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 1,
+          "product_name": "Product 1",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 3,
+          "pagerank": 1.0,
+          "product_id": 4,
+          "product_name": "Product 4",
+          "weighted_degree": 8
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 2,
+          "product_name": "Product 2",
+          "weighted_degree": 4
+        },
+        {
+          "neighbor_count": 2,
+          "pagerank": 0.7079038349109805,
+          "product_id": 3,
+          "product_name": "Product 3",
+          "weighted_degree": 4
+        }
+      ]
+    },
+    "trials": [
+      {
+        "active_product_count": 6,
+        "catalog_product_coverage": 1.0,
+        "directed_edge_count": 18,
+        "edge_count": 9,
+        "edge_weight_quantiles": [
+          2.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0
+        ],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 0,
+        "min_edge_weight": 2,
+        "neighbor_count_quantiles": [
+          3.0,
+          4.0,
+          4.0,
+          4.0,
+          4.0
+        ],
+        "prior_fact_coverage": 1.0,
+        "runtime_ms": 2981.702,
+        "scope_product_coverage": 1.0,
+        "status": "passed",
+        "total_weight": 24,
+        "vertex_count": 6
+      },
+      {
+        "active_product_count": 0,
+        "catalog_product_coverage": 0.0,
+        "directed_edge_count": 0,
+        "edge_count": 0,
+        "edge_weight_quantiles": [],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 6,
+        "min_edge_weight": 5,
+        "neighbor_count_quantiles": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "prior_fact_coverage": 0.0,
+        "runtime_ms": 2150.628,
+        "scope_product_coverage": 0.0,
+        "status": "passed",
+        "total_weight": 0,
+        "vertex_count": 6
+      },
+      {
+        "active_product_count": 0,
+        "catalog_product_coverage": 0.0,
+        "directed_edge_count": 0,
+        "edge_count": 0,
+        "edge_weight_quantiles": [],
+        "graph_scope": "full_catalog_vertices_and_prior_baskets",
+        "isolated_vertices": 6,
+        "min_edge_weight": 10,
+        "neighbor_count_quantiles": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "prior_fact_coverage": 0.0,
+        "runtime_ms": 3770.273,
+        "scope_product_coverage": 0.0,
+        "status": "passed",
+        "total_weight": 0,
+        "vertex_count": 6
+      }
+    ],
+    "validation": {
+      "backend": "graphframes",
+      "basket_count": 8,
+      "basket_size_quantiles": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ],
+      "catalog_products": 6,
+      "catalog_scope_coverage": 1.0,
+      "directed_edge_count": 18,
+      "edge_count": 9,
+      "graph_scope": "full_catalog_vertices_and_prior_baskets",
+      "isolated_vertices": 0,
+      "max_iter": 10,
+      "pagerank_backend_validation": "passed",
+      "pagerank_finite": true,
+      "pair_expansion_count": 24.0,
+      "prior_fact_scope_coverage": 1.0,
+      "prior_facts_in_scope": 24,
+      "prior_facts_total": 24,
+      "raw_edge_count_at_weight_1": 9,
+      "reset_probability": 0.15,
+      "selected_product_ids_sha256": null,
+      "threshold_selection": "configured prior-only threshold; no official train signal used",
+      "top_products_requested": null,
+      "total_edge_weight": 24,
+      "vertex_count": 6,
+      "weighted_degree_sum": 48
+    }
+  },
+  "pair_readiness": {
+    "graph_published": true,
+    "graph_version": "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "pair_rename_is_atomic": false,
+    "readiness_collection": "module4_snapshot_readiness",
+    "readiness_document": {
+      "_id": "active",
+      "graph_published": true,
+      "graph_version": "graph-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "model_version": "als-cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "ready": true,
+      "recommendation_published": true,
+      "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+      "single_writer_policy": "module4_publication_lock",
+      "status": "ready"
+    },
+    "ready": true,
+    "recommendation_published": true,
+    "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+    "single_snapshot_ready": false,
+    "single_writer_policy": "module4_publication_lock",
+    "status": "both_snapshots_validated"
+  },
+  "preflight": {
+    "mongo": {
+      "insert_index_rename_readback": "passed",
+      "ping": "passed"
+    }
+  },
+  "run_id": "cross-932c44d6fcc4439ba10d5f8e4979a272",
+  "scope": "staged_fixture",
+  "serving_status": "published_and_validated",
+  "source_stability_check": "passed",
+  "spark_event_metrics": {
+    "module4.als.final": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 48951,
+      "failed_task_attempts": 0,
+      "input_bytes": 802858,
+      "input_records": 1797,
+      "referenced_stages": 1943,
+      "shuffle_read_bytes": 412973,
+      "shuffle_write_bytes": 309403,
+      "skipped_stages": 1388,
+      "stages": 555,
+      "tasks": 3835
+    },
+    "module4.als.full_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 7435,
+      "failed_task_attempts": 0,
+      "input_bytes": 96144,
+      "input_records": 200,
+      "referenced_stages": 303,
+      "shuffle_read_bytes": 47399,
+      "shuffle_write_bytes": 30152,
+      "skipped_stages": 239,
+      "stages": 64,
+      "tasks": 506
+    },
+    "module4.als.full_validation.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 4957,
+      "failed_task_attempts": 0,
+      "input_bytes": 98812,
+      "input_records": 386,
+      "referenced_stages": 865,
+      "shuffle_read_bytes": 117385,
+      "shuffle_write_bytes": 113924,
+      "skipped_stages": 778,
+      "stages": 87,
+      "tasks": 428
+    },
+    "module4.als.pilot.1": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 5423,
+      "failed_task_attempts": 0,
+      "input_bytes": 98468,
+      "input_records": 383,
+      "referenced_stages": 1279,
+      "shuffle_read_bytes": 116969,
+      "shuffle_write_bytes": 113820,
+      "skipped_stages": 1192,
+      "stages": 87,
+      "tasks": 421
+    },
+    "module4.als.pilot_baseline": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 9914,
+      "failed_task_attempts": 0,
+      "input_bytes": 81504,
+      "input_records": 133,
+      "referenced_stages": 340,
+      "shuffle_read_bytes": 31192,
+      "shuffle_write_bytes": 27625,
+      "skipped_stages": 271,
+      "stages": 69,
+      "tasks": 455
+    },
+    "module4.graph.final_metrics": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 6728,
+      "failed_task_attempts": 0,
+      "input_bytes": 1094783,
+      "input_records": 650,
+      "referenced_stages": 752,
+      "shuffle_read_bytes": 251576,
+      "shuffle_write_bytes": 233520,
+      "skipped_stages": 664,
+      "stages": 88,
+      "tasks": 590
+    },
+    "module4.graph.raw_edges": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 295,
+      "failed_task_attempts": 0,
+      "input_bytes": 3139,
+      "input_records": 40,
+      "referenced_stages": 5,
+      "shuffle_read_bytes": 3439,
+      "shuffle_write_bytes": 2562,
+      "skipped_stages": 0,
+      "stages": 5,
+      "tasks": 19
+    },
+    "module4.graph.threshold.10": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 1279,
+      "failed_task_attempts": 0,
+      "input_bytes": 9891,
+      "input_records": 54,
+      "referenced_stages": 67,
+      "shuffle_read_bytes": 13388,
+      "shuffle_write_bytes": 13388,
+      "skipped_stages": 35,
+      "stages": 32,
+      "tasks": 215
+    },
+    "module4.graph.threshold.2": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 1435,
+      "failed_task_attempts": 0,
+      "input_bytes": 48291,
+      "input_records": 150,
+      "referenced_stages": 67,
+      "shuffle_read_bytes": 20297,
+      "shuffle_write_bytes": 20297,
+      "skipped_stages": 35,
+      "stages": 32,
+      "tasks": 215
+    },
+    "module4.graph.threshold.5": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 740,
+      "failed_task_attempts": 0,
+      "input_bytes": 9891,
+      "input_records": 54,
+      "referenced_stages": 67,
+      "shuffle_read_bytes": 13388,
+      "shuffle_write_bytes": 13388,
+      "skipped_stages": 35,
+      "stages": 32,
+      "tasks": 215
+    },
+    "module4.input_validation": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 14476,
+      "failed_task_attempts": 0,
+      "input_bytes": 70563,
+      "input_records": 816,
+      "referenced_stages": 125,
+      "shuffle_read_bytes": 26637,
+      "shuffle_write_bytes": 26636,
+      "skipped_stages": 2,
+      "stages": 123,
+      "tasks": 363
+    },
+    "module4.mongo.graph": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 98,
+      "failed_task_attempts": 0,
+      "input_bytes": 12544,
+      "input_records": 16,
+      "referenced_stages": 388,
+      "shuffle_read_bytes": 460,
+      "shuffle_write_bytes": 460,
+      "skipped_stages": 374,
+      "stages": 14,
+      "tasks": 35
+    },
+    "module4.mongo.recommendations": {
+      "discarded_task_attempts": 0,
+      "executor_run_time_ms": 187,
+      "failed_task_attempts": 0,
+      "input_bytes": 8720,
+      "input_records": 10,
+      "referenced_stages": 64,
+      "shuffle_read_bytes": 454,
+      "shuffle_write_bytes": 454,
+      "skipped_stages": 48,
+      "stages": 16,
+      "tasks": 44
+    }
+  },
+  "stage_timings_ms": {
+    "als_compute": 137973.524,
+    "graph_compute": 21094.497,
+    "graph_publication": 1108.143,
+    "input_validation": 37442.15,
+    "recommendation_publication": 1303.885
+  },
+  "stages": {
+    "als_compute": "passed",
+    "graph_compute": "passed",
+    "graph_publication": "passed",
+    "input_validation": "passed",
+    "recommendation_publication": "passed",
+    "serving": "passed",
+    "source_stability_check": "passed"
+  },
+  "started_at_utc": "2026-10-08T14:59:32.173688+00:00",
+  "status": "passed",
+  "validation": {
+    "cohort": {
+      "prior_orders_without_facts": 0,
+      "train_orders_without_facts": 0,
+      "train_users_with_truth": 4
+    },
+    "counts": {
+      "orders": 16,
+      "prior": 24,
+      "prior_users": 4,
+      "products": 6,
+      "train": 12,
+      "train_users": 4
+    },
+    "distinct": {
+      "prior_orders": 8,
+      "prior_products": 6,
+      "train_orders": 4,
+      "train_products": 6
+    },
+    "official_train_used_for_fit": false,
+    "official_train_used_for_tuning": false,
+    "prior_eval_set": "prior",
+    "purchase_distribution": {
+      "prior_purchases_per_user_product_quantiles": [
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0,
+        2.0
+      ],
+      "prior_reordered": {
+        "False": 12,
+        "True": 12
+      },
+      "train_reordered": {
+        "True": 12
+      }
+    },
+    "schema": {
+      "orders": "struct<order_id:bigint,user_id:bigint,eval_set:string,order_number:bigint,order_dow:bigint,order_hour_of_day:bigint,days_since_prior_order:double>",
+      "prior": "struct<order_id:bigint,product_id:bigint,add_to_cart_order:bigint,reordered:boolean>",
+      "products": "struct<product_id:bigint,product_name:string,aisle_id:bigint,department_id:bigint>",
+      "train": "struct<order_id:bigint,product_id:bigint,add_to_cart_order:bigint,reordered:boolean>"
+    },
+    "source_receipt": {
+      "inputs": {
+        "order_products_prior": {
+          "file_bytes": 1443,
+          "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_prior/part.parquet",
+          "rows": 24,
+          "sha256": "d7bb714e9841634acffb62b995d77587d44fd85bd0f4a6ba1b90cf5c30700914"
+        },
+        "order_products_train": {
+          "file_bytes": 1415,
+          "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/order_products_train/part.parquet",
+          "rows": 12,
+          "sha256": "911b530603a51e2b7c15448df902dabadaa947eda9f9b39cd49341a2f395205d"
+        },
+        "orders": {
+          "file_bytes": 2546,
+          "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/orders/part.parquet",
+          "rows": 16,
+          "sha256": "eebacc9952f7e436b866bb032af4014b58c8d44698c5ed740414cb2c3cc68d2f"
+        },
+        "products": {
+          "file_bytes": 1502,
+          "path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/dimensions/products/part.parquet",
+          "rows": 6,
+          "sha256": "cc3c0f605e1c24b31a96bdc89071a0916498d9b85d65a76a621e9ed6d4dca233"
+        }
+      },
+      "receipt_path": "hdfs://namenode:8020/instacart/_module4_cross_module/932c44d6fcc4439ba10d5f8e4979a272/curated/_sources.json",
+      "receipt_sha256": "6b9527052485f9bce9b7b8fe3f2ced395c7bd2fb46f7accf270ac8d1fd5804af",
+      "source_scope": "staged_curated",
+      "validated_at_utc": "2026-10-08T15:00:11.916420+00:00"
+    },
+    "train_eval_set": "train"
+  }
+}
