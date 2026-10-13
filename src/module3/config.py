@@ -7,10 +7,25 @@ reproducible from the run summary alone.
 
 from dataclasses import dataclass
 import os
+import re
 
 DEFAULT_TOPIC = "instacart-purchase-events"
 DEFAULT_MONGO_TOP_K = 20
 DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
+MAX_TREND_BUNDLE_TOP_K = 20
+_STABLE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*\Z")
+
+
+def _validate_stable_label(value: str | None, field: str, maximum: int) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) > maximum
+        or not _STABLE_LABEL.fullmatch(value)
+    ):
+        raise ValueError(
+            f"{field} must use 1-{maximum} letters, digits, '.', '_', ':', '/', or '-'; "
+            "it must start with a letter or digit"
+        )
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -63,6 +78,11 @@ class Config:
     ttl_seconds: int = DEFAULT_TTL_SECONDS
     checkpoint_dir: str = "checkpoint"
 
+    # Optional immutable finalized-window bundle publication.
+    publish_trend_bundles: bool = False
+    trend_source_namespace: str | None = None
+    trend_source_scope: str = "unknown_or_mixed"
+
     def __post_init__(self):
         if self.shuffle_partitions < 1 or self.repetitions < 3 or self.warmups < 1:
             raise ValueError("Require positive partitions, >=3 measured runs and >=1 warm-up")
@@ -80,6 +100,26 @@ class Config:
             raise ValueError("Kafka topic and bootstrap servers are required")
         if not isinstance(self.fail_on_data_loss, bool):
             raise ValueError("fail_on_data_loss must be a boolean")
+        if not isinstance(self.publish_trend_bundles, bool):
+            raise ValueError("publish_trend_bundles must be a boolean")
+        if self.trend_source_namespace is not None:
+            _validate_stable_label(
+                self.trend_source_namespace, "trend_source_namespace", 256
+            )
+        _validate_stable_label(self.trend_source_scope, "trend_source_scope", 128)
+        if self.publish_trend_bundles:
+            if self.trend_source_namespace is None:
+                raise ValueError(
+                    "trend_source_namespace is required when trend bundle publication is enabled"
+                )
+            if (
+                type(self.mongo_top_k_per_window) is not int
+                or not 1 <= self.mongo_top_k_per_window <= MAX_TREND_BUNDLE_TOP_K
+            ):
+                raise ValueError(
+                    "mongo_top_k_per_window must be an integer between 1 and "
+                    f"{MAX_TREND_BUNDLE_TOP_K} when trend bundle publication is enabled"
+                )
 
     @classmethod
     def environment(cls, **overrides):
@@ -99,6 +139,18 @@ class Config:
                 os.environ.get("MONGO_TOP_K_PER_WINDOW", cls.mongo_top_k_per_window)
             ),
             "ttl_seconds": int(os.environ.get("MONGO_TTL_SECONDS", cls.ttl_seconds)),
+            "publish_trend_bundles": parse_bool(
+                os.environ.get(
+                    "MODULE3_PUBLISH_TREND_BUNDLES",
+                    str(cls.publish_trend_bundles),
+                )
+            ),
+            "trend_source_namespace": os.environ.get(
+                "MODULE3_TREND_SOURCE_NAMESPACE", cls.trend_source_namespace
+            ),
+            "trend_source_scope": os.environ.get(
+                "MODULE3_TREND_SOURCE_SCOPE", cls.trend_source_scope
+            ),
         }
         values.update(overrides)
         return cls(**values)
