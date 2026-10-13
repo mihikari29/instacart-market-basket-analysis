@@ -45,7 +45,9 @@ checks all three required local images, creates one internal task-labeled
 network, starts one KRaft broker and one tmpfs-only MongoDB, then runs the
 streaming harness in the pinned Spark image. The Spark source tree is mounted
 read-only; only the unique evidence run directory is writable. There are no
-published ports, persistent volumes, or connections to project services.
+published ports, attached project volumes, or connections to project services.
+The Kafka image declares three anonymous Docker volumes; the task-owned teardown
+captures and removes those exact run-created volumes after inspection.
 
 ```bash
 set -Eeuo pipefail
@@ -66,6 +68,7 @@ NETWORK="i3-c8b-net-$RUN_ID"
 KAFKA="i3-c8b-kafka-$RUN_ID"
 MONGO="i3-c8b-mongo-$RUN_ID"
 SPARK="i3-c8b-spark-$RUN_ID"
+OWNER_HELPER="i3-c8b-owner-helper-$RUN_ID"
 TOPIC="i3-c8b-$RUN_ID"
 DATABASE="i3_c8b_$SAFE_RUN"
 RUN_DIR="$PWD/results/module4c-streaming-demo/$RUN_ID"
@@ -79,65 +82,50 @@ docker run --pull=never --rm --network none \
 GIT_COMMIT="$(git rev-parse HEAD)"
 GIT_STATUS_JSON="$(git status --porcelain | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().splitlines()))')"
 DEADLINE=$((SECONDS + 270))
-CREATED_NETWORK=0
 
 cleanup() {
-  rc=$?
-  cleanup_rc=0
+  local rc=$?
+  local cleanup_rc=0
+  local cleaned=no
+  local finalize_rc=0
   trap - EXIT INT TERM
-  if (( CREATED_NETWORK )) && docker network inspect "$NETWORK" >/dev/null 2>&1; then
-    task="$(docker network inspect --format '{{ index .Labels "codex.task" }}' "$NETWORK")"
-    run="$(docker network inspect --format '{{ index .Labels "codex.run" }}' "$NETWORK")"
-    if [[ "$task" == c8b && "$run" == "$RUN_ID" ]]; then
-      docker network inspect "$NETWORK" >"$RUN_DIR/docker-network-inspect.json" || true
+  set +e
+  if [[ -d "$RUN_DIR" ]]; then
+    docker run --pull=never --rm --name "$OWNER_HELPER" --network none \
+      --label codex.task=c8b --label "codex.run=$RUN_ID" \
+      -v "$RUN_DIR:/out:rw" --entrypoint sh "$IMAGE_SPARK" -c \
+      "chown -R $(id -u):$(id -g) /out"
+    helper_rc=$?
+    if (( helper_rc != 0 )); then
+      printf 'Evidence ownership helper failed with exit %s\n' "$helper_rc" >&2
+      cleanup_rc=$helper_rc
     fi
   fi
-  for name in "$SPARK" "$KAFKA" "$MONGO"; do
-    if docker container inspect "$name" >/dev/null 2>&1; then
-      task="$(docker inspect --format '{{ index .Config.Labels "codex.task" }}' "$name" 2>/dev/null || true)"
-      run="$(docker inspect --format '{{ index .Config.Labels "codex.run" }}' "$name" 2>/dev/null || true)"
-      if [[ "$task" == c8b && "$run" == "$RUN_ID" ]]; then
-        case "$name" in
-          "$SPARK") log_file=spark-container.log ;;
-          "$KAFKA") log_file=kafka.log ;;
-          "$MONGO") log_file=mongodb.log ;;
-        esac
-        docker inspect "$name" >"$RUN_DIR/${log_file%.log}-inspect.json" || true
-        docker logs "$name" >"$RUN_DIR/$log_file" 2>&1 || true
-        docker rm -f "$name" >/dev/null || cleanup_rc=1
-      fi
-    fi
-  done
-  if (( CREATED_NETWORK )) && docker network inspect "$NETWORK" >/dev/null 2>&1; then
-    task="$(docker network inspect --format '{{ index .Labels "codex.task" }}' "$NETWORK")"
-    run="$(docker network inspect --format '{{ index .Labels "codex.run" }}' "$NETWORK")"
-    if [[ "$task" == c8b && "$run" == "$RUN_ID" ]]; then
-      docker network rm "$NETWORK" >/dev/null || cleanup_rc=1
-    fi
+  python3 scripts/module4c_streaming_demo.py cleanup-docker \
+    --run-id "$RUN_ID" --evidence-dir "$RUN_DIR"
+  docker_cleanup_rc=$?
+  if (( docker_cleanup_rc != 0 )); then
+    cleanup_rc=1
+  elif (( cleanup_rc == 0 )); then
+    cleaned=yes
   fi
-  docker run --pull=never --rm --network none --label codex.task=c8b --label "codex.run=$RUN_ID" \
-    -v "$RUN_DIR:/out:rw" --entrypoint sh "$IMAGE_SPARK" -c \
-    "chown -R $(id -u):$(id -g) /out" || cleanup_rc=1
-  mapfile -t remaining < <(
-    { docker ps -aq --filter "label=codex.task=c8b" --filter "label=codex.run=$RUN_ID";
-      docker network ls -q --filter "label=codex.task=c8b" --filter "label=codex.run=$RUN_ID"; } | sort -u
-  )
-  clean=no
-  if (( cleanup_rc == 0 )) && (( ${#remaining[@]} == 0 )); then clean=yes; fi
   if [[ -f "$RUN_DIR/report.json" ]]; then
     args=(python3 scripts/module4c_streaming_demo.py finalize --run-id "$RUN_ID" \
-      --report "$RUN_DIR/report.json" --cleaned "$clean")
-    for item in "${remaining[@]}"; do args+=(--remaining "$item"); done
-    "${args[@]}" || cleanup_rc=1
+      --report "$RUN_DIR/report.json" --docker-cleanup-report "$RUN_DIR/docker-cleanup.json" \
+      --cleaned "$cleaned" --experiment-exit-code "$rc")
+    "${args[@]}"
+    finalize_rc=$?
+    if (( finalize_rc != 0 )); then cleanup_rc=1; fi
   fi
   if (( rc == 0 && cleanup_rc != 0 )); then rc=1; fi
   exit "$rc"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 docker network create --internal \
   --label codex.task=c8b --label "codex.run=$RUN_ID" "$NETWORK" >/dev/null
-CREATED_NETWORK=1
 
 docker run --pull=never -d --name "$KAFKA" --network "$NETWORK" --network-alias c8b-kafka \
   --label codex.task=c8b --label "codex.run=$RUN_ID" --memory 1g --cpus 1 \
@@ -178,6 +166,11 @@ for _ in $(seq 1 45); do
 done
 [[ "$ready" == yes ]] || { docker logs "$MONGO" >&2; exit 4; }
 
+if [[ "${C8B_TEST_FAIL_BEFORE_SPARK:-0}" == 1 ]]; then
+  printf 'Injected C9A-FIX failure before Spark start; run_id=%s\n' "$RUN_ID" >&2
+  exit 42
+fi
+
 remaining_seconds=$((DEADLINE - SECONDS))
 (( remaining_seconds > 0 )) || { printf 'C8B overall deadline expired before Spark start\n' >&2; exit 124; }
 timeout --signal=TERM --kill-after=10s "${remaining_seconds}s" docker run --pull=never \
@@ -195,11 +188,64 @@ timeout --signal=TERM --kill-after=10s "${remaining_seconds}s" docker run --pull
 
 The launcher has 75-second Kafka and 45-second Mongo readiness limits and a
 270-second overall deadline. The in-container experiment bounds Kafka sends,
-Spark offset/watermark/bundle polling, and each CLI call. The cleanup trap saves
-service logs, stops/removes only containers with both matching C8B task and run
-labels, removes only the matching network, and records any remaining labelled
-resources in `report.json`. It does not run `docker compose`, remove volumes, or
-touch other project containers.
+Spark offset/watermark/bundle polling, and each CLI call. The EXIT trap calls
+the same host-side `cleanup-docker` subcommand used by the cleanup tests. It
+inspects exact run-specific container names, verifies both C8B ownership labels,
+and records container mount identities before removal. For the Kafka image's
+image-declared anonymous volumes, Docker creates 64-character volume IDs even
+when the launcher specifies no `-v` option. `docker rm -f` alone leaves these
+anonymous volumes behind; the cleanup helper uses `docker rm -f -v` with the
+verified container ID only after confirming each volume is image-declared, not an
+explicit named mount, and not referenced outside the current run. It then
+inspects each captured volume ID and the exact task containers/network, with
+task/run label queries as an additional check. Named, external, or unexpected
+volume mounts are preserved and make cleanup fail with their identifiers.
+
+The temporary evidence-owner helper uses a task-specific name, the same labels,
+and `--rm`; it runs before the cleanup verifier so a leaked helper container is
+also detected. The finalizer requires a successful cleanup receipt with all
+captured volumes absent before it can preserve `status: passed`. On cleanup
+failure, inspect `docker-cleanup.json`, the saved sanitized container logs, and
+the listed container, network, or volume IDs. Do not use a global volume prune.
+The trap preserves the original experiment exit code; cleanup or finalization
+failure changes an otherwise successful run to nonzero and prevents a PASS
+report. EXIT, INT, and TERM paths converge on this trap.
+Setting `C8B_TEST_FAIL_BEFORE_SPARK=1` injects exit code 42 after Kafka and
+MongoDB are ready; it is reserved for checking the documented failure trap.
+
+The C9A audit found that the original C8B cleanup verified containers and
+networks but missed Kafka's anonymous volumes. Twenty-one exact anonymous
+volume IDs recorded by seven historical Kafka container inspections were
+subsequently removed manually after confirming that no container referenced
+them. The original C8B reports and their checksums are preserved unchanged;
+their cleanup fields do not establish anonymous-volume cleanup. The new
+`docker-cleanup.json` receipt is separate evidence from a corrected teardown.
+The launcher never runs `docker compose`, never removes named project volumes,
+and selects containers only after checking their exact C8B task and run labels.
+
+The C9A-FIX2 failure-path check used run
+`c8b-20261013t163130z-5dbc0328`. The Kafka broker readiness probe and MongoDB
+ping both succeeded before `C8B_TEST_FAIL_BEFORE_SPARK=1` injected exit 42.
+The EXIT trap retained that original exit code, while the cleanup command
+returned 0. It removed the exact run containers and network, captured and
+removed all three image-declared Kafka anonymous volumes, and verified each
+volume ID absent. A second cleanup invocation also passed with no resources to
+remove. No experiment report was created, so the intentionally failed run was
+not represented as a passing experiment. The targeted before/after inventory
+showed the six pre-existing `instacart` Compose containers and their three
+project volumes unchanged during this check. Sanitized receipts and Docker
+events are recorded under
+`results/module4c-streaming-demo/c8b-20261013t163130z-5dbc0328/`.
+
+An earlier Docker event window showed the pre-existing `instacart` Compose
+containers start and then stop with SIGTERM/SIGKILL around 16:03 UTC. The event
+history does not identify the initiating process. The documented launcher and
+cleanup commands use run-specific C8B names and labels and do not invoke
+Compose; the FIX2 before/after inventory confirms those project resources were
+not changed during the controlled failure test. The short-lived evidence-owner
+helper in that test was auto-removed; Docker events also recorded injected
+Compose metadata on it for project `c7b-final-20261013` and service
+`spark-master`. The source of that metadata remains unknown.
 
 ## Validation
 

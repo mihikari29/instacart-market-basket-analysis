@@ -64,6 +64,16 @@ _URI_SECRET_PATTERN = re.compile(r"mongodb(?:\+srv)?://[^\s\"'<>]+", re.IGNORECA
 _INLINE_SECRET_PATTERN = re.compile(
     r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)"
 )
+_ANONYMOUS_VOLUME_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+_DOCKER_TASK_LABEL = "codex.task"
+_DOCKER_RUN_LABEL = "codex.run"
+_DOCKER_TASK_VALUE = "c8b"
+_CONTAINER_ROLES = (
+    "spark_container",
+    "kafka_container",
+    "mongo_container",
+    "owner_helper_container",
+)
 
 
 def canonical_json(value: Any) -> str:
@@ -130,6 +140,7 @@ def resource_names(run_id: str) -> dict[str, str]:
         "kafka_container": f"i3-c8b-kafka-{run_id}",
         "mongo_container": f"i3-c8b-mongo-{run_id}",
         "spark_container": f"i3-c8b-spark-{run_id}",
+        "owner_helper_container": f"i3-c8b-owner-helper-{run_id}",
         "topic": f"i3-c8b-{run_id}",
         "database": f"i3_c8b_{safe}",
         "namespace": f"c8b:controlled-synthetic:{run_id}",
@@ -1520,28 +1531,415 @@ def run_live(args: argparse.Namespace) -> int:
     return 0
 
 
+def _docker_cli(arguments: list[str], *, timeout_seconds: int = 30) -> subprocess.CompletedProcess[str]:
+    """Run one bounded Docker CLI command without exposing command output."""
+    try:
+        return subprocess.run(
+            ["docker", *arguments],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"Docker command failed: {redact_secrets(str(exc))}") from exc
+
+
+def _docker_detail(result: subprocess.CompletedProcess[str]) -> str:
+    detail = (result.stderr or result.stdout or "Docker returned no diagnostic").strip()
+    return redact_secrets(detail[:1000])
+
+
+def _docker_resource_missing(result: subprocess.CompletedProcess[str]) -> bool:
+    detail = f"{result.stderr or ''} {result.stdout or ''}".lower()
+    return any(token in detail for token in ("no such", "not found", "no such object"))
+
+
+def _docker_inspect(resource_type: str, name: str) -> dict[str, Any] | None:
+    result = _docker_cli([resource_type, "inspect", name])
+    if result.returncode:
+        if _docker_resource_missing(result):
+            return None
+        raise RuntimeError(
+            f"Docker {resource_type} inspect failed for {name}: {_docker_detail(result)}"
+        )
+    try:
+        decoded = json.loads(result.stdout)
+        if not isinstance(decoded, list) or len(decoded) != 1 or not isinstance(decoded[0], dict):
+            raise ValueError("inspect result was not a single JSON object")
+        return decoded[0]
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(f"Docker {resource_type} inspect returned invalid JSON for {name}") from exc
+
+
+def _container_volume_mounts(container: dict[str, Any]) -> tuple[list[dict[str, str]], list[str]]:
+    """Identify image-created anonymous volumes; reject explicit or unknown volumes."""
+    config = container.get("Config") or {}
+    declared = set((config.get("Volumes") or {}).keys())
+    host_config = container.get("HostConfig") or {}
+    explicit_destinations = {
+        str(mount.get("Target") or mount.get("Destination") or "")
+        for mount in (host_config.get("Mounts") or [])
+        if mount.get("Type") == "volume"
+    }
+    volumes_from = bool(host_config.get("VolumesFrom"))
+    for bind in host_config.get("Binds") or []:
+        parts = str(bind).split(":")
+        if len(parts) >= 2:
+            explicit_destinations.add(parts[1])
+
+    anonymous: list[dict[str, str]] = []
+    unsafe: list[str] = []
+    for mount in container.get("Mounts") or []:
+        if mount.get("Type") != "volume":
+            continue
+        name = str(mount.get("Name") or "")
+        destination = str(mount.get("Destination") or "")
+        if (
+            destination not in declared
+            or destination in explicit_destinations
+            or volumes_from
+            or _ANONYMOUS_VOLUME_PATTERN.fullmatch(name) is None
+        ):
+            unsafe.append(
+                f"volume mount at {destination or '<unknown destination>'} is named, external, or unexpected"
+            )
+            continue
+        anonymous.append({"name": name, "destination": destination})
+    return anonymous, unsafe
+
+
+def _is_task_owned(resource: dict[str, Any], *, name: str, run_id: str, network: bool = False) -> bool:
+    actual_name = resource.get("Name")
+    if not network:
+        actual_name = str(actual_name or "").lstrip("/")
+    labels = resource.get("Labels") if network else (resource.get("Config") or {}).get("Labels")
+    return (
+        actual_name == name
+        and isinstance(labels, dict)
+        and labels.get(_DOCKER_TASK_LABEL) == _DOCKER_TASK_VALUE
+        and labels.get(_DOCKER_RUN_LABEL) == run_id
+    )
+
+
+def _filtered_task_resources(resource_type: str, run_id: str) -> list[str]:
+    if resource_type == "container":
+        command = [
+            "ps", "-aq", "--filter", f"label={_DOCKER_TASK_LABEL}={_DOCKER_TASK_VALUE}",
+            "--filter", f"label={_DOCKER_RUN_LABEL}={run_id}",
+        ]
+    else:
+        command = [
+            "network", "ls", "-q", "--filter", f"label={_DOCKER_TASK_LABEL}={_DOCKER_TASK_VALUE}",
+            "--filter", f"label={_DOCKER_RUN_LABEL}={run_id}",
+        ]
+    result = _docker_cli(command)
+    if result.returncode:
+        raise RuntimeError(f"Could not verify remaining task {resource_type}s: {_docker_detail(result)}")
+    return sorted(set(result.stdout.split()))
+
+
+def _capture_container_diagnostics(
+    container: dict[str, Any], *, role: str, evidence_dir: Path | None
+) -> list[str]:
+    warnings: list[str] = []
+    if evidence_dir is None:
+        return warnings
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    summary = {
+        key: container.get(key)
+        for key in ("Id", "Name", "Created", "State", "Image", "Mounts")
+    }
+    _write_json(evidence_dir / f"{role}-inspect.json", summary)
+    container_id = str(container.get("Id") or "")
+    logs = _docker_cli(["logs", container_id])
+    if logs.returncode:
+        warnings.append(f"Could not collect {role} logs: {_docker_detail(logs)}")
+    else:
+        (evidence_dir / f"{role}.log").write_text(
+            redact_secrets(logs.stdout + logs.stderr), encoding="utf-8"
+        )
+    return warnings
+
+
+def cleanup_task_docker_resources(run_id: str, *, evidence_dir: Path | None = None) -> dict[str, Any]:
+    """Remove only verified C8B resources and independently inspect cleanup results."""
+    validate_run_id(run_id)
+    names = resource_names(run_id)
+    receipt: dict[str, Any] = {
+        "run_id": run_id,
+        "status": "failed",
+        "cleanup_complete": False,
+        "containers": [],
+        "network": {"name": names["network"], "ownership_verified": False, "removed": False},
+        "captured_anonymous_volumes": [],
+        "remaining": {"containers": [], "networks": [], "anonymous_volumes": []},
+        "errors": [],
+        "warnings": [],
+    }
+    errors: list[str] = receipt["errors"]
+    receipt_path = evidence_dir / "docker-cleanup.json" if evidence_dir is not None else None
+    if receipt_path is not None and receipt_path.exists():
+        try:
+            previous = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if previous.get("run_id") != run_id:
+                errors.append("Existing cleanup receipt belongs to a different run ID; refusing to reuse its volumes")
+            else:
+                for volume in previous.get("captured_anonymous_volumes") or []:
+                    if (
+                        not isinstance(volume, dict)
+                        or _ANONYMOUS_VOLUME_PATTERN.fullmatch(str(volume.get("name") or "")) is None
+                        or not isinstance(volume.get("container_ids"), list)
+                    ):
+                        errors.append("Existing cleanup receipt contains an invalid captured volume identity")
+                        continue
+                    if not any(
+                        item["name"] == volume["name"] for item in receipt["captured_anonymous_volumes"]
+                    ):
+                        receipt["captured_anonymous_volumes"].append(
+                            {
+                                "name": volume["name"],
+                                "destination": volume.get("destination", "previous cleanup inspection"),
+                                "container_ids": list(volume["container_ids"]),
+                            }
+                        )
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
+            errors.append(f"Existing cleanup receipt could not be validated: {redact_secrets(str(exc))}")
+    task_containers: list[dict[str, Any]] = []
+    owned_ids: set[str] = set()
+
+    # Inspect every exact run-specific name and capture its mount identities before
+    # any task container is removed.
+    for role in _CONTAINER_ROLES:
+        name = names[role]
+        try:
+            container = _docker_inspect("container", name)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            continue
+        row: dict[str, Any] = {
+            "role": role,
+            "name": name,
+            "present_before_cleanup": container is not None,
+            "ownership_verified": False,
+            "removed": False,
+            "anonymous_volumes": [],
+            "unsafe_mounts": [],
+        }
+        receipt["containers"].append(row)
+        if container is None:
+            continue
+        if not _is_task_owned(container, name=name, run_id=run_id):
+            errors.append(f"Refusing to remove {name}: exact name or C8B task/run labels do not match")
+            continue
+        container_id = str(container.get("Id") or "")
+        if not container_id:
+            errors.append(f"Refusing to remove {name}: Docker inspection omitted the container ID")
+            continue
+        row["container_id"] = container_id
+        row["ownership_verified"] = True
+        anonymous, unsafe = _container_volume_mounts(container)
+        row["anonymous_volumes"] = anonymous
+        row["unsafe_mounts"] = unsafe
+        if unsafe:
+            errors.extend(f"{name}: {message}" for message in unsafe)
+        task_containers.append({"role": role, "row": row, "container": container, "id": container_id})
+        owned_ids.add(container_id)
+        for mount in anonymous:
+            captured = next(
+                (item for item in receipt["captured_anonymous_volumes"] if item["name"] == mount["name"]),
+                None,
+            )
+            if captured is None:
+                captured = {
+                    "name": mount["name"],
+                    "destination": mount["destination"],
+                    "container_ids": [],
+                }
+                receipt["captured_anonymous_volumes"].append(captured)
+            if container_id not in captured["container_ids"]:
+                captured["container_ids"].append(container_id)
+        receipt["warnings"].extend(
+            _capture_container_diagnostics(container, role=role.removesuffix("_container"), evidence_dir=evidence_dir)
+        )
+
+    # Save the inspected identities before container removal. A repeated call
+    # can then still detect a same-run volume if Docker left it behind.
+    if receipt_path is not None:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(receipt_path, receipt)
+
+    # A volume referenced by any non-task container is external to this experiment.
+    externally_referenced: set[str] = set()
+    for volume in receipt["captured_anonymous_volumes"]:
+        result = _docker_cli(["ps", "-aq", "--filter", f"volume={volume['name']}"])
+        if result.returncode:
+            errors.append(
+                f"Could not verify users of captured volume {volume['name']}: {_docker_detail(result)}"
+            )
+            externally_referenced.add(volume["name"])
+            continue
+        # `docker ps -q` returns abbreviated IDs by default; container inspect
+        # returns full IDs. Compare by unique prefix rather than raw equality.
+        referenced_ids = set(result.stdout.split())
+        outside = {
+            referenced
+            for referenced in referenced_ids
+            if not any(
+                container_id == referenced
+                or container_id.startswith(referenced)
+                or referenced.startswith(container_id)
+                for container_id in owned_ids
+            )
+        }
+        if outside:
+            errors.append(
+                f"Captured volume {volume['name']} is also referenced outside this C8B run"
+            )
+            externally_referenced.add(volume["name"])
+            volume["external_container_ids"] = sorted(outside)
+
+    for item in task_containers:
+        row = item["row"]
+        container_id = item["id"]
+        unsafe = bool(row["unsafe_mounts"])
+        unsafe = unsafe or any(
+            mount["name"] in externally_referenced for mount in row["anonymous_volumes"]
+        )
+        # -v removes only anonymous volumes. If inspection finds an unexpected
+        # mount, use plain -f to remove the owned container but preserve that data.
+        flags = ["rm", "-f"] if unsafe else ["rm", "-f", "-v"]
+        result = _docker_cli([*flags, container_id])
+        row["remove_command"] = "docker " + " ".join(flags + [container_id])
+        row["removed"] = result.returncode == 0
+        if result.returncode:
+            errors.append(f"Could not remove verified C8B container {container_id}: {_docker_detail(result)}")
+
+    network_name = names["network"]
+    try:
+        network = _docker_inspect("network", network_name)
+    except RuntimeError as exc:
+        errors.append(str(exc))
+        network = None
+    if network is not None:
+        network_id = str(network.get("Id") or "")
+        receipt["network"]["network_id"] = network_id
+        if not _is_task_owned(network, name=network_name, run_id=run_id, network=True):
+            errors.append(f"Refusing to remove {network_name}: exact name or C8B task/run labels do not match")
+        else:
+            receipt["network"]["ownership_verified"] = True
+            result = _docker_cli(["network", "rm", network_id])
+            receipt["network"]["removed"] = result.returncode == 0
+            if result.returncode:
+                errors.append(f"Could not remove verified C8B network {network_id}: {_docker_detail(result)}")
+
+    # Verify exact resource names and each captured volume identity. Label filters
+    # are an additional leak check, never the source of ownership for deletion.
+    for item in receipt["containers"]:
+        try:
+            current = _docker_inspect("container", item["name"])
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            current = {"Id": "inspection-error"}
+        if current is not None:
+            receipt["remaining"]["containers"].append(str(current.get("Id") or item["name"]))
+    try:
+        current_network = _docker_inspect("network", network_name)
+        if current_network is not None:
+            receipt["remaining"]["networks"].append(str(current_network.get("Id") or network_name))
+    except RuntimeError as exc:
+        errors.append(str(exc))
+        receipt["remaining"]["networks"].append(network_name)
+    for volume in receipt["captured_anonymous_volumes"]:
+        try:
+            current_volume = _docker_inspect("volume", volume["name"])
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            current_volume = {"Name": volume["name"]}
+        volume["absent_after_cleanup"] = current_volume is None
+        if current_volume is not None:
+            receipt["remaining"]["anonymous_volumes"].append(volume["name"])
+
+    for resource_type, target in (("container", "containers"), ("network", "networks")):
+        try:
+            remaining = _filtered_task_resources(resource_type, run_id)
+        except RuntimeError as exc:
+            errors.append(str(exc))
+            remaining = [f"{resource_type}-verification-error"]
+        for identity in remaining:
+            if identity not in receipt["remaining"][target]:
+                receipt["remaining"][target].append(identity)
+
+    receipt["cleanup_complete"] = not errors and not any(receipt["remaining"].values())
+    receipt["status"] = "passed" if receipt["cleanup_complete"] else "failed"
+    if evidence_dir is not None:
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        _write_json(receipt_path, receipt)
+    return receipt
+
+
+def cleanup_docker_command(args: argparse.Namespace) -> int:
+    evidence_dir = Path(args.evidence_dir)
+    receipt = cleanup_task_docker_resources(args.run_id, evidence_dir=evidence_dir)
+    print(json.dumps({"status": receipt["status"], "receipt": str(evidence_dir / "docker-cleanup.json")}, sort_keys=True))
+    return 0 if receipt["cleanup_complete"] else 1
+
+
 def finalize_report(args: argparse.Namespace) -> int:
-    """Record host-verified Docker cleanup after the Spark container exits."""
+    """Record independently verified container, network, and volume cleanup."""
     path = Path(args.report)
     report = json.loads(path.read_text(encoding="utf-8"))
     if report.get("experiment_id") != args.run_id:
         raise ValueError("report run ID does not match cleanup run ID")
-    report.setdefault("cleanup_status", {})["docker_resources_removed"] = args.cleaned == "yes"
-    report["cleanup_status"]["docker_remaining_task_resources"] = args.remaining
-    required_cleanup = (
-        report["cleanup_status"].get("mongodb_database_dropped") is True
-        and report["cleanup_status"].get("spark_query_stopped") is True
+    cleanup_status = report.setdefault("cleanup_status", {})
+    receipt_valid = False
+    receipt_summary: dict[str, Any] = {}
+    try:
+        receipt = json.loads(Path(args.docker_cleanup_report).read_text(encoding="utf-8"))
+        receipt_summary = {
+            "status": receipt.get("status"),
+            "cleanup_complete": receipt.get("cleanup_complete"),
+            "captured_anonymous_volume_count": len(receipt.get("captured_anonymous_volumes") or []),
+            "remaining": receipt.get("remaining"),
+            "errors": receipt.get("errors"),
+        }
+        receipt_valid = (
+            receipt.get("run_id") == args.run_id
+            and receipt.get("status") == "passed"
+            and receipt.get("cleanup_complete") is True
+            and not receipt.get("errors")
+            and not any((receipt.get("remaining") or {}).values())
+            and all(
+                volume.get("absent_after_cleanup") is True
+                for volume in receipt.get("captured_anonymous_volumes") or []
+            )
+        )
+    except (OSError, json.JSONDecodeError, AttributeError, TypeError) as exc:
+        receipt_summary = {"status": "unavailable", "error": redact_secrets(str(exc))}
+    cleanup_status["docker_cleanup_receipt"] = receipt_summary
+    cleanup_status["docker_anonymous_volumes_removed"] = receipt_valid
+    cleanup_status["docker_resources_removed"] = receipt_valid
+    cleanup_status["docker_remaining_task_resources"] = (
+        receipt_summary.get("remaining") or {"containers": [], "networks": [], "anonymous_volumes": []}
     )
-    if args.cleaned != "yes" or args.remaining or not required_cleanup:
+    required_cleanup = (
+        cleanup_status.get("mongodb_database_dropped") is True
+        and cleanup_status.get("spark_query_stopped") is True
+        and receipt_valid
+        and args.cleaned == "yes"
+        and args.experiment_exit_code == 0
+    )
+    if not required_cleanup:
         report["status"] = "failed"
-        report["cleanup_status"]["cleanup_error"] = (
-            "task resources remain or MongoDB/Spark cleanup did not verify"
+        cleanup_status["cleanup_error"] = (
+            "experiment failed, task resources or anonymous volumes remain, "
+            "or cleanup could not be verified"
         )
     validate_report(report)
     _write_json(path, report)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     path.with_name("report.sha256").write_text(f"{digest}  report.json\n", encoding="utf-8")
-    return 0 if report.get("status") == "passed" and args.cleaned == "yes" and not args.remaining and required_cleanup else 1
+    return 0 if report.get("status") == "passed" and required_cleanup else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1554,11 +1952,18 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("--database", required=True)
     live.add_argument("--topic", required=True)
     live.set_defaults(func=run_live)
+    docker_cleanup = subparsers.add_parser(
+        "cleanup-docker", help="remove and verify only one run's C8B Docker resources"
+    )
+    docker_cleanup.add_argument("--run-id", required=True)
+    docker_cleanup.add_argument("--evidence-dir", required=True)
+    docker_cleanup.set_defaults(func=cleanup_docker_command)
     finalize = subparsers.add_parser("finalize", help="record host-verified container cleanup")
     finalize.add_argument("--run-id", required=True)
     finalize.add_argument("--report", required=True)
+    finalize.add_argument("--docker-cleanup-report", required=True)
     finalize.add_argument("--cleaned", choices=("yes", "no"), required=True)
-    finalize.add_argument("--remaining", action="append", default=[])
+    finalize.add_argument("--experiment-exit-code", type=int, required=True)
     finalize.set_defaults(func=finalize_report)
     return parser
 
