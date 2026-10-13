@@ -21,6 +21,14 @@ from .data import (
     SourceSnapshotError,
     capture_verified_user_sources,
 )
+from .trend_reader import (
+    TrendSnapshotIntegrityError,
+    TrendSnapshotQueryError,
+    TrendSnapshotReaderError,
+    TrendSnapshotReadResult,
+    TrendSnapshotRequestError,
+    read_verified_trend_snapshot,
+)
 
 __all__ = [
     "ALSRecommendation",
@@ -38,8 +46,14 @@ __all__ = [
     "SourceQueryError",
     "SourceSnapshotError",
     "TrendRecommendation",
+    "TrendSnapshotIntegrityError",
+    "TrendSnapshotQueryError",
+    "TrendSnapshotReaderError",
+    "TrendSnapshotReadResult",
+    "TrendSnapshotRequestError",
     "TrendSnapshot",
     "VerifiedSourceContext",
     "capture_verified_user_sources",
     "rank_hybrid_recommendations",
+    "read_verified_trend_snapshot",
 ]
