@@ -29,6 +29,19 @@ from .trend_reader import (
     TrendSnapshotRequestError,
     read_verified_trend_snapshot,
 )
+from .sink_mongo import (
+    FINAL_RECOMMENDATIONS_COLLECTION,
+    HybridPublicationConflictError,
+    HybridPublicationPromotionError,
+    HybridPublicationResult,
+    HybridPublicationWriteError,
+    HybridPublisherError,
+    HybridSnapshotContractError,
+    PreparedHybridSnapshot,
+    ensure_final_recommendation_indexes,
+    prepare_hybrid_snapshot,
+    publish_hybrid_recommendations,
+)
 
 __all__ = [
     "ALSRecommendation",
@@ -36,6 +49,14 @@ __all__ = [
     "HybridRankingConfig",
     "HybridRankingMetadata",
     "HybridRankingResult",
+    "HybridPublicationConflictError",
+    "HybridPublicationPromotionError",
+    "HybridPublicationResult",
+    "HybridPublicationWriteError",
+    "HybridPublisherError",
+    "HybridSnapshotContractError",
+    "PreparedHybridSnapshot",
+    "FINAL_RECOMMENDATIONS_COLLECTION",
     "ProductMetadata",
     "Recommendation",
     "ReadinessContractError",
@@ -54,6 +75,9 @@ __all__ = [
     "TrendSnapshot",
     "VerifiedSourceContext",
     "capture_verified_user_sources",
+    "ensure_final_recommendation_indexes",
+    "prepare_hybrid_snapshot",
+    "publish_hybrid_recommendations",
     "rank_hybrid_recommendations",
     "read_verified_trend_snapshot",
 ]
