@@ -42,6 +42,13 @@ from .sink_mongo import (
     prepare_hybrid_snapshot,
     publish_hybrid_recommendations,
 )
+from .service import (
+    HybridServingContractError,
+    HybridServingPublicationError,
+    HybridServingRequestError,
+    HybridServingResult,
+    serve_hybrid_user,
+)
 
 __all__ = [
     "ALSRecommendation",
@@ -55,6 +62,10 @@ __all__ = [
     "HybridPublicationWriteError",
     "HybridPublisherError",
     "HybridSnapshotContractError",
+    "HybridServingContractError",
+    "HybridServingPublicationError",
+    "HybridServingRequestError",
+    "HybridServingResult",
     "PreparedHybridSnapshot",
     "FINAL_RECOMMENDATIONS_COLLECTION",
     "ProductMetadata",
@@ -80,4 +91,5 @@ __all__ = [
     "publish_hybrid_recommendations",
     "rank_hybrid_recommendations",
     "read_verified_trend_snapshot",
+    "serve_hybrid_user",
 ]
