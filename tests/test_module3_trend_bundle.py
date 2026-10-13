@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 pytest.importorskip("pyspark")
+from bson import BSON
 from pyspark.sql import DataFrame
 from pyspark.sql.types import (
     DoubleType,
@@ -25,6 +26,9 @@ from src.module3.trend_bundle import (
     DEFAULT_SOURCE_SCOPE,
     TrendBundleConflictError,
     TrendBundleValidationError,
+    _build_document,
+    _config_payload,
+    _sha256,
     write_trend_bundles,
 )
 
@@ -40,6 +44,7 @@ WINDOW_SCHEMA = StructType(
         StructField("trend_rank", IntegerType(), True),
     ]
 )
+_DEFAULT_WINDOW_END = object()
 
 
 class FakeUpdateOne:
@@ -158,6 +163,40 @@ def window_rows(start, products, *, scores=None):
     ]
 
 
+def direct_document(
+    start,
+    *,
+    end=_DEFAULT_WINDOW_END,
+    namespace="instacart:fixture-a",
+    scope=DEFAULT_SOURCE_SCOPE,
+):
+    writer_config = config()
+    if end is _DEFAULT_WINDOW_END:
+        end = start + timedelta(hours=2)
+    return _build_document(
+        {
+            "window_start": start,
+            "window_end": end,
+            "items": [
+                {
+                    "product_id": 11,
+                    "purchase_count_30m": 20,
+                    "purchase_count_120m": 40,
+                    "trend_score": 0.95,
+                    "trend_rank": 1,
+                }
+            ],
+            "_row_count": 1,
+        },
+        source_namespace=namespace,
+        source_scope=scope,
+        top_k=writer_config.mongo_top_k_per_window,
+        config_hash=_sha256(_config_payload(writer_config, writer_config.mongo_top_k_per_window)),
+        published_at=datetime(2024, 1, 1, 3, tzinfo=timezone.utc),
+        retention_seconds=0,
+    )
+
+
 def frame(spark_session, rows, schema=WINDOW_SCHEMA):
     return spark_session.createDataFrame(rows, schema=schema)
 
@@ -211,6 +250,132 @@ def test_one_complete_window_produces_one_atomic_bundle(spark_session, pymongo_u
     }
     assert operations[0].update == {"$setOnInsert": document}
     assert operations[0].upsert is True
+
+
+@pytest.mark.parametrize("microsecond", [0, 123_000, 999_000])
+def test_bson_millisecond_window_boundaries_are_accepted(microsecond):
+    start = datetime(2024, 1, 1, 0, 0, 0, microsecond, tzinfo=timezone.utc)
+
+    document = direct_document(start)
+
+    assert document["window_start"] == start
+    assert document["window_end"] == start + timedelta(hours=2)
+    assert document["_id"].endswith("2024-01-01T02:00:00." + f"{microsecond:06d}Z")
+
+
+@pytest.mark.parametrize("field", ["window_start", "window_end"])
+@pytest.mark.parametrize("microsecond", [1, 123_456, 999_999])
+def test_submillisecond_window_bounds_are_rejected_by_document_builder(field, microsecond):
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(hours=2)
+    if field == "window_start":
+        start = start.replace(microsecond=microsecond)
+        end = end.replace(microsecond=microsecond)
+    else:
+        end = end.replace(microsecond=microsecond)
+
+    with pytest.raises(ValueError, match=f"{field}.*millisecond precision"):
+        direct_document(start, end=end)
+
+
+@pytest.mark.parametrize("microsecond", [0, 123_000])
+def test_document_identity_and_digest_survive_bson_round_trip(microsecond):
+    start = datetime(2024, 1, 1, 0, 0, 0, microsecond, tzinfo=timezone.utc)
+    document = direct_document(start)
+
+    # Default BSON decoding returns naive datetimes whose documented meaning is UTC.
+    decoded = BSON.encode(document).decode()
+    decoded_start = decoded["window_start"].replace(tzinfo=timezone.utc)
+    decoded_end = decoded["window_end"].replace(tzinfo=timezone.utc)
+    rebuilt = _build_document(
+        {
+            "window_start": decoded_start,
+            "window_end": decoded_end,
+            "items": decoded["items"],
+            "_row_count": decoded["row_count"],
+        },
+        source_namespace=decoded["source_namespace"],
+        source_scope=decoded["source_scope"],
+        top_k=decoded["top_k"],
+        config_hash=decoded["config_hash"],
+        published_at=decoded["published_at"].replace(tzinfo=timezone.utc),
+        retention_seconds=0,
+    )
+
+    assert decoded["window_start"].microsecond == microsecond
+    assert decoded["window_end"].microsecond == microsecond
+    assert rebuilt["_id"] == decoded["_id"]
+    assert rebuilt["content_sha256"] == decoded["content_sha256"]
+    assert rebuilt["config_hash"] == decoded["config_hash"] == document["config_hash"]
+    assert rebuilt["items"] == decoded["items"] == document["items"]
+    assert rebuilt["window_start"] == decoded_start == document["window_start"]
+    assert rebuilt["window_end"] == decoded_end == document["window_end"]
+
+
+def test_utc_equivalent_offsets_preserve_identity_and_hash():
+    utc_start = datetime(2024, 1, 1, 0, 0, 0, 123_000, tzinfo=timezone.utc)
+    offset_start = datetime(
+        2023, 12, 31, 19, 0, 0, 123_000, tzinfo=timezone(timedelta(hours=-5))
+    )
+
+    utc_document = direct_document(utc_start)
+    offset_document = direct_document(offset_start)
+
+    assert offset_document["window_start"] == utc_document["window_start"]
+    assert offset_document["window_end"] == utc_document["window_end"]
+    assert offset_document["_id"] == utc_document["_id"]
+    assert offset_document["content_sha256"] == utc_document["content_sha256"]
+
+
+def test_existing_millisecond_fixture_identity_and_hash_remain_unchanged():
+    document = direct_document(datetime(2024, 1, 1, tzinfo=timezone.utc))
+
+    assert document["_id"] == (
+        "trend-window:e0b059af7cf1417f20691e5ef8ac9c5039622f90e8342a96d307b8ac5b35996a:"
+        "2024-01-01T02:00:00.000000Z"
+    )
+    assert document["config_hash"] == "767f9a84f5c826bbe0705c265c090691039e9823ddd81e853d5346d19f5162ce"
+    assert document["content_sha256"] == "942795d87ff1332f9573a0a88ee8133af6b9fb0fcd823ab9ec7429608526a866"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("window_start", None),
+        ("window_start", "2024-01-01T00:00:00Z"),
+        ("window_end", None),
+        ("window_end", "2024-01-01T02:00:00Z"),
+    ],
+)
+def test_document_builder_rejects_missing_or_non_datetime_bounds(field, value):
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    end = start + timedelta(hours=2)
+    if field == "window_start":
+        start = value
+    else:
+        end = value
+
+    with pytest.raises(ValueError, match=f"{field} must be a timestamp"):
+        direct_document(start, end=end)
+
+
+def test_document_builder_rejects_nonincreasing_bounds():
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+
+    with pytest.raises(ValueError, match="window_end must be later than window_start"):
+        direct_document(start, end=start)
+
+
+def test_spark_window_on_five_minute_slide_remains_publishable(spark_session, pymongo_update_one):
+    start = datetime(2024, 1, 1, 0, 5)
+    collection = FakeCollection()
+
+    report = publish(spark_session, collection, window_rows(start, [11, 12]))
+
+    document = next(iter(collection.documents.values()))
+    assert report.bundles_created == 1
+    assert document["window_start"] == start.replace(tzinfo=timezone.utc)
+    assert document["window_end"] == (start + timedelta(minutes=120)).replace(tzinfo=timezone.utc)
 
 
 def test_multiple_independent_windows_are_separate_documents(spark_session, pymongo_update_one):
@@ -493,6 +658,48 @@ def test_validation_failure_preserves_previous_complete_bundle(spark_session, py
 
     assert collection.documents[identity] == original_document
     assert len(collection.bulk_calls) == 1
+
+
+@pytest.mark.parametrize("field", ["window_start", "window_end"])
+def test_writer_rejects_submillisecond_bounds_before_publication_and_preserves_prior_bundle(
+    spark_session, pymongo_update_one, field
+):
+    base = datetime(2024, 1, 1)
+    collection = FakeCollection()
+    publish(spark_session, collection, window_rows(base, [1]))
+    original_documents = {identity: dict(document) for identity, document in collection.documents.items()}
+    original_bulk_call_count = len(collection.bulk_calls)
+
+    start = base
+    end = base + timedelta(hours=2)
+    if field == "window_start":
+        start = start.replace(microsecond=123_456)
+        end = end.replace(microsecond=123_456)
+    else:
+        end = end.replace(microsecond=123_456)
+
+    with pytest.raises(TrendBundleValidationError, match=f"{field}.*millisecond precision"):
+        publish(spark_session, collection, [(start, end, 2, 20, 40, 0.95, 1)])
+
+    assert collection.documents == original_documents
+    assert len(collection.documents) == 1
+    assert len(collection.bulk_calls) == original_bulk_call_count
+
+
+def test_submillisecond_bound_in_later_window_prevents_all_batch_publication(
+    spark_session, pymongo_update_one
+):
+    start = datetime(2024, 1, 1)
+    rows = window_rows(start, [1])
+    later_start = start + timedelta(minutes=5, microseconds=1)
+    rows.extend(window_rows(later_start, [2]))
+    collection = FakeCollection()
+
+    with pytest.raises(TrendBundleValidationError, match="window_start.*millisecond precision"):
+        publish(spark_session, collection, rows, batch_size=1)
+
+    assert collection.documents == {}
+    assert collection.bulk_calls == []
 
 
 def test_enabled_and_disabled_ttl_semantics(spark_session, pymongo_update_one):

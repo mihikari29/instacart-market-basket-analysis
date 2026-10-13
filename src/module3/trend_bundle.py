@@ -130,6 +130,21 @@ def _canonical_datetime(value: Any, field: str, *, allow_naive_utc: bool) -> tup
     return utc_value, canonical
 
 
+def _canonical_window_datetime(value: Any, field: str) -> tuple[datetime, str]:
+    """Normalize a window bound to UTC and require BSON-exact milliseconds.
+
+    Spark TimestampType values are returned as naive Python datetimes when the
+    session timezone is UTC; ``_canonical_datetime`` explicitly interprets
+    those values as UTC. MongoDB BSON Date preserves milliseconds only, so
+    rejecting finer precision here keeps the stored value, identity, and
+    logical digest in agreement without silently changing the event time.
+    """
+    utc_value, canonical = _canonical_datetime(value, field, allow_naive_utc=True)
+    if utc_value.microsecond % 1000 != 0:
+        raise ValueError(f"{field} must be aligned to BSON millisecond precision")
+    return utc_value, canonical
+
+
 def _config_payload(config: Config, top_k: int) -> dict[str, Any]:
     return {
         "formula_version": "module3-trend-v1",
@@ -188,12 +203,8 @@ def _build_document(
     published_at: datetime,
     retention_seconds: int,
 ) -> dict[str, Any]:
-    window_start, start_iso = _canonical_datetime(
-        group["window_start"], "window_start", allow_naive_utc=True
-    )
-    window_end, end_iso = _canonical_datetime(
-        group["window_end"], "window_end", allow_naive_utc=True
-    )
+    window_start, start_iso = _canonical_window_datetime(group["window_start"], "window_start")
+    window_end, end_iso = _canonical_window_datetime(group["window_end"], "window_end")
     if window_end <= window_start:
         raise ValueError("window_end must be later than window_start")
 
@@ -458,6 +469,14 @@ def write_trend_bundles(
 
     source = batch_df.select(*REQUIRED_ROW_FIELDS)
     try:
+        for field in ("window_start", "window_end"):
+            has_submillisecond_value = source.where(
+                F.col(field).isNotNull()
+                & (F.pmod(F.unix_micros(F.col(field)), F.lit(1000)) != F.lit(0))
+            ).limit(1).count()
+            if has_submillisecond_value:
+                invalid(f"{field} must be aligned to BSON millisecond precision")
+
         window_summary = source.groupBy("window_end").agg(
             F.count(F.lit(1)).alias("_rows"),
             F.countDistinct("window_start").alias("_starts"),
