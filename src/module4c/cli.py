@@ -47,7 +47,10 @@ def _parse_as_of_event_time(value: str) -> datetime:
         raise argparse.ArgumentTypeError("as-of event time must be an ISO-8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise argparse.ArgumentTypeError("as-of event time must include a timezone offset")
-    parsed = parsed.astimezone(timezone.utc)
+    try:
+        parsed = parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("as-of event time must be a valid UTC instant") from exc
     if parsed.microsecond % 1000:
         raise argparse.ArgumentTypeError(
             "as-of event time must be aligned to BSON millisecond precision"

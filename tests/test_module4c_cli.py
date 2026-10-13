@@ -181,6 +181,8 @@ def test_valid_timezone_asof_is_normalized_and_serialized_as_utc(monkeypatch, ca
         "2024-01-01T03:00:00",
         "not-a-timestamp",
         "2024-01-01T03:00:00.000001Z",
+        "0001-01-01T00:00:00+01:00",
+        "9999-12-31T23:59:59-01:00",
     ],
 )
 def test_naive_malformed_or_submillisecond_asof_is_rejected(monkeypatch, timestamp):
