@@ -12,14 +12,17 @@ Instacart CSV
   -> cleaning + deterministic event-time synthesis
   -> HDFS curated data -> Spark batch analytics -> batch MongoDB collections
   -> Kafka replay -> Spark Structured Streaming -> realtime_trending MongoDB
-  -> Module 4A–4B: ALS + product graph; C/D serving blend planned
+  -> Module 4A–4B: ALS + product graph
+  -> Module 4C: verified hybrid recommendation serving and bounded Kafka integration
 ```
 
 The batch layer provides reproducible historical aggregates and user features.
 The speed layer processes event time with validation, deduplication, watermarking
-and finalized-window trend ranking. MongoDB exposes bounded serving collections;
-Module 4A–4B implements recommendation and graph outputs without changing the validated
-Modules 1–3 contracts.
+and finalized-window trend ranking. Module 4C verifies those immutable trend
+bundles, combines them with accepted Module 4A–4B snapshots, and publishes
+versioned per-user recommendations in MongoDB without changing the validated
+Modules 1–3 contracts. See the [Module 4C release review](docs/module4c-release-review.md)
+and [evaluation plan](docs/module4c-evaluation-plan.md) for evidence and limits.
 
 ## Repo layout
 
@@ -382,9 +385,16 @@ passed **91 tests, zero skipped**; Ruff and standalone runtime smoke passed.
 The [progress report](docs/progress.md) records **21/21 acceptance gates** and
 links to reproducible commands, metrics and evidence.
 
-## Next step: Module 4C–4D
+## Module 4C — Hybrid serving and Kafka integration
 
-Integrate the accepted ALS/graph snapshots with `realtime_trending` in the
-Serving Layer, then expose API/dashboard outputs and the planned
-`λ·norm(ALS) + (1-λ)·norm(Trend)` blend in `final_recommendations`.
-Evaluation involving trend requires an explicit time cutoff to prevent leakage.
+Module 4C now combines readiness-checked ALS/graph snapshots with verified,
+finalized trend windows and publishes immutable, versioned per-user
+recommendations through the serving CLI. The release review records C1–C8B
+implementation, concurrency guarantees, tests, and controlled integration
+evidence. C8A and C8B use synthetic fixtures; they do not establish production
+capacity or recommendation accuracy. Official-train quality evaluation still
+requires a defensible leakage-safe chronology and cutoff.
+
+See the [Module 4C release review](docs/module4c-release-review.md),
+[release evidence receipts](docs/evidence/module4c/README.md), and
+[evaluation plan](docs/module4c-evaluation-plan.md).
