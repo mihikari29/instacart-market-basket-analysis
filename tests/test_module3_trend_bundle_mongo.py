@@ -418,6 +418,217 @@ class _PreflightBarrierCollection:
         return getattr(self._collection, name)
 
 
+def _enable_duplicate_key_failpoint(client, identity):
+    client.admin.command(
+        {
+            "configureFailPoint": "failCommand",
+            "mode": {"times": 1},
+            "data": {
+                "failCommands": ["update"],
+                "errorCode": 11000,
+                "errorExtraInfo": {
+                    "keyPattern": {"_id": 1},
+                    "keyValue": {"_id": identity},
+                },
+            },
+        }
+    )
+
+
+def _disable_duplicate_key_failpoint(client):
+    client.admin.command(
+        {"configureFailPoint": "failCommand", "mode": "off"}
+    )
+
+
+class _IdenticalRaceCollection(_PreflightBarrierCollection):
+    """Make one writer win, then inject a server E11000 into the other writer."""
+
+    def __init__(self, collection, preflight_barrier, bulk_barrier, winner_done, role, observed):
+        super().__init__(collection, preflight_barrier)
+        self._bulk_barrier = bulk_barrier
+        self._winner_done = winner_done
+        self._role = role
+        self._observed = observed
+        self.winner_document = None
+
+    def bulk_write(self, operations, ordered):
+        operations = list(operations)
+        self._bulk_barrier.wait(timeout=30)
+        if self._role == "winner":
+            result = self._collection.bulk_write(operations, ordered=ordered)
+            self.winner_document = self._collection.find_one(
+                {"_id": operations[0]._filter["_id"]}
+            )
+            self._winner_done.set()
+            return result
+
+        if not self._winner_done.wait(timeout=30):
+            raise RuntimeError("winner did not publish before the duplicate-key injection")
+        identity = operations[0]._filter["_id"]
+        _enable_duplicate_key_failpoint(self._collection.database.client, identity)
+        try:
+            try:
+                return self._collection.bulk_write(operations, ordered=ordered)
+            except Exception as exc:
+                if getattr(exc, "code", None) == 11000:
+                    self._observed.append(exc)
+                raise
+        finally:
+            _disable_duplicate_key_failpoint(self._collection.database.client)
+
+
+class _FailSecondUpdateWithDuplicateKey:
+    """Keep one window, then return MongoDB's E11000 for the next update."""
+
+    def __init__(self, collection):
+        self._collection = collection
+        self._bulk_calls = 0
+        self.duplicate_error = None
+        self.name = collection.name
+
+    def bulk_write(self, operations, ordered):
+        from pymongo.errors import BulkWriteError, DuplicateKeyError
+
+        operations = list(operations)
+        self._bulk_calls += 1
+        if self._bulk_calls == 1:
+            return self._collection.bulk_write(operations, ordered=ordered)
+
+        identity = operations[0]._filter["_id"]
+        client = self._collection.database.client
+        _enable_duplicate_key_failpoint(client, identity)
+        try:
+            try:
+                return self._collection.bulk_write(operations, ordered=ordered)
+            except (BulkWriteError, DuplicateKeyError) as exc:
+                if getattr(exc, "code", None) == 11000 or any(
+                    error.get("code") == 11000
+                    for error in (getattr(exc, "details", None) or {}).get("writeErrors", [])
+                ):
+                    self.duplicate_error = exc
+                raise
+        finally:
+            _disable_duplicate_key_failpoint(client)
+
+    def __getattr__(self, name):
+        return getattr(self._collection, name)
+
+
+def test_live_concurrent_identical_publishers_recover_server_duplicate_key(
+    live_database, spark_session
+):
+    _client, database, uri = live_database
+    config = _writer_config(uri, database.name)
+    namespace = "i1:module3:concurrent-identical-v1"
+    start = datetime(2019, 2, 3, 4, 5)
+    preflight_barrier = threading.Barrier(2)
+    bulk_barrier = threading.Barrier(2)
+    winner_done = threading.Event()
+    observed_duplicate_errors = []
+    results = []
+
+    def publish(role):
+        with MongoClient(uri, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, tz_aware=True) as client:
+            raw_collection = client[database.name][BUNDLE_COLLECTION_NAME]
+            synchronized = _IdenticalRaceCollection(
+                raw_collection,
+                preflight_barrier,
+                bulk_barrier,
+                winner_done,
+                role,
+                observed_duplicate_errors,
+            )
+            try:
+                report = _publish(
+                    spark_session,
+                    synchronized,
+                    config,
+                    _window_rows(start),
+                    source_namespace=namespace,
+                )
+                results.append((role, "success", report, synchronized.winner_document))
+            except Exception as exc:
+                results.append((role, "error", exc, synchronized.winner_document))
+
+    threads = [
+        threading.Thread(target=publish, args=("winner",)),
+        threading.Thread(target=publish, args=("retry",)),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=90)
+
+    assert all(not thread.is_alive() for thread in threads), "concurrent publishers did not finish"
+    assert len(results) == 2
+    assert all(state == "success" for _role, state, _value, _doc in results), results
+    assert len(observed_duplicate_errors) == 1
+    assert observed_duplicate_errors[0].code == 11000
+    winner_result = next(value for role, _state, value, _doc in results if role == "winner")
+    retry_result = next(value for role, _state, value, _doc in results if role == "retry")
+    winner_document = next(doc for role, _state, _value, doc in results if role == "winner")
+    after = database[BUNDLE_COLLECTION_NAME].find_one({"source_namespace": namespace})
+
+    assert winner_result.bundles_created == 1
+    assert winner_result.identical_content_retries == 0
+    assert retry_result.bundles_created == 0
+    assert retry_result.identical_content_retries == 1
+    assert database[BUNDLE_COLLECTION_NAME].count_documents({"source_namespace": namespace}) == 1
+    assert winner_document == after
+    assert after["_id"] == winner_document["_id"]
+    assert after["content_sha256"] == winner_document["content_sha256"]
+
+
+def test_live_duplicate_recovery_rejects_missing_window_then_identical_retry_converges(
+    live_database, spark_session
+):
+    _client, database, uri = live_database
+    config = _writer_config(uri, database.name)
+    collection = database[BUNDLE_COLLECTION_NAME]
+    namespace = "i1:module3:partial-duplicate-v1"
+    starts = [datetime(2019, 2, 3, 4, 5), datetime(2019, 2, 3, 4, 10)]
+    rows = [row for start in starts for row in _window_rows(start, (51, 52))]
+    first_time = datetime(2026, 10, 14, 5, 30, tzinfo=timezone.utc)
+
+    with pytest.raises(TrendBundlePublicationError, match="missing expected") as raised:
+        write_trend_bundles(
+            _frame(spark_session, rows),
+            _FailSecondUpdateWithDuplicateKey(collection),
+            config,
+            source_namespace=namespace,
+            published_at=first_time,
+            batch_size=1,
+        )
+
+    assert raised.value.report.windows_processed == 2
+    assert raised.value.report.bundles_created == 1
+    partial = list(collection.find({"source_namespace": namespace}))
+    assert len(partial) == 1
+    original = partial[0]
+    assert original["row_count"] == 2
+    assert original["published_at"] == first_time
+
+    retry = _publish(
+        spark_session,
+        collection,
+        config,
+        rows,
+        source_namespace=namespace,
+        published_at=first_time + timedelta(hours=1),
+        batch_size=1,
+    )
+    completed = list(collection.find({"source_namespace": namespace}))
+
+    assert len(completed) == 2
+    assert retry.bundles_created == 1
+    assert retry.identical_content_retries == 1
+    assert collection.find_one({"_id": original["_id"]}) == original
+    assert {document["window_start"] for document in completed} == {
+        start.replace(tzinfo=timezone.utc) for start in starts
+    }
+
+
 def test_live_concurrent_different_content_cannot_overwrite_bundle(live_database, spark_session):
     _client, database, uri = live_database
     config = _writer_config(uri, database.name)

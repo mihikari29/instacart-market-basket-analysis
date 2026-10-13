@@ -25,6 +25,7 @@ from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     DEFAULT_SOURCE_SCOPE,
     TrendBundleConflictError,
+    TrendBundlePublicationError,
     TrendBundleValidationError,
     _build_document,
     _config_payload,
@@ -121,6 +122,104 @@ class FakeCollection:
             self.documents[identity] = dict(document)
             upserted += 1
         return FakeBulkResult(upserted=upserted, matched=matched)
+
+
+class ControlledBulkErrorCollection(FakeCollection):
+    """Inject a bulk error after chosen documents have become durable."""
+
+    def __init__(
+        self,
+        *,
+        duplicate_indices=(0,),
+        missing_indices=(),
+        conflicting_indices=(),
+        inserted_indices=(),
+        matched_count=0,
+        error_code=11000,
+        key_pattern=None,
+        write_concern_errors=None,
+        fail_find_on=None,
+    ):
+        super().__init__()
+        self.duplicate_indices = set(duplicate_indices)
+        self.missing_indices = set(missing_indices)
+        self.conflicting_indices = set(conflicting_indices)
+        self.inserted_indices = set(inserted_indices)
+        self.matched_count = matched_count
+        self.error_code = error_code
+        self.key_pattern = key_pattern or {"_id": 1}
+        self.write_concern_errors = write_concern_errors
+        self.fail_find_on = fail_find_on
+
+    def find(self, query, projection=None):
+        if self.fail_find_on == len(self.find_calls) + 1:
+            self.find_calls.append((query, projection))
+            raise RuntimeError("injected read-back failure")
+        return super().find(query, projection)
+
+    def bulk_write(self, operations, ordered):
+        from pymongo.errors import BulkWriteError
+
+        operations = list(operations)
+        self.bulk_calls.append((operations, ordered))
+        assert ordered is False
+        for index, operation in enumerate(operations):
+            if index in self.missing_indices:
+                continue
+            document = dict(operation.update["$setOnInsert"])
+            if index in self.conflicting_indices:
+                document["content_sha256"] = "f" * 64
+            self.documents[document["_id"]] = document
+
+        write_errors = []
+        for index in sorted(self.duplicate_indices):
+            identity = operations[index].filter["_id"]
+            write_errors.append(
+                {
+                    "index": index,
+                    "code": self.error_code,
+                    "errmsg": "injected bulk write error",
+                    "keyPattern": self.key_pattern,
+                    "keyValue": {"_id": identity},
+                }
+            )
+        upserted = [
+            {"index": index, "_id": operations[index].filter["_id"]}
+            for index in sorted(self.inserted_indices)
+        ]
+        details = {
+            "writeErrors": write_errors,
+            "nInserted": 0,
+            "nMatched": self.matched_count,
+            "nModified": 0,
+            "nRemoved": 0,
+            "nUpserted": len(upserted),
+            "upserted": upserted,
+        }
+        if self.write_concern_errors is not None:
+            details["writeConcernErrors"] = self.write_concern_errors
+        raise BulkWriteError(details)
+
+
+class DirectDuplicateKeyCollection(FakeCollection):
+    """Persist a competing document, then raise a single-operation E11000."""
+
+    def bulk_write(self, operations, ordered):
+        from pymongo.errors import DuplicateKeyError
+
+        operations = list(operations)
+        self.bulk_calls.append((operations, ordered))
+        assert ordered is False
+        document = operations[0].update["$setOnInsert"]
+        self.documents[document["_id"]] = dict(document)
+        raise DuplicateKeyError(
+            "E11000 duplicate key error",
+            code=11000,
+            details={
+                "keyPattern": {"_id": 1},
+                "keyValue": {"_id": document["_id"]},
+            },
+        )
 
 
 @pytest.fixture(scope="module")
@@ -832,6 +931,200 @@ def test_multi_window_fixture_and_bounded_driver_chunks(spark_session, pymongo_u
     assert len(collection.documents) == 12
     assert all(len(document["items"]) == 3 for document in collection.documents.values())
     assert all(len(operations) <= 2 for operations, _ordered in collection.bulk_calls)
+
+
+def test_duplicate_key_with_matching_competing_document_is_an_identical_retry(
+    spark_session, pymongo_update_one
+):
+    rows = window_rows(datetime(2024, 1, 1), [11, 12])
+    collection = ControlledBulkErrorCollection()
+
+    report = publish(spark_session, collection, rows)
+
+    stored = next(iter(collection.documents.values()))
+    writer_config = config()
+    expected = _build_document(
+        {
+            "window_start": rows[0][0],
+            "window_end": rows[0][1],
+            "items": [
+                {
+                    "product_id": row[2],
+                    "purchase_count_30m": row[3],
+                    "purchase_count_120m": row[4],
+                    "trend_score": row[5],
+                    "trend_rank": row[6],
+                }
+                for row in rows
+            ],
+            "_row_count": len(rows),
+        },
+        source_namespace="instacart:fixture-a",
+        source_scope=DEFAULT_SOURCE_SCOPE,
+        top_k=writer_config.mongo_top_k_per_window,
+        config_hash=_sha256(_config_payload(writer_config, writer_config.mongo_top_k_per_window)),
+        published_at=stored["published_at"],
+        retention_seconds=0,
+    )
+    assert stored["_id"] == expected["_id"]
+    assert stored["content_sha256"] == expected["content_sha256"]
+    assert report.bundles_created == 0
+    assert report.identical_content_retries == 1
+    assert report.rejected_publications == 0
+
+
+def test_direct_duplicate_key_with_matching_document_is_an_identical_retry(
+    spark_session, pymongo_update_one
+):
+    collection = DirectDuplicateKeyCollection()
+
+    report = publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    stored = next(iter(collection.documents.values()))
+    assert stored["_id"] in collection.documents
+    assert report.bundles_created == 0
+    assert report.identical_content_retries == 1
+    assert report.rejected_publications == 0
+
+
+def test_duplicate_key_with_different_stored_digest_remains_a_conflict(
+    spark_session, pymongo_update_one
+):
+    collection = ControlledBulkErrorCollection(conflicting_indices={0})
+
+    with pytest.raises(TrendBundleConflictError, match="conflicting content"):
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    stored = next(iter(collection.documents.values()))
+    assert stored["content_sha256"] == "f" * 64
+    assert len(collection.documents) == 1
+
+
+def test_duplicate_key_with_missing_stored_document_is_a_publication_failure(
+    spark_session, pymongo_update_one
+):
+    collection = ControlledBulkErrorCollection(missing_indices={0})
+
+    with pytest.raises(TrendBundlePublicationError, match="missing expected") as raised:
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    assert raised.value.report.bundles_created == 0
+    assert collection.documents == {}
+
+
+def test_partial_duplicate_recovery_does_not_succeed_when_another_window_is_missing(
+    spark_session, pymongo_update_one
+):
+    start = datetime(2024, 1, 1)
+    rows = window_rows(start, [11]) + window_rows(start + timedelta(minutes=5), [12])
+    collection = ControlledBulkErrorCollection(missing_indices={1})
+
+    with pytest.raises(TrendBundlePublicationError, match="missing expected") as raised:
+        publish(spark_session, collection, rows)
+
+    assert raised.value.report.windows_processed == 2
+    assert raised.value.report.identical_content_retries == 1
+    assert len(collection.documents) == 1
+    assert next(iter(collection.documents.values()))["content_sha256"]
+
+
+def test_partial_duplicate_recovery_succeeds_when_all_windows_match_and_accounts_writes(
+    spark_session, pymongo_update_one
+):
+    start = datetime(2024, 1, 1)
+    rows = window_rows(start, [11]) + window_rows(start + timedelta(minutes=5), [12])
+    collection = ControlledBulkErrorCollection(
+        inserted_indices={1},
+        matched_count=0,
+    )
+
+    report = publish(spark_session, collection, rows)
+
+    assert report.windows_processed == 2
+    assert report.bundles_created == 1
+    assert report.identical_content_retries == 1
+    assert report.rejected_publications == 0
+    assert len(collection.documents) == 2
+    assert {document["content_sha256"] for document in collection.documents.values()}
+
+
+def test_partial_duplicate_recovery_reports_conflict_even_if_another_window_is_missing(
+    spark_session, pymongo_update_one
+):
+    start = datetime(2024, 1, 1)
+    rows = window_rows(start, [11]) + window_rows(start + timedelta(minutes=5), [12])
+    collection = ControlledBulkErrorCollection(
+        conflicting_indices={0},
+        missing_indices={1},
+    )
+
+    with pytest.raises(TrendBundleConflictError, match="conflicting content"):
+        publish(spark_session, collection, rows)
+
+    assert len(collection.documents) == 1
+    assert next(iter(collection.documents.values()))["content_sha256"] == "f" * 64
+
+
+def test_nonduplicate_bulk_write_error_is_not_suppressed(spark_session, pymongo_update_one):
+    collection = ControlledBulkErrorCollection(error_code=121)
+
+    with pytest.raises(TrendBundlePublicationError, match="atomically publish"):
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    assert len(collection.documents) == 1
+    assert len(collection.find_calls) == 1
+
+
+def test_duplicate_on_an_unrelated_unique_index_is_not_suppressed(
+    spark_session, pymongo_update_one
+):
+    collection = ControlledBulkErrorCollection(key_pattern={"another_unique_field": 1})
+
+    with pytest.raises(TrendBundlePublicationError, match="atomically publish"):
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    assert len(collection.documents) == 1
+    assert len(collection.find_calls) == 1
+
+
+def test_duplicate_plus_write_concern_error_is_not_suppressed(spark_session, pymongo_update_one):
+    collection = ControlledBulkErrorCollection(
+        write_concern_errors=[{"code": 64, "errmsg": "write concern failed"}]
+    )
+
+    with pytest.raises(TrendBundlePublicationError, match="atomically publish"):
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    assert len(collection.documents) == 1
+    assert len(collection.find_calls) == 1
+
+
+def test_duplicate_recovery_readback_failure_is_not_suppressed(spark_session, pymongo_update_one):
+    collection = ControlledBulkErrorCollection(fail_find_on=2)
+
+    with pytest.raises(TrendBundlePublicationError, match="failed to verify every"):
+        publish(spark_session, collection, window_rows(datetime(2024, 1, 1), [11]))
+
+    assert len(collection.documents) == 1
+    assert len(collection.find_calls) == 2
+
+
+def test_matching_digest_with_corrupted_source_metadata_is_rejected(
+    spark_session, pymongo_update_one
+):
+    collection = FakeCollection()
+    rows = window_rows(datetime(2024, 1, 1), [11])
+    publish(spark_session, collection, rows)
+    identity, stored = next(iter(collection.documents.items()))
+    corrupted = dict(stored)
+    corrupted["source_scope"] = "different-scope"
+    collection.documents[identity] = corrupted
+
+    with pytest.raises(TrendBundlePublicationError, match="metadata is corrupted"):
+        publish(spark_session, collection, rows)
+
+    assert collection.documents[identity] == corrupted
+    assert len(collection.bulk_calls) == 1
 
 
 def test_writer_does_not_call_dataframe_collect(spark_session, pymongo_update_one, monkeypatch):

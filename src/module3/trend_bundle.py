@@ -6,6 +6,7 @@ not call it until the bundle reader and rollout are reviewed separately.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -314,24 +315,71 @@ def ensure_bundle_indexes(collection: Any, retention_seconds: int) -> None:
 
 def _existing_for_chunk(collection: Any, documents: list[dict[str, Any]]) -> dict[str, Any]:
     identities = [document["_id"] for document in documents]
-    cursor = collection.find(
-        {"_id": {"$in": identities}},
-        {"_id": 1, "content_sha256": 1},
-    )
+    cursor = collection.find({"_id": {"$in": identities}})
     existing = {}
     for row in cursor:
-        if not isinstance(row, dict):
+        if isinstance(row, Mapping):
+            row = dict(row)
+        else:
             row = row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
         existing[row.get("_id")] = row
     return existing
 
 
-def _raise_conflict(message: str, counters: _Counters, started: float) -> None:
-    counters.rejected_publications += 1
-    raise TrendBundleConflictError(message, counters.report(started))
+def _existing_metadata_error(expected: dict[str, Any], stored: Any) -> str | None:
+    if not isinstance(stored, Mapping):
+        return "stored bundle is not a document"
+    if stored.get("_id") != expected["_id"]:
+        return "stored bundle _id does not match the requested identity"
+
+    for field in (
+        "schema_version",
+        "source_namespace",
+        "source_scope",
+        "top_k",
+        "row_count",
+        "items",
+        "config_hash",
+    ):
+        try:
+            if _canonical_json(stored.get(field)) != _canonical_json(expected[field]):
+                return f"stored bundle {field} does not match the expected publication"
+        except (TypeError, ValueError):
+            return f"stored bundle {field} is malformed"
+
+    for field in ("window_start", "window_end"):
+        try:
+            actual, _actual_iso = _canonical_window_datetime(stored.get(field), field)
+        except (TypeError, ValueError, OverflowError):
+            return f"stored bundle {field} is not a valid BSON-compatible timestamp"
+        if actual != expected[field]:
+            return f"stored bundle {field} does not match the expected publication"
+
+    try:
+        published_at, _published_iso = _canonical_datetime(
+            stored.get("published_at"), "published_at", allow_naive_utc=True
+        )
+    except (TypeError, ValueError, OverflowError):
+        return "stored bundle published_at is not a valid BSON timestamp"
+
+    if "expires_at" in stored:
+        try:
+            expires_at, _expires_iso = _canonical_datetime(
+                stored["expires_at"], "expires_at", allow_naive_utc=True
+            )
+        except (TypeError, ValueError, OverflowError):
+            return "stored bundle expires_at is not a valid BSON timestamp"
+        if expires_at <= published_at:
+            return "stored bundle expires_at is not later than published_at"
+    return None
 
 
-def _validate_existing(collection: Any, documents: list[dict[str, Any]], counters: _Counters, started: float):
+def _validate_existing(
+    collection: Any,
+    documents: list[dict[str, Any]],
+    counters: _Counters,
+    started: float,
+) -> int:
     try:
         existing = _existing_for_chunk(collection, documents)
     except Exception as exc:
@@ -341,20 +389,173 @@ def _validate_existing(collection: Any, documents: list[dict[str, Any]], counter
         ) from exc
 
     conflicts = []
+    corrupted = []
     for document in documents:
         prior = existing.get(document["_id"])
-        if prior is not None and prior.get("content_sha256") != document["content_sha256"]:
+        if prior is None:
+            continue
+        if prior.get("content_sha256") != document["content_sha256"]:
             conflicts.append(document["_id"])
+            continue
+        metadata_error = _existing_metadata_error(document, prior)
+        if metadata_error:
+            corrupted.append((document["_id"], metadata_error))
     if conflicts:
         counters.rejected_publications += len(conflicts)
         raise TrendBundleConflictError(
             f"conflicting content already exists for {len(conflicts)} trending bundle identity/identities",
             counters.report(started),
         )
+    if corrupted:
+        counters.rejected_publications += len(corrupted)
+        raise TrendBundlePublicationError(
+            f"stored trending bundle metadata is corrupted for {len(corrupted)} identity/identities",
+            counters.report(started),
+        )
+    return len(existing)
 
 
-def _upsert_chunk(collection: Any, documents: list[dict[str, Any]], counters: _Counters, started: float):
+def _duplicate_key_outcome(exc: Exception, documents: list[dict[str, Any]]):
+    """Return reliable partial counts only for duplicate _id write errors."""
+    from pymongo.errors import BulkWriteError, DuplicateKeyError
+
+    details = getattr(exc, "details", None)
+    if not isinstance(details, Mapping):
+        return None
+
+    if isinstance(exc, BulkWriteError):
+        write_errors = details.get("writeErrors")
+        if not isinstance(write_errors, list) or not write_errors:
+            return None
+        if details.get("writeConcernErrors"):
+            return None
+    elif isinstance(exc, DuplicateKeyError) and len(documents) == 1:
+        write_errors = [
+            {
+                "index": 0,
+                "code": exc.code,
+                "keyPattern": details.get("keyPattern"),
+                "keyValue": details.get("keyValue"),
+            }
+        ]
+    else:
+        return None
+
+    duplicate_indexes = set()
+    for error in write_errors:
+        if not isinstance(error, Mapping) or error.get("code") != 11000:
+            return None
+        index = error.get("index")
+        if type(index) is not int or not 0 <= index < len(documents):
+            return None
+        if error.get("keyPattern") != {"_id": 1}:
+            return None
+        if error.get("keyValue") != {"_id": documents[index]["_id"]}:
+            return None
+        if index in duplicate_indexes:
+            return None
+        duplicate_indexes.add(index)
+
+    upserted_count = details.get("nUpserted", 0)
+    matched_count = details.get("nMatched", 0)
+    upserted = details.get("upserted", [])
+    if (
+        type(upserted_count) is not int
+        or upserted_count < 0
+        or type(matched_count) is not int
+        or matched_count < 0
+        or not isinstance(upserted, list)
+        or upserted_count != len(upserted)
+        or upserted_count + matched_count + len(duplicate_indexes) > len(documents)
+    ):
+        return None
+
+    upserted_indexes = set()
+    for item in upserted:
+        if not isinstance(item, Mapping):
+            return None
+        index = item.get("index")
+        if type(index) is not int or not 0 <= index < len(documents):
+            return None
+        if item.get("_id") != documents[index]["_id"] or index in upserted_indexes:
+            return None
+        upserted_indexes.add(index)
+    if duplicate_indexes & upserted_indexes:
+        return None
+    return upserted_count, matched_count
+
+
+def _reconcile_duplicate_publication(
+    collection: Any,
+    documents_factory,
+    *,
+    batch_size: int,
+    counters: _Counters,
+    started: float,
+) -> None:
+    missing_count = 0
+    matching_count = 0
+    conflicts = []
+    corrupted = []
+
+    for chunk in _chunks(documents_factory(), batch_size):
+        try:
+            existing = _existing_for_chunk(collection, chunk)
+        except Exception as exc:
+            counters.rejected_publications += 1
+            raise TrendBundlePublicationError(
+                "failed to verify every trending bundle identity after a duplicate-key write",
+                counters.report(started),
+            ) from exc
+
+        for document in chunk:
+            prior = existing.get(document["_id"])
+            if prior is None:
+                missing_count += 1
+                continue
+            if prior.get("content_sha256") != document["content_sha256"]:
+                conflicts.append(document["_id"])
+                continue
+            metadata_error = _existing_metadata_error(document, prior)
+            if metadata_error:
+                corrupted.append((document["_id"], metadata_error))
+                continue
+            matching_count += 1
+
+    counters.identical_content_retries = max(
+        0, matching_count - counters.bundles_created
+    )
+    if conflicts:
+        counters.rejected_publications += len(conflicts)
+        raise TrendBundleConflictError(
+            f"conflicting content already exists for {len(conflicts)} trending bundle identity/identities",
+            counters.report(started),
+        )
+    if corrupted:
+        counters.rejected_publications += len(corrupted)
+        raise TrendBundlePublicationError(
+            f"stored trending bundle metadata is corrupted for {len(corrupted)} identity/identities",
+            counters.report(started),
+        )
+    if missing_count:
+        counters.rejected_publications += 1
+        raise TrendBundlePublicationError(
+            f"duplicate-key recovery found {missing_count} missing expected trending bundle identity/identities",
+            counters.report(started),
+        )
+
+
+def _upsert_chunk(
+    collection: Any,
+    documents: list[dict[str, Any]],
+    counters: _Counters,
+    started: float,
+    *,
+    documents_factory,
+    batch_size: int,
+) -> bool:
     from pymongo import UpdateOne
+    from pymongo.errors import BulkWriteError
 
     operations = [
         UpdateOne(
@@ -368,19 +569,26 @@ def _upsert_chunk(collection: Any, documents: list[dict[str, Any]], counters: _C
         result = collection.bulk_write(operations, ordered=False)
     except Exception as exc:
         details = getattr(exc, "details", None) or {}
-        write_errors = details.get("writeErrors", [])
-        duplicate_error = getattr(exc, "code", None) == 11000 or any(
-            error.get("code") == 11000 for error in write_errors
-        )
-        if duplicate_error:
-            counters.bundles_created += int(details.get("nUpserted", 0))
-            counters.identical_content_retries += int(details.get("nMatched", 0))
-            _validate_existing(collection, documents, counters, started)
-            _raise_conflict(
-                "a concurrent trending bundle publication used the same identity with different content",
-                counters,
-                started,
+        if isinstance(exc, BulkWriteError) and isinstance(details, Mapping):
+            partial_upserted = details.get("nUpserted", 0)
+            partial_matched = details.get("nMatched", 0)
+            if type(partial_upserted) is int and partial_upserted >= 0:
+                counters.bundles_created += partial_upserted
+            if type(partial_matched) is int and partial_matched >= 0:
+                counters.identical_content_retries += partial_matched
+
+        duplicate_outcome = _duplicate_key_outcome(exc, documents)
+        if duplicate_outcome is not None:
+            # A successful reconciliation counts the complete publication, including
+            # windows that were present before this bulk operation began.
+            _reconcile_duplicate_publication(
+                collection,
+                documents_factory,
+                batch_size=batch_size,
+                counters=counters,
+                started=started,
             )
+            return True
         counters.rejected_publications += 1
         raise TrendBundlePublicationError(
             "MongoDB failed to atomically publish a trending bundle chunk",
@@ -389,6 +597,7 @@ def _upsert_chunk(collection: Any, documents: list[dict[str, Any]], counters: _C
 
     counters.bundles_created += int(result.upserted_count)
     counters.identical_content_retries += int(result.matched_count)
+    return False
 
 
 def write_trend_bundles(
@@ -559,7 +768,16 @@ def write_trend_bundles(
         # Re-iterate the persisted grouped DataFrame. Each chunk is bounded and
         # every operation is an atomic insert-only upsert of one whole document.
         for chunk in _chunks(make_documents(), batch_size):
-            _upsert_chunk(collection, chunk, counters, started)
+            recovered = _upsert_chunk(
+                collection,
+                chunk,
+                counters,
+                started,
+                documents_factory=make_documents,
+                batch_size=batch_size,
+            )
+            if recovered:
+                return counters.report(started)
         return counters.report(started)
     finally:
         grouped.unpersist()
