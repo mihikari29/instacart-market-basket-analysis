@@ -101,7 +101,7 @@ cleanup() {
       cleanup_rc=$helper_rc
     fi
   fi
-  python3 scripts/module4c_streaming_demo.py cleanup-docker \
+  python3 scripts/module4/module4c_streaming_demo.py cleanup-docker \
     --run-id "$RUN_ID" --evidence-dir "$RUN_DIR"
   docker_cleanup_rc=$?
   if (( docker_cleanup_rc != 0 )); then
@@ -110,7 +110,7 @@ cleanup() {
     cleaned=yes
   fi
   if [[ -f "$RUN_DIR/report.json" ]]; then
-    args=(python3 scripts/module4c_streaming_demo.py finalize --run-id "$RUN_ID" \
+    args=(python3 scripts/module4/module4c_streaming_demo.py finalize --run-id "$RUN_ID" \
       --report "$RUN_DIR/report.json" --docker-cleanup-report "$RUN_DIR/docker-cleanup.json" \
       --cleaned "$cleaned" --experiment-exit-code "$rc")
     "${args[@]}"
@@ -180,7 +180,7 @@ timeout --signal=TERM --kill-after=10s "${remaining_seconds}s" docker run --pull
   -e C8B_GIT_COMMIT="$GIT_COMMIT" -e "C8B_GIT_STATUS_JSON=$GIT_STATUS_JSON" \
   -v "$PWD:/workspace:ro" -v "$RUN_DIR:/demo-output:rw" \
   -w /workspace --entrypoint python3 "$IMAGE_SPARK" \
-  scripts/module4c_streaming_demo.py live \
+  scripts/module4/module4c_streaming_demo.py live \
   --run-id "$RUN_ID" --output-dir /demo-output \
   --mongodb-uri mongodb://c8b-mongo:27017 --database "$DATABASE" --topic "$TOPIC" \
   >"$RUN_DIR/spark-console.log" 2>&1
@@ -266,7 +266,7 @@ docker run --rm --network none \
   -v "$PWD:/workspace:ro" -w /workspace \
   --entrypoint ruff instacart-spark:3.5.5 \
   check --no-cache \
-  scripts/module4c_streaming_demo.py \
+  scripts/module4/module4c_streaming_demo.py \
   tests/test_module4c_streaming_demo.py
 ```
 

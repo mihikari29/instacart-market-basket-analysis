@@ -3,6 +3,8 @@
 The root `Dockerfile` is the canonical build definition. Explicit targets share
 reviewed dependency declarations and produce separate runtime images. MongoDB,
 Kafka, and HDFS remain external services configured by Compose.
+See the [repository layout guide](repository-layout.md) for the configuration
+and script directory map.
 
 | Target | Base | Runtime and copied repository resources |
 |---|---|---|
@@ -46,13 +48,14 @@ not require a pre-existing `instacart-spark` image.
 
 ## Start and stop the synthetic dashboard
 
-The isolated `compose.module4d-demo.yaml` selects `api` and `ui`. It does not
-mount main pipeline volumes or the repository:
+The isolated `deploy/module4/compose.demo.yaml` selects `api` and `ui`. Its
+build context is `../..`, resolved from the Compose file directory to the
+repository root. It does not mount main pipeline volumes or the repository:
 
 ```bash
-bash scripts/module4d_demo.sh up
+bash scripts/module4/module4d_demo.sh up
 # Open http://127.0.0.1:18501 and retain the printed run ID.
-bash scripts/module4d_demo.sh down <12-hex-run-id>
+bash scripts/module4/module4d_demo.sh down <12-hex-run-id>
 ```
 
 Startup builds images, creates a unique MongoDB database, publishes valid
@@ -104,7 +107,7 @@ docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   --ignore=tests/test_module4d_ui_app.py \
   --ignore=tests/test_module4d_ui_client.py \
   --ignore=tests/test_module4d_ui_evaluation.py
-python3 scripts/module4d_api_validation.py --mode all
+python3 scripts/module4/module4d_api_validation.py --mode all
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
   -e PYTEST_ADDOPTS="-p no:cacheprovider" \

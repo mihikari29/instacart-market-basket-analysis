@@ -25,7 +25,7 @@ services:
   fixture:
     image: instacart-module4d-demo-api:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     profiles: [fixture]
-    entrypoint: [python3, scripts/module4d_demo_fixture.py]
+    entrypoint: [python3, scripts/module4/module4d_demo_fixture.py]
     environment:
       MODULE4D_DEMO_DATABASE: ${MODULE4D_DEMO_DATABASE:?}
       MODULE4D_DEMO_ROOT_URI: mongodb://root:${MODULE4D_DEMO_ROOT_PASSWORD}@module4d-mongo:27017/${MODULE4D_DEMO_DATABASE}?authSource=admin
@@ -44,7 +44,7 @@ services:
   validator:
     image: instacart-module4d-demo-api:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     profiles: [fixture]
-    entrypoint: [python3, scripts/module4d_demo_validate.py]
+    entrypoint: [python3, scripts/module4/module4d_demo_validate.py]
     environment:
       MODULE4D_DEMO_DATABASE: ${MODULE4D_DEMO_DATABASE:?}
       MODULE4D_DEMO_READONLY_USERNAME: ${MODULE4D_DEMO_READONLY_USERNAME:?}
@@ -64,7 +64,7 @@ services:
   module4d-api:
     image: instacart-module4d-demo-api:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
       target: api
       labels:
@@ -102,7 +102,7 @@ services:
   module4d-ui:
     image: instacart-module4d-demo-ui:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
       target: ui
       labels:

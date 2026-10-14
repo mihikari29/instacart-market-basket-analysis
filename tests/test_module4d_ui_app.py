@@ -454,7 +454,7 @@ def test_frontend_source_has_no_database_credentials_publishers_or_compute_start
 
 
 def test_frontend_dependency_set_excludes_backend_compute_and_database_packages():
-    requirements = (ROOT / "requirements-module4d-ui.txt").read_text().lower()
+    requirements = (ROOT / "deploy/module4/requirements/ui.txt").read_text().lower()
     assert "streamlit==1.65.0" in requirements
     assert "requests==2.34.2" in requirements
     assert not any(token in requirements for token in ("pymongo", "pyspark", "kafka", "hdfs", "fastapi"))

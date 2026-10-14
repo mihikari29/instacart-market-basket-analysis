@@ -230,7 +230,7 @@ repository-wide Ruff, runtime import/OpenAPI smoke, and the isolated MongoDB
 integration suites with:
 
 ```bash
-python3 scripts/module4d_api_validation.py --mode all
+python3 scripts/module4/module4d_api_validation.py --mode all
 ```
 
 The script builds the pinned Spark/PyMongo API runtime with the exact evidence

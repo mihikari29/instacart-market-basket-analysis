@@ -4,8 +4,8 @@ FROM apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece56438925893
 USER root
 COPY requirements.txt requirements-dev.txt /tmp/dependencies/
 RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
-COPY requirements-module4d-api.txt /tmp/requirements-module4d-api.txt
-RUN pip install --no-cache-dir -r /tmp/requirements-module4d-api.txt
+COPY deploy/module4/requirements/api.txt /tmp/module4-api-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt
 
 # Spark does not bundle the Structured Streaming Kafka source. Keep the
 # connector and its compile-time dependencies in the image, pinned and
@@ -32,19 +32,20 @@ FROM spark AS api
 
 USER root
 WORKDIR /workspace
-COPY requirements-module4d-api.txt /tmp/requirements-module4d-api.txt
-RUN pip install --no-cache-dir -r /tmp/requirements-module4d-api.txt \
+COPY deploy/module4/requirements/api.txt /tmp/module4-api-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt \
     && python3 -m pip check \
     && python3 -c "import pymongo; assert pymongo.version == '4.11.3', pymongo.version"
 
 COPY pyproject.toml /workspace/pyproject.toml
 COPY src/ /workspace/src/
 COPY tests/ /workspace/tests/
-COPY scripts/module4d_api_validation.py /workspace/scripts/module4d_api_validation.py
-COPY scripts/module4d_demo_fixture.py /workspace/scripts/module4d_demo_fixture.py
-COPY scripts/module4d_demo_validate.py /workspace/scripts/module4d_demo_validate.py
-COPY scripts/module4c_responsiveness.py /workspace/scripts/module4c_responsiveness.py
-COPY scripts/module4c_streaming_demo.py /workspace/scripts/module4c_streaming_demo.py
+COPY scripts/module4/__init__.py /workspace/scripts/module4/__init__.py
+COPY scripts/module4/module4d_api_validation.py /workspace/scripts/module4/module4d_api_validation.py
+COPY scripts/module4/module4d_demo_fixture.py /workspace/scripts/module4/module4d_demo_fixture.py
+COPY scripts/module4/module4d_demo_validate.py /workspace/scripts/module4/module4d_demo_validate.py
+COPY scripts/module4/module4c_responsiveness.py /workspace/scripts/module4/module4c_responsiveness.py
+COPY scripts/module4/module4c_streaming_demo.py /workspace/scripts/module4/module4c_streaming_demo.py
 COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
 COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
 COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
@@ -65,11 +66,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 WORKDIR /app
-COPY requirements-module4d-ui.txt requirements-module4d-ui-dev.txt ./
+COPY deploy/module4/requirements/ui.txt deploy/module4/requirements/ui-dev.txt ./
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
-      -r requirements-module4d-ui.txt \
+      -r ui.txt \
     && if [ "$MODULE4D_UI_DEV" = "1" ]; then \
-      python -m pip install --no-cache-dir --disable-pip-version-check -r requirements-module4d-ui-dev.txt; \
+      python -m pip install --no-cache-dir --disable-pip-version-check -r ui-dev.txt; \
     fi \
     && python -m pip check \
     && useradd --uid 10001 --create-home --shell /usr/sbin/nologin dashboard
@@ -86,9 +87,9 @@ CMD ["python", "-m", "streamlit", "run", "src/module4/dashboard/ui/app.py", "--s
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0 AS browser
 
 WORKDIR /opt/module4d-browser
-COPY requirements-module4d-browser.txt ./requirements-module4d-browser.txt
-RUN python -m pip install --no-cache-dir --disable-pip-version-check -r requirements-module4d-browser.txt \
+COPY deploy/module4/requirements/browser.txt ./browser-requirements.txt
+RUN python -m pip install --no-cache-dir --disable-pip-version-check -r browser-requirements.txt \
     && python -m pip check
-COPY scripts/module4d_browser_e2e.py ./module4d_browser_e2e.py
+COPY scripts/module4/module4d_browser_e2e.py ./module4d_browser_e2e.py
 USER pwuser
 ENTRYPOINT ["python", "module4d_browser_e2e.py"]

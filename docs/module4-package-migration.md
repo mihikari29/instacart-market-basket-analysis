@@ -45,7 +45,7 @@ Install the API requirements in the active Python environment, configure the
 backend settings below, and start Uvicorn from the repository root:
 
 ```bash
-python3 -m pip install -r requirements-module4d-api.txt
+python3 -m pip install -r deploy/module4/requirements/api.txt
 python3 -m uvicorn src.module4.dashboard.api:app --host 127.0.0.1 --port 8000
 ```
 
@@ -118,7 +118,7 @@ Run the complete applicable D1A/D1B and Hybrid regression suite in the pinned
 API image, including isolated live MongoDB tests, with:
 
 ```bash
-python3 scripts/module4d_api_validation.py --mode all
+python3 scripts/module4/module4d_api_validation.py --mode all
 ```
 
 The script builds a narrow temporary context, runs the complete API unit test
@@ -138,7 +138,7 @@ docker run --rm -v "$PWD:/workspace" -w /workspace \
 ```
 
 The two D1A/D1B live MongoDB test files are owned by
-`scripts/module4d_api_validation.py --mode all`; the Spark command excludes
+`scripts/module4/module4d_api_validation.py --mode all`; the Spark command excludes
 those files because the API harness supplies their isolated MongoDB 7.0.16
 service and read-only account. The three UI test files run with dependencies
 from a development image built using:
@@ -148,7 +148,7 @@ docker build --build-arg MODULE4D_UI_DEV=1 -f Dockerfile --target ui \
   -t instacart-module4d-ui-dev:local .
 ```
 
-The D3 browser and publisher checks use the pinned `compose.module4d-demo.yaml`
+The D3 browser and publisher checks use the pinned `deploy/module4/compose.demo.yaml`
 fixture and Playwright image; see the [Streamlit runbook](module4d-streamlit.md).
 
 Repository Ruff and Compose checks:

@@ -260,14 +260,14 @@ def _git_state() -> tuple[str, bool, list[str]]:
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=Path(__file__).resolve().parents[2],
             capture_output=True,
             text=True,
             check=True,
         ).stdout.strip()
         status = subprocess.run(
             ["git", "status", "--porcelain"],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=Path(__file__).resolve().parents[2],
             capture_output=True,
             text=True,
             check=True,
@@ -515,7 +515,7 @@ def _invoke_cli(
     started = time.perf_counter()
     process = subprocess.run(
         command,
-        cwd=Path(__file__).resolve().parents[1],
+        cwd=Path(__file__).resolve().parents[2],
         env=process_env,
         capture_output=True,
         text=True,
@@ -768,7 +768,7 @@ def _cleanup_owned_databases(
 def run_experiment(args: argparse.Namespace) -> dict[str, Any]:
     validate_mongodb_target(args.mongodb_uri)
     output_dir = Path(args.output_dir).resolve()
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     if output_dir == repo_root or repo_root not in output_dir.parents:
         raise ValueError("output directory must be inside this repository's results tree")
     expected_results_root = repo_root / "results" / "module4c-responsiveness"

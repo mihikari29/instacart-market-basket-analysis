@@ -65,7 +65,7 @@ jobs:
             tests/test_module4d_ui_client.py \
             tests/test_module4d_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
-        run: python3 scripts/module4d_api_validation.py --mode all
+        run: python3 scripts/module4/module4d_api_validation.py --mode all
       - name: Start HDFS and stage all data
         run: |
           docker compose up -d --wait namenode datanode
