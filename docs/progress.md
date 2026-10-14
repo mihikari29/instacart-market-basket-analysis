@@ -533,6 +533,11 @@ and [package migration guide](module4-package-migration.md).
 
 ### D3 local integration and release validation
 
+Docker builds now use one canonical root `Dockerfile` with separate `spark`,
+`api`, `ui`, and `browser` targets. Main Compose selects `spark`; the isolated
+demo selects `api` and `ui`. The current commands and validation boundaries are
+in the [Docker runbook](docker.md).
+
 The task-scoped Compose demonstration uses MongoDB 7.0.16 on disposable tmpfs,
 with separate database and API/UI networks. API and UI ports are published only
 on `127.0.0.1`; MongoDB has no host port. The fixture creates a unique database

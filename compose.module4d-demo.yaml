@@ -65,7 +65,8 @@ services:
     image: instacart-module4d-demo-api:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     build:
       context: .
-      dockerfile: Dockerfile.module4d-api
+      dockerfile: Dockerfile
+      target: api
       labels:
         com.codex.task: module4d-d3-release
     entrypoint:
@@ -102,7 +103,8 @@ services:
     image: instacart-module4d-demo-ui:${MODULE4D_DEMO_TAG:?generate a private demo env file first}
     build:
       context: .
-      dockerfile: Dockerfile.module4d-ui
+      dockerfile: Dockerfile
+      target: ui
       labels:
         com.codex.task: module4d-d3-release
     environment:

@@ -5,6 +5,11 @@
 **GitHub PR:** [#7](https://github.com/mihikari29/instacart-market-basket-analysis/pull/7)
 **Remote checks:** passed on implementation head `172f2f748a28bb9b23b98063173f8dfe7136d7f8`; the results are recorded below.
 
+Current Docker commands use the root `Dockerfile` with named `spark`, `api`,
+`ui`, and `browser` targets and one shared `.dockerignore`. The accepted D3
+measurements below are historical release evidence. See [the Docker runbook](docker.md)
+for the consolidated build, runtime boundaries, and subsequent validation.
+
 ## Scope and release boundary
 
 This release integrates the existing Module 4D read API with the four-page
@@ -72,7 +77,8 @@ and private environment file. Normal shutdown discards MongoDB tmpfs and removes
 only that run's uniquely tagged API/UI images. It does not prune shared Docker
 resources.
 
-Startup builds the pinned Spark runtime image used by the API/fixture image.
+Startup builds the `api` and `ui` targets; API/fixture dependencies come from
+the internal pinned `spark` stage without a separate image-build prerequisite.
 The fixture uses one small `local[1]` Spark session for the synthetic Module 2
 aggregation; no Spark cluster is started for dashboard use or page refresh.
 
@@ -87,7 +93,7 @@ MongoDB uses `mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316
 `/data/configdb` tmpfs mounts, and has no host-published port or persistent
 volume. FastAPI publishes host port `18000` only on `127.0.0.1`; Streamlit
 publishes `18501` only on `127.0.0.1`. Health checks gate service startup. The
-API and UI Dockerfiles do not mount the repository or `results/`.
+API and UI targets do not mount the repository or `results/`.
 
 The fixture administrator provisions source data and indexes, then creates a
 database-scoped built-in MongoDB `read` user. FastAPI and the live API validator

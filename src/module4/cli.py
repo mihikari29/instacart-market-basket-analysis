@@ -89,7 +89,7 @@ def source_digest() -> str:
         REPO_ROOT / "scripts/module4_runtime_smoke.py",
         REPO_ROOT / "scripts/module4_flow_smoke.py",
         REPO_ROOT / "scripts/module4_cross_module_smoke.py",
-        REPO_ROOT / "Dockerfile.spark",
+        REPO_ROOT / "Dockerfile",
         REPO_ROOT / "compose.yaml",
         REPO_ROOT / "requirements.txt",
         REPO_ROOT / "requirements-dev.txt",

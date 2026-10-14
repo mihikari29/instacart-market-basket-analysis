@@ -238,7 +238,7 @@ src/module3/             Structured Streaming, watermark/dedup, finalized trends
                          Mongo serving, recovery and benchmarks
 scripts/module2.py       canonical Docker runner
 scripts/module3*.py      Module 3 runner, smoke, and recovery orchestration
-Dockerfile.spark         pinned Spark runtime
+Dockerfile               named spark, api, ui, and browser image targets
 tests/                   staging/unit/Spark integration regressions
 ```
 
@@ -421,3 +421,24 @@ the API and UI ports to host loopback, and seeds clearly identified synthetic
 data through the accepted Module 2, Module 3, Module 4A/4B, and Module 4C
 publishers. It does not replay the full dataset or claim Hybrid quality or
 production capacity.
+
+## Docker architecture
+
+The root `Dockerfile` defines four independent build targets: `spark` for the
+pipeline, `api` for FastAPI and its accepted fixture/test dependencies, `ui` for
+Streamlit, and `browser` for disposable Playwright checks. The API inherits the
+internal Spark stage; UI and browser use their own pinned bases. MongoDB remains
+a separate Compose service. The shared `.dockerignore` admits only build
+manifests, Python sources/tests, selected validation scripts, and five curated
+evidence artifacts.
+
+```bash
+docker compose build spark-master spark-worker
+bash scripts/module4d_demo.sh up
+# Open http://127.0.0.1:18501; use the printed run ID for cleanup.
+bash scripts/module4d_demo.sh down <12-hex-run-id>
+```
+
+The synthetic demo uses disposable storage and separate networks from the main
+pipeline. See [the Docker runbook](docs/docker.md) for individual target builds,
+credentials/index setup, context safeguards, and the full validation commands.

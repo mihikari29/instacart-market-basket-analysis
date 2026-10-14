@@ -212,10 +212,16 @@ reason. Event-time staleness is evaluated only when `max_event_age_seconds` is
 provided. Processing-time `expires_at` is a separate expiration condition; an
 expired newest bundle is reported as expired even when an older bundle remains.
 
-The unchanged C5 import graph imports PySpark modules. The API image therefore
-uses the existing project image that already contains PySpark. API startup and
+The unchanged C5 import graph imports PySpark modules. The canonical root
+`Dockerfile` therefore builds `api` from its internal `spark` stage, which
+already contains PySpark. Build it with `docker build --target api`; no
+separately tagged Spark image is required. API startup and
 requests do not create a Spark session, launch Spark jobs, or start Kafka or
 HDFS. This keeps the accepted C5 implementation unchanged.
+
+The shared context allowlist and separate runtime targets are documented in
+[the Docker runbook](docker.md). Compose continues to configure the API with a
+database-scoped read identity; administrators provision its indexes separately.
 
 ## Reproducible validation
 

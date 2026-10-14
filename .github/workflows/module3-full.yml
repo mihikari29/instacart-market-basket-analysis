@@ -18,7 +18,8 @@ on:
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
-      - 'Dockerfile.spark'
+      - 'Dockerfile'
+      - '.dockerignore'
       - 'requirements*.txt'
       - '.github/workflows/module3-full.yml'
   pull_request:
@@ -37,7 +38,8 @@ on:
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
-      - 'Dockerfile.spark'
+      - 'Dockerfile'
+      - '.dockerignore'
       - 'requirements*.txt'
       - '.github/workflows/module3-full.yml'
   workflow_dispatch:
@@ -80,7 +82,7 @@ jobs:
         run: |
           image="instacart-module4d-ui-dev:module3-${GITHUB_RUN_ID}"
           docker build --label com.codex.task=module4d-d3-release \
-            --build-arg MODULE4D_UI_DEV=1 -f Dockerfile.module4d-ui -t "$image" .
+            --build-arg MODULE4D_UI_DEV=1 -f Dockerfile --target ui -t "$image" .
           docker run --rm \
             --label com.codex.task=module4d-d3-release \
             --label com.codex.resource=ui-regression-tests \

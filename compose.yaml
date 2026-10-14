@@ -71,7 +71,8 @@ services:
   spark-master:
     build:
       context: .
-      dockerfile: Dockerfile.spark
+      dockerfile: Dockerfile
+      target: spark
     image: instacart-spark:3.5.5
     hostname: spark-master
     entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
@@ -95,7 +96,8 @@ services:
   spark-worker:
     build:
       context: .
-      dockerfile: Dockerfile.spark
+      dockerfile: Dockerfile
+      target: spark
     image: instacart-spark:3.5.5
     hostname: spark-worker
     entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--cores", "2", "--memory", "2g", "spark://spark-master:7077"]
