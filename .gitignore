@@ -13,15 +13,8 @@ venv/
 .env
 .env.*
 !.env.example
-/results/module2/
-/results/module3/
-/results/module3-smoke/
-/results/module3-hardening/
-/results/module4/
-/results/module4-flow/
-/results/module4-cross/
-/results/spark-local/
-/results/*.json
+# Generated experiment outputs and runtime state; curated evidence lives in docs/evidence/.
+/results/
 /spark-warehouse/
 /metastore_db/
 derby.log
