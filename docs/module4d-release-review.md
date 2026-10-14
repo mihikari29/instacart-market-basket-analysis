@@ -2,7 +2,8 @@
 
 **Review date:** 2026-10-14
 **Local D3 gates:** passed
-**GitHub PR, remote CI, review, and merge:** pending
+**GitHub PR:** [#7](https://github.com/mihikari29/instacart-market-basket-analysis/pull/7)
+**Remote checks:** passed on implementation head `172f2f748a28bb9b23b98063173f8dfe7136d7f8`; the results are recorded below.
 
 ## Scope and release boundary
 
@@ -247,11 +248,22 @@ reported no broken requirements.
 
 The existing GitHub `fixtures` job remains in place as the required status. A
 new `module4d-demo-browser` job runs the UI test suites and the isolated fixture,
-API validator, and pinned Chromium checks after it. Remote CI and review results
-must be updated here only after they are observed on the exact PR head. The
-existing Module 3 and Module 4 repository-wide test workflows now exclude the
-UI-owned files from their Spark containers and run the same three UI suites in
-the pinned UI development image; their Module 3/4 core checks remain enabled.
+API validator, and pinned Chromium checks after it. On PR #7 implementation
+head `172f2f748a28bb9b23b98063173f8dfe7136d7f8`, GitHub reported success for:
+
+- Required `fixtures` check and dependent `module4d-demo-browser` job in [Fast validation](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38579894942).
+- `streaming` in [Module 3 streaming validation](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38579894987).
+- `spark-graphframes-mongo` in [Module 4A/4B pull-request validation](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38579894929) and the matching [branch-push validation](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38579857897).
+
+The first pull-request Module 4A/4B attempt stopped during its pinned Spark
+image build when the GraphFrames artifact host reset the TLS connection. The
+failed-job-only retry on the same head passed the full runtime and staged-flow
+checks. The repository's main branch rules require only `fixtures` and zero
+approving reviews; at the recorded head GitHub reported the PR mergeable, with
+no review requests or discussion comments. The PR remains a draft until the
+final release action. The Module 3 and Module 4 repository-wide workflows
+exclude UI-owned files from their Spark containers and run the UI suites in the
+pinned UI development image; their core checks remain enabled.
 
 ## Claim boundaries and known limitations
 
