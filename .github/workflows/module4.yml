@@ -31,7 +31,13 @@ jobs:
         run: |
           set -o pipefail
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-            -m pytest -q 2>&1 | tee module4-pytest.log
+            -m pytest -q \
+            --ignore=tests/test_module4d_api_mongo.py \
+            --ignore=tests/test_module4d_batch_api_mongo.py 2>&1 | tee module4-pytest.log
+      - name: Run D1A/D1B API and isolated MongoDB tests
+        run: |
+          set -o pipefail
+          python3 scripts/module4d_api_validation.py --mode all 2>&1 | tee module4d-api-validation.log
 
       - name: Verify staged flow and same-version A/B publication replay
         run: |
@@ -61,6 +67,7 @@ jobs:
           path: |
             module4-runtime-smoke.log
             module4-pytest.log
+            module4d-api-validation.log
             module4-flow-smoke.log
             module4-cross-module-smoke.log
             module4-services.log

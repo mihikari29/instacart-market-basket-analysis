@@ -17,7 +17,7 @@ from src.module4.sink_mongo import (
     ensure_recommendation_indexes,
     publication_lock,
 )
-from src.module4c import (
+from src.module4.hybrid import (
     HybridRankingConfig,
     ReadinessContractError,
     SourceSnapshotError,
@@ -26,7 +26,7 @@ from src.module4c import (
     capture_verified_user_sources,
     rank_hybrid_recommendations,
 )
-from src.module4c.data import READINESS_COLLECTION
+from src.module4.hybrid.data import READINESS_COLLECTION
 
 
 pytestmark = pytest.mark.integration

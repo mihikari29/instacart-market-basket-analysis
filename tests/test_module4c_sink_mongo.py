@@ -13,7 +13,7 @@ from bson import BSON
 
 from src.module4.config import Config as Module4Config
 from src.module4 import sink_mongo as module4_sink
-from src.module4c import (
+from src.module4.hybrid import (
     ALSRecommendation,
     CapturedUserSources,
     HybridRankingConfig,
@@ -30,7 +30,7 @@ from src.module4c import (
     publish_hybrid_recommendations,
     rank_hybrid_recommendations,
 )
-from src.module4c.sink_mongo import (
+from src.module4.hybrid.sink_mongo import (
     FINAL_RECOMMENDATIONS_COLLECTION,
     ensure_final_recommendation_indexes,
     prepare_hybrid_snapshot,

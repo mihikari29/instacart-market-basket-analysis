@@ -2,3 +2,4 @@
 !Dockerfile.spark
 !requirements.txt
 !requirements-dev.txt
+!requirements-module4d-api.txt

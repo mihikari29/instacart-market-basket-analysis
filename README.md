@@ -14,6 +14,7 @@ Instacart CSV
   -> Kafka replay -> Spark Structured Streaming -> realtime_trending MongoDB
   -> Module 4A–4B: ALS + product graph
   -> Module 4C: verified hybrid recommendation serving and bounded Kafka integration
+  -> Module 4D: read-only analytics and evidence API (D1A/D1B)
 ```
 
 The batch layer provides reproducible historical aggregates and user features.
@@ -23,6 +24,9 @@ bundles, combines them with accepted Module 4A–4B snapshots, and publishes
 versioned per-user recommendations in MongoDB without changing the validated
 Modules 1–3 contracts. See the [Module 4C release review](docs/module4c-release-review.md)
 and [evaluation plan](docs/module4c-evaluation-plan.md) for evidence and limits.
+Module 4A–4D keep separate responsibilities inside one Python package rooted at
+`src/module4/`. The Module 4D read API (D1A and D1B) is implemented; its
+Streamlit work (D2) and full dashboard integration (D3) remain incomplete.
 
 ## Repo layout
 
@@ -31,8 +35,8 @@ src/module1/             data cleaning, synthetic timestamp generator, staging, 
 src/module2/             Spark batch analytics, feature extraction, benchmarks, CLI
 src/module3/             Spark Structured Streaming, watermarking, deduplication,
                          finalized-window trending, Mongo serving, recovery and benchmarks
-src/module4/             ALS tuning/evaluation, GraphFrames co-purchase graph,
-                         versioned MongoDB snapshots and acceptance evidence
+src/module4/             Module 4A/4B ALS and product graph; `hybrid/` contains
+                         Module 4C serving; `dashboard/` contains Module 4D API
 data/raw/*.csv           original Kaggle files (archive — only read by clean.py)
 data/clean/*.parquet     batch source of truth (facts + dims)
 data/synthesized/        reproducible synthetic feeds (scatter_1w, scatter_1m, scatter_3m)
@@ -398,3 +402,6 @@ requires a defensible leakage-safe chronology and cutoff.
 See the [Module 4C release review](docs/module4c-release-review.md),
 [release evidence receipts](docs/evidence/module4c/README.md), and
 [evaluation plan](docs/module4c-evaluation-plan.md).
+
+For canonical package imports, the Hybrid CLI, API startup and validation
+commands, see the [Module 4 package migration guide](docs/module4-package-migration.md).

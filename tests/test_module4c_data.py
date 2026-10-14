@@ -9,7 +9,7 @@ import math
 import pytest
 
 from src.module4.config import Config as Module4Config
-from src.module4c import (
+from src.module4.hybrid import (
     ReadinessContractError,
     SourceLockError,
     SourceQueryError,
@@ -19,7 +19,7 @@ from src.module4c import (
     capture_verified_user_sources,
     rank_hybrid_recommendations,
 )
-from src.module4c import data
+from src.module4.hybrid import data
 
 
 def readiness(**overrides):

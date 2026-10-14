@@ -17,7 +17,7 @@ from src.module3.trend_bundle import (
     _sha256,
 )
 from src.module4.config import Config as Module4Config
-from src.module4c import (
+from src.module4.hybrid import (
     HybridRankingConfig,
     TrendRecommendation,
     TrendSnapshot,
@@ -28,7 +28,7 @@ from src.module4c import (
     rank_hybrid_recommendations,
     read_verified_trend_snapshot,
 )
-from src.module4c import data as module4c_data
+from src.module4.hybrid import data as module4c_data
 
 
 NAMESPACE = "fixture:trend-reader:v1"

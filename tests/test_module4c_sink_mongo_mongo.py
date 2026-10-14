@@ -19,7 +19,7 @@ from pymongo.uri_parser import parse_uri
 from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, _build_document
 from src.module4 import sink_mongo as module4_sink
 from src.module4.config import Config as Module4Config
-from src.module4c import (
+from src.module4.hybrid import (
     ALSRecommendation,
     CapturedUserSources,
     HybridPublicationConflictError,
@@ -34,8 +34,8 @@ from src.module4c import (
     rank_hybrid_recommendations,
     read_verified_trend_snapshot,
 )
-from src.module4c.data import READINESS_COLLECTION
-from src.module4c.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+from src.module4.hybrid.data import READINESS_COLLECTION
+from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
 
 pytestmark = pytest.mark.integration

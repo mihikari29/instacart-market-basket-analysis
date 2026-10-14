@@ -27,3 +27,7 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/workspace" -w /workspace
           instacart-spark:3.5.5 python3 -m pytest -q
+          --ignore=tests/test_module4d_api_mongo.py
+          --ignore=tests/test_module4d_batch_api_mongo.py
+      - name: Run D1A/D1B API and isolated MongoDB tests
+        run: python3 scripts/module4d_api_validation.py --mode all

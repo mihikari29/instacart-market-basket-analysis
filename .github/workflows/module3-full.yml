@@ -64,7 +64,11 @@ jobs:
       - name: Build pinned Spark runtime and run streaming tests
         run: |
           docker compose build spark-master
-          docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q
+          docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q \
+            --ignore=tests/test_module4d_api_mongo.py \
+            --ignore=tests/test_module4d_batch_api_mongo.py
+      - name: Run D1A/D1B API and isolated MongoDB tests
+        run: python3 scripts/module4d_api_validation.py --mode all
       - name: Start services (Spark, Kafka, Mongo)
         run: |
           docker compose up -d --wait spark-master spark-worker kafka mongodb
