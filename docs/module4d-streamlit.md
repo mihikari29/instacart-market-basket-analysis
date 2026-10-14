@@ -1,4 +1,4 @@
-# Module 4D Streamlit Dashboard MVP (D2A)
+# Module 4D Streamlit Dashboard (D2B)
 
 ## Layout and boundary
 
@@ -8,7 +8,7 @@ Streamlit; Streamlit calls FastAPI; only FastAPI reads MongoDB or registered
 evidence files. The UI package has no PyMongo, Spark, Kafka, HDFS, database
 credential, report-file reader, or recommendation publisher dependency.
 
-The dashboard has three pages:
+The dashboard has four pages:
 
 - **Overview** checks `/health` for API process liveness and checks each batch,
   trend, and evidence source independently. It shows each source's own run,
@@ -20,6 +20,11 @@ The dashboard has three pages:
 - **Hybrid Recommendations** reads one verified per-user Hybrid snapshot and
   displays the persisted ranking, mode, reason, serving identities, source
   timestamps, inclusion flags, and separate raw, normalized and final scores.
+- **Evaluation & Performance** reads the archived ALS evaluation, benchmark
+  report, and C8A/C8B receipts through the existing FastAPI client. It has
+  independent section errors and successful-response caching with an explicit
+  page refresh. It does not start a benchmark, evaluation, publisher, Spark,
+  Kafka, HDFS, or MongoDB client.
 
 The original D0 plan proposed multi-window trend history and per-user ALS
 comparison. D1A/D1B do not expose those capabilities: the implemented trends
@@ -118,8 +123,60 @@ widget interaction does not continuously poll the API.
 | Order distributions | `GET /api/v1/analytics/orders-distribution` | Archived all-order count by source bin 0–6 and hour 0–23 |
 | Hybrid recommendation | `GET /api/v1/recommendations/{user_id}` | Verified per-user Hybrid rows selected by the serving readiness pointer |
 
-The UI does not call `/api/v1/evaluation/als` in D2A; that route remains
-available for a later evaluation page.
+The Evaluation & Performance page calls these fixed routes:
+
+| Panel | Implemented route | Archived source and interpretation |
+|---|---|---|
+| ALS evaluation | `GET /api/v1/evaluation/als` | Module 4A official-train evaluation and recorded global-popularity/personal-frequency baselines |
+| Evidence status | `GET /api/v1/evidence` | Fixed registry with availability, classification, source label and digest |
+| Spark batch performance | `GET /api/v1/evidence/module2-full-hardening-benchmarks` | Module 2 isolated full-public-dataset benchmark run |
+| Hybrid responsiveness | `GET /api/v1/evidence/module4c-c8a-responsiveness` | Controlled synthetic C8A ranking response and CLI wall-time receipt |
+| Kafka/Spark integration | `GET /api/v1/evidence/module4c-c8b-streaming-demo` | Bounded synthetic C8B event reconciliation, windows, Spark durations and serving assertions |
+
+The evidence client validates response shapes and fixed IDs; it does not accept
+arbitrary routes or filesystem paths. The registry and each report load
+independently, so one missing report does not hide the other panels.
+
+### Evaluation and performance page
+
+The ALS controls select one of the two recorded primary cohorts, K=5/10/20, a
+Precision@K/Recall@K/MAP@K/NDCG@K metric, and one recorded method (ALS, global
+popularity, or personal frequency). The chart compares all three methods for
+the selected cohort/K/metric. The table retains all four metrics and method
+identity; a separate table shows evaluated users and available user/catalog
+coverage. History subgroups use their own K and metric controls and remain in a
+separate section. The methodology section shows the cohort definition, official
+train truth, cohort exclusion, fallback, truth counts, and the absence of
+official test truth. Optional coverage fields are displayed as unavailable
+when not recorded. The UI does not recalculate scores or call this a Hybrid
+evaluation. For all official-train users at K=10, the recorded ALS and personal
+frequency Recall@10 values remain 0.121472 and 0.319232 respectively; the UI
+states that ALS did not outperform personal frequency on that metric.
+
+The Module 2 panel presents join strategy medians in seconds, a separate scan
+comparison with a different-scope caveat for the full scan, and all three cache
+phases including materialization cost. Structured shuffle metrics have an
+explicit unavailable state. Provenance shows the recorded run, date, isolated
+environment, Spark version, warmups, and repetitions. Timings are historical
+observations, not production throughput or cluster-scale scalability.
+
+C8A is labeled controlled synthetic responsiveness evidence. Its table shows
+lambda 0.0, 0.5, 0.7, 0.9, and 1.0 with both Top-1 identities, changed-rank
+count, mean absolute rank displacement, and recorded Top-20 overlap. The page
+highlights that the selected shift changed Top-1 at 0.0 and 0.5 but not at the
+default 0.7. Baseline and changed-window CLI first-publication medians are
+separate and labeled as wall time including process startup and MongoDB serving
+but excluding fixture setup. C8A did not measure recommendation accuracy.
+
+C8B is labeled bounded synthetic integration evidence. It shows planned,
+acknowledged, consumed, invalid, and finalized-bundle counts as historical
+receipt values; the two windows retain event-time bounds, watermark observation,
+microbatch, row count, Top-1 product, and full bundle identity in a details
+view. Spark `add_batch` and `trigger_execution` sequences are shown in
+milliseconds. Serving pointer, prior-row immutability, and repeated-publish
+checks are presented as recorded assertions. The report's limitation that
+Spark checkpoint restart was not exercised remains visible. No interval is
+renamed Kafka lag or generic end-to-end latency.
 
 ## Availability, provenance and errors
 
@@ -172,16 +229,21 @@ Run frontend unit and AppTest cases with:
 
 ```bash
 python -m pip install -r requirements-module4d-ui-dev.txt
-python -m pytest -q tests/test_module4d_ui_client.py tests/test_module4d_ui_app.py
+python -m pytest -q tests/test_module4d_ui_client.py tests/test_module4d_ui_app.py tests/test_module4d_ui_evaluation.py
 ```
 
 For a clean Docker test image, build with
 `--build-arg MODULE4D_UI_DEV=1`, then mount the repository read-only and run
 the same pytest command. This keeps pytest out of the normal UI runtime image.
 
-D2B remains responsible for the full Evaluation & Performance evidence page,
-including controlled interpretation of persisted ALS, Module 2/3 benchmark and
-C8A/C8B reports. It must not turn archived experiment metrics into live
-throughput, Kafka lag, recommendation accuracy or generic latency claims.
-D3 remains responsible for release integration, authenticated networked
-deployment where applicable, and a reproducible end-to-end packaged demo.
+D2B delivered the Evaluation & Performance evidence page, including controlled
+interpretation of persisted ALS, Module 2 benchmarks, and C8A/C8B reports.
+Archived evidence remains separate from Mongo-backed overview and recommendation
+data. Missing or invalid reports render as section-level errors and are not
+cached as successful payloads. Use **Refresh evaluation and evidence** or the
+global refresh control to bypass the per-session successful-response cache.
+
+Remaining D3 work includes live integration with the configured Mongo-backed
+API, release packaging, scoped network and volume setup, and a reproducible
+browser-accessible demonstration. D2B smoke results do not establish D3
+acceptance.

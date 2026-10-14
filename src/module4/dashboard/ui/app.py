@@ -6,12 +6,18 @@ import streamlit as st
 
 from src.module4.dashboard.ui.components import render_error
 from src.module4.dashboard.ui.pages.analytics import render_analytics
+from src.module4.dashboard.ui.pages.evaluation import render_evaluation
 from src.module4.dashboard.ui.pages.overview import render_overview
 from src.module4.dashboard.ui.pages.recommendations import render_recommendations
 from src.module4.dashboard.ui.state import clear_response_cache, consume_refresh_request, get_api_client
 
 
-PAGES = ("Overview", "Realtime & Batch Analytics", "Hybrid Recommendations")
+PAGES = (
+    "Overview",
+    "Realtime & Batch Analytics",
+    "Hybrid Recommendations",
+    "Evaluation & Performance",
+)
 
 
 def main() -> None:
@@ -40,8 +46,10 @@ def main() -> None:
         render_overview(st, client)
     elif page == "Realtime & Batch Analytics":
         render_analytics(st, client)
-    else:
+    elif page == "Hybrid Recommendations":
         render_recommendations(st, client, refresh_requested=refresh_requested)
+    else:
+        render_evaluation(st, client)
 
 
 main()

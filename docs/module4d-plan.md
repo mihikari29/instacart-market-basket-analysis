@@ -14,8 +14,11 @@ recommendation and trend API), D1B (batch analytics and curated evidence API),
 and D2A (the three-page Streamlit MVP documented in
 [`module4d-streamlit.md`](module4d-streamlit.md)). The backend and UI now live
 under `src/module4/dashboard/`; the Hybrid reader uses `src/module4/hybrid/`.
-D2B's full Evaluation & Performance page and D3 release integration remain
-pending. D0 route proposals below are historical design context; the
+D2B implemented and validated the fourth Evaluation & Performance page using
+the accepted archived evaluation and evidence API contracts. D3 release
+integration remains pending; D2B smoke validation does not establish D3
+acceptance.
+D0 route proposals below are historical design context; the
 implemented D1A/D1B routes documented in [`module4d-api.md`](module4d-api.md)
 take precedence. The D1A/D1B dependencies are pinned in
 [`requirements-module4d-api.txt`](../requirements-module4d-api.txt), and UI
@@ -268,9 +271,11 @@ startup or dependency is added to API requests.
 ### D2 — MVP Streamlit pages and evidence views
 
 Implement Overview, Realtime and batch, and User recommendations pages against
-the API. Add allowlisted Module 2/3/4 evidence endpoints and the secondary
-Evaluation and performance evidence page only after the report registry is
-defined and report fields are verified.
+the API. Add allowlisted Module 2/3/4 evidence endpoints and the Evaluation &
+Performance evidence page only after the report registry is defined and report
+fields are verified. D2A delivered the first three pages; D2B delivered the
+fourth page over the existing read-only evaluation, registry, and curated
+evidence endpoints.
 
 **Acceptance:** every displayed metric has source/run/method/scope; missing data
 is shown as unavailable; there are no unsupported accuracy, lag, or latency

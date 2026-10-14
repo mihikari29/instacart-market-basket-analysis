@@ -19,6 +19,18 @@ READ_TIMEOUT_SECONDS = 6.0
 MAX_USER_ID = 9_223_372_036_854_775_807
 MAX_TREND_AGE_SECONDS = 31_536_000
 ALLOWED_DOCKER_HOSTS = frozenset({"module4d-api"})
+ALLOWED_EVIDENCE_IDS = frozenset(
+    {
+        "module2-full-hardening-benchmarks",
+        "module4c-c8a-responsiveness",
+        "module4c-c8b-streaming-demo",
+    }
+)
+EVALUATION_MODEL_IDS = ("als", "global_popularity", "personal_frequency")
+EVALUATION_COHORT_IDS = ("all_official_train_users", "warm_users_and_all_truth_items")
+EVALUATION_HISTORY_IDS = ("new_to_user", "reordered")
+EVALUATION_METRIC_IDS = ("precision_at_k", "recall_at_k", "map_at_k", "ndcg_at_k")
+EVALUATION_KS = (5, 10, 20)
 
 
 class ApiClientError(RuntimeError):
@@ -193,7 +205,16 @@ def _check_bool(value: Any, endpoint: str) -> None:
         raise ValueError(f"{endpoint} boolean field is invalid")
 
 
-def _check_int(value: Any, endpoint: str, *, minimum: int = 0, maximum: int | None = None) -> None:
+def _check_int(
+    value: Any,
+    endpoint: str,
+    *,
+    minimum: int = 0,
+    maximum: int | None = None,
+    nullable: bool = False,
+) -> None:
+    if nullable and value is None:
+        return
     if type(value) is not int or value < minimum or (maximum is not None and value > maximum):
         raise ValueError(f"{endpoint} integer field is invalid")
 
@@ -212,6 +233,296 @@ def _check_number(
         raise ValueError(f"{endpoint} number field is invalid")
     if minimum is not None and value < minimum or maximum is not None and value > maximum:
         raise ValueError(f"{endpoint} number is outside its allowed range")
+
+
+def _check_provenance(value: Any, endpoint: str) -> None:
+    provenance = _require_mapping(value, endpoint)
+    _require_keys(provenance, {"artifact_key", "source_label", "classification", "archived", "sha256"}, endpoint)
+    for key in ("artifact_key", "source_label", "classification", "sha256"):
+        _check_text(provenance[key], endpoint)
+    _check_bool(provenance["archived"], endpoint)
+    if not provenance["archived"]:
+        raise ValueError("evidence provenance is not archived")
+
+
+def _check_metric_row(value: Any, endpoint: str, expected_k: int) -> None:
+    row = _require_mapping(value, endpoint)
+    required = {
+        "k", "status", *EVALUATION_METRIC_IDS, "evaluated_users", "user_coverage", "catalog_coverage_rate"
+    }
+    _require_keys(row, required, endpoint)
+    if row["status"] != "evaluated":
+        raise ValueError("evaluation metric status is invalid")
+    _check_int(row["k"], endpoint, minimum=1, maximum=100)
+    if row["k"] != expected_k:
+        raise ValueError("evaluation metric K does not match its key")
+    for key in EVALUATION_METRIC_IDS:
+        _check_number(row[key], endpoint, minimum=0, maximum=1)
+    _check_int(row["evaluated_users"], endpoint, minimum=1)
+    for key in ("user_coverage", "catalog_coverage_rate"):
+        _check_number(row[key], endpoint, minimum=0, maximum=1, nullable=True)
+    for key in ("catalog_coverage", "users_with_no_recommendations"):
+        if key in row:
+            _check_int(row[key], endpoint, nullable=True)
+
+
+def _check_evaluation_groups(
+    value: Any, endpoint: str, expected_ids: tuple[str, ...]
+) -> None:
+    groups = _require_mapping(value, endpoint)
+    if set(groups) != set(expected_ids):
+        raise ValueError("evaluation cohort identities are invalid")
+    for cohort_id in expected_ids:
+        cohort = _require_mapping(groups[cohort_id], endpoint)
+        _require_keys(cohort, {"definition", "users", "metrics"}, endpoint)
+        _check_text(cohort["definition"], endpoint, nullable=True)
+        _check_int(cohort["users"], endpoint, minimum=1)
+        model_groups = _require_mapping(cohort["metrics"], endpoint)
+        if set(model_groups) != set(EVALUATION_MODEL_IDS):
+            raise ValueError("evaluation method identities are invalid")
+        for model_id in EVALUATION_MODEL_IDS:
+            by_k = _require_mapping(model_groups[model_id], endpoint)
+            if set(by_k) != {str(k) for k in EVALUATION_KS}:
+                raise ValueError("evaluation K identities are invalid")
+            for k in EVALUATION_KS:
+                _check_metric_row(by_k[str(k)], endpoint, k)
+
+
+def _validate_als_evaluation(value: Any) -> dict[str, Any]:
+    endpoint = "als_evaluation"
+    body = _require_mapping(value, endpoint)
+    _require_keys(
+        body,
+        {
+            "evidence_id", "title", "provenance", "algorithm_scope", "evaluation_method", "ks", "cohorts",
+            "history_subgroups", "als_vs_baseline_deltas", "official_test_truth_available", "truth_summary",
+            "observed_at",
+        },
+        endpoint,
+    )
+    _check_text(body["evidence_id"], endpoint)
+    if body["evidence_id"] != "module4a-full-als-evaluation":
+        raise ValueError("ALS evaluation identity is invalid")
+    _check_text(body["title"], endpoint)
+    _check_provenance(body["provenance"], endpoint)
+    if body["algorithm_scope"] != "ALS and recorded baselines":
+        raise ValueError("ALS evaluation scope is invalid")
+    method = _require_mapping(body["evaluation_method"], endpoint)
+    if not method or not all(isinstance(key, str) and isinstance(item, str) for key, item in method.items()):
+        raise ValueError("ALS evaluation methodology is invalid")
+    ks = _require_list(body["ks"], endpoint, 3)
+    if ks != list(EVALUATION_KS):
+        raise ValueError("ALS evaluation K values are unsupported")
+    _check_evaluation_groups(body["cohorts"], endpoint, EVALUATION_COHORT_IDS)
+    _check_evaluation_groups(body["history_subgroups"], endpoint, EVALUATION_HISTORY_IDS)
+    deltas = _require_mapping(body["als_vs_baseline_deltas"], endpoint)
+    if set(deltas) != set(EVALUATION_COHORT_IDS):
+        raise ValueError("ALS baseline comparison identities are invalid")
+    for cohort_id in EVALUATION_COHORT_IDS:
+        baselines = _require_mapping(deltas[cohort_id], endpoint)
+        if set(baselines) != {"global_popularity", "personal_frequency"}:
+            raise ValueError("ALS baseline comparison methods are invalid")
+        for model_id, by_k_value in baselines.items():
+            by_k = _require_mapping(by_k_value, endpoint)
+            if set(by_k) != {str(k) for k in EVALUATION_KS}:
+                raise ValueError("ALS baseline comparison K values are invalid")
+            for metrics in by_k.values():
+                metrics = _require_mapping(metrics, endpoint)
+                if set(metrics) != set(EVALUATION_METRIC_IDS):
+                    raise ValueError("ALS baseline comparison metrics are invalid")
+                for score in metrics.values():
+                    _check_number(score, endpoint)
+    _check_bool(body["official_test_truth_available"], endpoint)
+    summary = _require_mapping(body["truth_summary"], endpoint)
+    if not summary:
+        raise ValueError("ALS truth summary is empty")
+    for count in summary.values():
+        _check_int(count, endpoint)
+    _validate_timestamp(body["observed_at"], endpoint)
+    return body
+
+
+def _validate_evidence_data(evidence_id: str, data_value: Any) -> None:
+    endpoint = f"evidence:{evidence_id}"
+    data = _require_mapping(data_value, endpoint)
+    if evidence_id == "module2-full-hardening-benchmarks":
+        _require_keys(data, {"run", "environment", "metrics", "method_notes", "module2_validation"}, endpoint)
+        run = _require_mapping(data["run"], endpoint)
+        _require_keys(run, {"run_id", "timestamp_utc", "dataset_classification", "date_utc"}, endpoint)
+        for field in run.values():
+            _check_text(field, endpoint)
+        environment = _require_mapping(data["environment"], endpoint)
+        _require_keys(
+            environment,
+            {"platform", "resources", "spark", "java", "python", "shuffle_partitions", "warmups", "measured_repetitions"},
+            endpoint,
+        )
+        for key in ("platform", "resources", "spark", "java", "python"):
+            _check_text(environment[key], endpoint)
+        for key in ("shuffle_partitions", "measured_repetitions"):
+            _check_int(environment[key], endpoint, minimum=1)
+        _check_int(environment["warmups"], endpoint)
+        metrics = _require_mapping(data["metrics"], endpoint)
+        join = _require_mapping(metrics.get("join_strategy_medians_seconds"), endpoint)
+        _require_keys(join, {"broadcast_hash_join", "sort_merge_join"}, endpoint)
+        scans = _require_mapping(metrics.get("partition_scan_medians_seconds"), endpoint)
+        _require_keys(scans, {"full_scan", "date_filter", "partition_filter", "partition_filter_rows"}, endpoint)
+        cache = _require_mapping(metrics.get("cache_medians_seconds"), endpoint)
+        _require_keys(cache, {"uncached", "cache_materialization", "cached_reuse"}, endpoint)
+        for group in (join, scans, cache):
+            for key, number in group.items():
+                if key.endswith("_rows"):
+                    _check_int(number, endpoint)
+                else:
+                    _check_number(number, endpoint, minimum=0)
+        shuffle = _require_mapping(metrics.get("shuffle_metrics"), endpoint)
+        _require_keys(shuffle, {"available", "reason"}, endpoint)
+        _check_bool(shuffle["available"], endpoint)
+        if not shuffle["available"]:
+            _check_text(shuffle["reason"], endpoint)
+        notes = _require_mapping(data["method_notes"], endpoint)
+        for value in notes.values():
+            if isinstance(value, str):
+                continue
+            if type(value) is bool:
+                continue
+            raise ValueError("benchmark method notes are invalid")
+        validation = _require_mapping(data["module2_validation"], endpoint)
+        for value in validation.values():
+            if type(value) is bool:
+                continue
+            _check_int(value, endpoint)
+    elif evidence_id == "module4c-c8a-responsiveness":
+        _require_keys(
+            data,
+            {
+                "experiment_id", "status", "classification", "top20_overlap", "ranking_response",
+                "first_publication_cli_wall_ms_at_lambda_0_5", "recommendation_accuracy_measured", "limitations",
+            },
+            endpoint,
+        )
+        for key in ("experiment_id", "status", "classification", "top20_overlap"):
+            _check_text(data[key], endpoint)
+        if "synthetic" not in data["classification"].lower():
+            raise ValueError("C8A experiment classification is invalid")
+        rows = _require_list(data["ranking_response"], endpoint, 5)
+        expected_lambdas = [0.0, 0.5, 0.7, 0.9, 1.0]
+        if len(rows) != len(expected_lambdas):
+            raise ValueError("C8A lambda series is incomplete")
+        for row, expected_lambda in zip(rows, expected_lambdas, strict=True):
+            row = _require_mapping(row, endpoint)
+            _require_keys(
+                row,
+                {"lambda", "baseline_top1", "changed_top1", "rank_changed_products", "mean_absolute_rank_displacement"},
+                endpoint,
+            )
+            _check_number(row["lambda"], endpoint, minimum=0, maximum=1)
+            if row["lambda"] != expected_lambda:
+                raise ValueError("C8A lambda ordering is invalid")
+            _check_text(row["baseline_top1"], endpoint)
+            _check_text(row["changed_top1"], endpoint)
+            _check_int(row["rank_changed_products"], endpoint)
+            _check_number(row["mean_absolute_rank_displacement"], endpoint, minimum=0)
+        timing = _require_mapping(data["first_publication_cli_wall_ms_at_lambda_0_5"], endpoint)
+        _require_keys(timing, {"baseline", "changed", "warmups", "includes_process_startup_and_mongodb_serving", "excludes_fixture_and_bundle_setup", "not_kafka_to_serving_latency"}, endpoint)
+        for variant in ("baseline", "changed"):
+            values = _require_mapping(timing[variant], endpoint)
+            _require_keys(values, {"repetitions", "median_ms", "min_ms", "max_ms"}, endpoint)
+            _check_int(values["repetitions"], endpoint, minimum=1)
+            for key in ("median_ms", "min_ms", "max_ms"):
+                _check_number(values[key], endpoint, minimum=0)
+        _check_int(timing["warmups"], endpoint)
+        for key in ("includes_process_startup_and_mongodb_serving", "excludes_fixture_and_bundle_setup", "not_kafka_to_serving_latency"):
+            _check_bool(timing[key], endpoint)
+        if not all(
+            timing[key]
+            for key in (
+                "includes_process_startup_and_mongodb_serving",
+                "excludes_fixture_and_bundle_setup",
+                "not_kafka_to_serving_latency",
+            )
+        ):
+            raise ValueError("C8A timing interpretation flags are invalid")
+        if data["recommendation_accuracy_measured"] is not False:
+            raise ValueError("C8A accuracy state is invalid")
+        limitations = _require_list(data["limitations"], endpoint, 10)
+        for limitation in limitations:
+            _check_text(limitation, endpoint)
+    else:
+        _require_keys(
+            data,
+            {
+                "experiment_id", "status", "classification", "runtime_versions", "runtime_isolation", "events",
+                "windows", "spark_batch_durations_ms", "serving", "limitations", "interpretation",
+            },
+            endpoint,
+        )
+        for key in ("experiment_id", "status", "classification", "interpretation"):
+            _check_text(data[key], endpoint)
+        if "synthetic" not in data["classification"].lower():
+            raise ValueError("C8B experiment classification is invalid")
+        versions = _require_mapping(data["runtime_versions"], endpoint)
+        _require_keys(versions, {"kafka", "spark", "mongodb"}, endpoint)
+        for value in versions.values():
+            _check_text(value, endpoint)
+        isolation = _require_mapping(data["runtime_isolation"], endpoint)
+        _require_keys(isolation, {"host_ports_published", "persistent_volumes", "spark_mode", "spark_shuffle_partitions"}, endpoint)
+        for key in ("host_ports_published", "persistent_volumes"):
+            _check_bool(isolation[key], endpoint)
+        _check_text(isolation["spark_mode"], endpoint)
+        _check_int(isolation["spark_shuffle_partitions"], endpoint, minimum=1)
+        events = _require_mapping(data["events"], endpoint)
+        _require_keys(events, {"planned", "acknowledged", "consumed", "invalid", "finalized_bundle_documents"}, endpoint)
+        for value in events.values():
+            _check_int(value, endpoint)
+        windows = _require_list(data["windows"], endpoint, 2)
+        if len(windows) != 2:
+            raise ValueError("C8B window records are incomplete")
+        for row, expected_name in zip(windows, ("A", "B"), strict=True):
+            row = _require_mapping(row, endpoint)
+            _require_keys(row, {"name", "start_utc", "end_utc", "watermark_utc", "microbatch_id", "row_count", "top1_product_id", "bundle_id", "content_sha256", "last_watermark_ack_to_bundle_visible_ms"}, endpoint)
+            if row["name"] != expected_name:
+                raise ValueError("C8B windows are out of order")
+            for key in ("start_utc", "end_utc", "watermark_utc"):
+                _validate_timestamp(row[key], endpoint)
+            _check_int(row["microbatch_id"], endpoint)
+            _check_int(row["row_count"], endpoint)
+            _check_int(row["top1_product_id"], endpoint, minimum=1)
+            _check_text(row["bundle_id"], endpoint)
+            _check_text(row["content_sha256"], endpoint)
+            _check_number(row["last_watermark_ack_to_bundle_visible_ms"], endpoint, minimum=0, nullable=True)
+        durations = _require_mapping(data["spark_batch_durations_ms"], endpoint)
+        _require_keys(durations, {"add_batch", "trigger_execution"}, endpoint)
+        for sequence in durations.values():
+            values = _require_list(sequence, endpoint, 100)
+            for duration in values:
+                _check_number(duration, endpoint, minimum=0)
+        serving = _require_mapping(data["serving"], endpoint)
+        _require_keys(serving, {"complete_rows_per_version", "pointer_advanced_to_window_b", "previous_version_rows_immutable", "repeat_b_status", "repeat_b_same_version_and_rows", "repeat_b_cli_wall_ms"}, endpoint)
+        _check_int(serving["complete_rows_per_version"], endpoint)
+        for key in ("pointer_advanced_to_window_b", "previous_version_rows_immutable", "repeat_b_same_version_and_rows"):
+            _check_bool(serving[key], endpoint)
+        _check_text(serving["repeat_b_status"], endpoint)
+        _check_number(serving["repeat_b_cli_wall_ms"], endpoint, minimum=0)
+        limitations = _require_list(data["limitations"], endpoint, 10)
+        for limitation in limitations:
+            _check_text(limitation, endpoint)
+        if not any("checkpoint" in limitation.lower() and "not exercised" in limitation.lower() for limitation in limitations):
+            raise ValueError("C8B checkpoint-restart limitation is missing")
+
+
+def _validate_evidence(value: Any, evidence_id: str) -> dict[str, Any]:
+    endpoint = f"evidence:{evidence_id}"
+    body = _require_mapping(value, endpoint)
+    _require_keys(body, {"evidence_id", "title", "kind", "provenance", "data", "observed_at"}, endpoint)
+    if body["evidence_id"] != evidence_id:
+        raise ValueError("evidence ID does not match the requested report")
+    _check_text(body["title"], endpoint)
+    _check_text(body["kind"], endpoint)
+    _check_provenance(body["provenance"], endpoint)
+    _validate_evidence_data(evidence_id, body["data"])
+    _validate_timestamp(body["observed_at"], endpoint)
+    return body
 
 
 def _validate_response(endpoint: str, value: Any) -> dict[str, Any]:
@@ -398,6 +709,10 @@ def _validate_response(endpoint: str, value: Any) -> dict[str, Any]:
                 raise ValueError("evidence availability and status disagree")
             _check_text(item["sha256"], endpoint, nullable=True)
         _validate_timestamp(body["observed_at"], endpoint)
+    elif endpoint == "als_evaluation":
+        return _validate_als_evaluation(value)
+    elif endpoint.startswith("evidence:"):
+        return _validate_evidence(value, endpoint.partition(":")[2])
     elif endpoint == "orders_distribution":
         _require_keys(
             body,
@@ -667,6 +982,21 @@ class ApiClient:
 
     def get_evidence_registry(self) -> dict[str, Any]:
         return self._get("/api/v1/evidence", endpoint="evidence_registry")
+
+    def get_als_evaluation(self) -> dict[str, Any]:
+        return self._get("/api/v1/evaluation/als", endpoint="als_evaluation")
+
+    def get_evidence(self, evidence_id: str) -> dict[str, Any]:
+        if not isinstance(evidence_id, str) or evidence_id not in ALLOWED_EVIDENCE_IDS:
+            raise ApiClientError(
+                "Choose a registered evaluation or performance evidence report.",
+                status_code=422,
+                code="invalid_evidence_id",
+            )
+        return self._get(
+            f"/api/v1/evidence/{evidence_id}",
+            endpoint=f"evidence:{evidence_id}",
+        )
 
     def get_orders_distribution(self) -> dict[str, Any]:
         return self._get("/api/v1/analytics/orders-distribution", endpoint="orders_distribution")
