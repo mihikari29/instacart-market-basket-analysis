@@ -17,7 +17,7 @@
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
 | **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Complete: 21/21 gates; full-data publication and same-version replay validated, 10/10/2026.** |
 | **Module 4C** | Readiness-aware hybrid serving over ALS, graph/catalog, and finalized trends | Deterministic ranking, verified trend bundles, immutable MongoDB versions/pointer, CLI, Kafka/Spark integration | **Implemented and locally validated; see release review. Quality and production capacity remain unevaluated.** |
-| **Module 4D** | Read-only analytics and evidence API for a future dashboard | FastAPI, bounded PyMongo readers, fixed evidence registry | **D0 architecture and D1A/D1B backend implemented; D2 Streamlit and D3 integration remain incomplete.** |
+| **Module 4D** | Read-only analytics/evidence API and four-page dashboard | FastAPI, bounded PyMongo readers, fixed evidence registry, Streamlit | **D0–D3 implementation and local integration complete; remote CI/review/merge status is in the release review.** |
 
 All Module 4 source code now lives under `src/module4/`: the existing 4A/4B
 implementation stays at the package root, Module 4C serving is under
@@ -514,7 +514,7 @@ and the historical Docker cleanup correction.
 
 ---
 
-## 8. Module 4D — Read-only dashboard backend
+## 8. Module 4D — Read-only API and Streamlit dashboard
 
 The completed D0 design is implemented in D1A and D1B. The read-only FastAPI
 application exposes verified Hybrid recommendations and finalized trends,
@@ -525,7 +525,32 @@ or create indexes.
 
 The package move consolidates the implementation under
 `src/module4/dashboard/` while retaining the separate 4D responsibility. The
-API is not the completed dashboard: D2 Streamlit and D3 full dashboard
-integration remain outstanding. See [the architecture plan](module4d-plan.md),
-[API contract](module4d-api.md), [data contracts](module4d-data-contracts.md),
+four-page Streamlit frontend reads the API over HTTP; it has no MongoDB driver
+or MongoDB network path. See the [architecture plan](module4d-plan.md),
+[API contract](module4d-api.md), [Streamlit runbook](module4d-streamlit.md),
+[release review](module4d-release-review.md), [data contracts](module4d-data-contracts.md),
 and [package migration guide](module4-package-migration.md).
+
+### D3 local integration and release validation
+
+The task-scoped Compose demonstration uses MongoDB 7.0.16 on disposable tmpfs,
+with separate database and API/UI networks. API and UI ports are published only
+on `127.0.0.1`; MongoDB has no host port. The fixture creates a unique database
+and publishes synthetic batch metrics, two distinct finalized trend bundles,
+Module 4A/4B source readiness, and warm, fallback, and ready-empty Hybrid
+snapshots through accepted publishers. The fixture administrator provisions
+indexes and creates a database-scoped read role; the API and live API validator
+use only that role. See the release review for recorded response values,
+evidence hashes, browser results, and claim boundaries.
+
+The local release run passed the repository Spark suite (690 passed, 69
+service-backed tests skipped, five Spark warnings), the D2A/D2B UI suite (64
+passed), the D1A/D1B API harness (497 unit and 26 live Mongo tests passed), and
+93 Module 3/4/4C live Mongo tests. Ruff, Compose, OpenAPI/Uvicorn startup,
+container dependency checks, compileability, the source-backed route validator,
+and pinned Chromium browser E2E passed. The browser exercised all four pages
+through the host loopback URL. These results validate API behavior, isolated
+integration, browser rendering, archived evidence, and offline ALS metrics as
+separate claims; they do not establish Hybrid recommendation quality or
+production scalability. GitHub CI/review/merge state is recorded separately in
+the release review.

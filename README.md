@@ -26,7 +26,8 @@ Modules 1–3 contracts. See the [Module 4C release review](docs/module4c-releas
 and [evaluation plan](docs/module4c-evaluation-plan.md) for evidence and limits.
 Module 4A–4D keep separate responsibilities inside one Python package rooted at
 `src/module4/`. The Module 4D read API (D1A and D1B) is implemented; its
-Streamlit work (D2) and full dashboard integration (D3) remain incomplete.
+four-page Streamlit UI and isolated integration demo are documented in the
+[Module 4D release review](docs/module4d-release-review.md).
 
 ## Repo layout
 
@@ -405,3 +406,18 @@ See the [Module 4C release review](docs/module4c-release-review.md),
 
 For canonical package imports, the Hybrid CLI, API startup and validation
 commands, see the [Module 4 package migration guide](docs/module4-package-migration.md).
+
+## Module 4D — Dashboard demonstration
+
+The four-page Streamlit dashboard reads the live Module 4D FastAPI application
+for Hybrid recommendations, finalized trends, prior-only Module 2 statistics,
+and registered archived evidence. The UI has no MongoDB connection. For the
+reproducible Docker demonstration, required indexes, read-only account, browser
+checks, and evidence limits, see the [Module 4D release review](docs/module4d-release-review.md)
+and [Streamlit runbook](docs/module4d-streamlit.md).
+
+The opt-in demo uses a unique MongoDB database on disposable tmpfs, binds only
+the API and UI ports to host loopback, and seeds clearly identified synthetic
+data through the accepted Module 2, Module 3, Module 4A/4B, and Module 4C
+publishers. It does not replay the full dataset or claim Hybrid quality or
+production capacity.

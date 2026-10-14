@@ -70,6 +70,8 @@ def _copy_context(destination: Path) -> None:
     scripts_dir.mkdir()
     for relative in (
         "scripts/module4d_api_validation.py",
+        "scripts/module4d_demo_fixture.py",
+        "scripts/module4d_demo_validate.py",
         "scripts/module4c_responsiveness.py",
         "scripts/module4c_streaming_demo.py",
     ):

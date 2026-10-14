@@ -131,13 +131,25 @@ docker compose build spark-master
 docker run --rm -v "$PWD:/workspace" -w /workspace \
   instacart-spark:3.5.5 python3 -m pytest -q \
   --ignore=tests/test_module4d_api_mongo.py \
-  --ignore=tests/test_module4d_batch_api_mongo.py
+  --ignore=tests/test_module4d_batch_api_mongo.py \
+  --ignore=tests/test_module4d_ui_app.py \
+  --ignore=tests/test_module4d_ui_client.py \
+  --ignore=tests/test_module4d_ui_evaluation.py
 ```
 
 The two D1A/D1B live MongoDB test files are owned by
 `scripts/module4d_api_validation.py --mode all`; the Spark command excludes
-only those files because the API harness supplies their isolated MongoDB 7.0.16
-service and read-only account.
+those files because the API harness supplies their isolated MongoDB 7.0.16
+service and read-only account. The three UI test files run with dependencies
+from a development image built using:
+
+```bash
+docker build --build-arg MODULE4D_UI_DEV=1 -f Dockerfile.module4d-ui \
+  -t instacart-module4d-ui-dev:local .
+```
+
+The D3 browser and publisher checks use the pinned `compose.module4d-demo.yaml`
+fixture and Playwright image; see the [Streamlit runbook](module4d-streamlit.md).
 
 Repository Ruff and Compose checks:
 
@@ -152,6 +164,8 @@ git diff --check
 ## Delivery boundary
 
 Module 4D D0 architecture, D1A read-only Hybrid/trend API, the D1A-FIX C5
-selection parity correction, and D1B batch/evidence API are implemented. D2
-Streamlit and D3 full dashboard integration remain incomplete. The API backend
-must not be described as a finished visualization.
+selection parity correction, D1B batch/evidence API, and D2 four-page Streamlit
+dashboard are implemented. D3 packages and validates a synthetic isolated
+MongoDB demonstration. The API and browser evidence are distinct from offline
+ALS quality, unevaluated Hybrid quality, and production scalability; see the
+[release review](module4d-release-review.md).

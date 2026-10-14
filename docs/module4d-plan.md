@@ -10,13 +10,21 @@ contracts are in [module4d-data-contracts.md](module4d-data-contracts.md).
 ## Implementation status update
 
 The D0 design has since been implemented through D1A (verified read-only
-recommendation and trend API) and D1B (batch analytics and curated evidence
-API). The backend now lives in `src/module4/dashboard/` and its Hybrid reader
-uses `src/module4/hybrid/`. D2 Streamlit and D3 full dashboard integration are
-still pending; this design document does not claim the visualization is done.
-The D1A/D1B dependencies are pinned in
-[`requirements-module4d-api.txt`](../requirements-module4d-api.txt); Streamlit
-remains deferred until D2.
+recommendation and trend API), D1B (batch analytics and curated evidence API),
+and D2A (the first three Streamlit pages documented in
+[`module4d-streamlit.md`](module4d-streamlit.md)). The backend and UI now live
+under `src/module4/dashboard/`; the Hybrid reader uses `src/module4/hybrid/`.
+D2B implemented and validated the fourth Evaluation & Performance page using
+the accepted archived evaluation and evidence API contracts. D3 packaged the
+loopback-only Compose demo and verified the synthetic publisher fixture,
+read-only FastAPI path, and browser flow. Observed evidence and limits are in
+[`module4d-release-review.md`](module4d-release-review.md).
+D0 route proposals below are historical design context; the
+implemented D1A/D1B routes documented in [`module4d-api.md`](module4d-api.md)
+take precedence. The D1A/D1B dependencies are pinned in
+[`requirements-module4d-api.txt`](../requirements-module4d-api.txt), and UI
+dependencies are pinned separately in
+[`requirements-module4d-ui.txt`](../requirements-module4d-ui.txt).
 
 The design follows [Proposal §30](Proposal.md),
 correcting its collection summaries where current code differs. In particular,
@@ -264,9 +272,11 @@ startup or dependency is added to API requests.
 ### D2 — MVP Streamlit pages and evidence views
 
 Implement Overview, Realtime and batch, and User recommendations pages against
-the API. Add allowlisted Module 2/3/4 evidence endpoints and the secondary
-Evaluation and performance evidence page only after the report registry is
-defined and report fields are verified.
+the API. Add allowlisted Module 2/3/4 evidence endpoints and the Evaluation &
+Performance evidence page only after the report registry is defined and report
+fields are verified. D2A delivered the first three pages; D2B delivered the
+fourth page over the existing read-only evaluation, registry, and curated
+evidence endpoints.
 
 **Acceptance:** every displayed metric has source/run/method/scope; missing data
 is shown as unavailable; there are no unsupported accuracy, lag, or latency
@@ -274,51 +284,50 @@ claims; historical synthetic data is labeled; user explanations match the
 persisted Hybrid rows; UI carries no Mongo credentials and makes no publisher
 calls.
 
-### D3 — Reproducible demo and review
+### D3 — Reproducible demo and review (implemented)
 
-Package API/UI in an opt-in Compose profile with loopback binding, scoped
-networking, read-only Mongo credentials, packaged evidence, and no unrelated
-mounts. Document the one-command startup and cleanup.
+Package API/UI in a task-scoped Compose file with loopback binding, scoped
+database and frontend networks, read-only Mongo credentials, packaged evidence,
+and no unrelated mounts. Document startup and cleanup.
 
 **Acceptance:** Compose configuration is valid; an isolated smoke proves UI to
 API to Mongo/report reads; the read-only account rejects a write; opening or
 refreshing the dashboard does not start Spark, Kafka, or HDFS; service health,
-empty states, shutdown, and report provenance are documented.
+empty states, shutdown, and report provenance are documented. The release
+review records the MongoDB 7.0.16 fixture, route responses, browser run, and
+regression results. CI keeps the required `fixtures` check and runs the UI and
+browser checks after it.
 
-## Open decisions and risks
+## Known limits and operational notes
 
-1. **Mongo read-only account:** current Compose MongoDB has no authentication.
-   Decide whether D1 adds an initialized read-only account or limits the Compose
-   demo to a localhost-only isolated environment.
-2. **Trend bundle enablement and namespace:** `publish_trend_bundles` defaults
+1. **Trend bundle enablement and namespace:** `publish_trend_bundles` defaults
    false. The deployment must explicitly enable it and provide a stable,
    allowlisted namespace; otherwise the finalized bundle view reports
    unavailable. The mutable `realtime_trending` collection is not a safe
    replacement for the immutable bundle reader.
-3. **Report registry and retention:** decide which verified report run IDs ship
-   in the dashboard image and whether local `results/<module>/<run_id>` files
-   are eligible. Default to committed sanitized `docs/evidence` reports; do not
-   make arbitrary generated result paths discoverable.
-4. **Module 2 sorted read indexes:** the current single-field indexes support
-   basic top queries, but deterministic tie ordering and support-filtered live
-   top-reordered selection need reviewed compound/partial indexes. The
-   top-reordered MVP can use its persisted Spark report until that index is
-   accepted.
-5. **Batch cross-collection publication:** Module 2 atomically replaces each
+2. **Report registry and retention:** only reviewed files in the fixed evidence
+   registry ship in the API image. Do not make arbitrary generated result paths
+   discoverable.
+3. **Module 2 sorted read indexes:** the dashboard requires the compound
+   purchase-count and reorder-rate ranking indexes documented in the migration
+   guide. Module 2 publication replaces the product collection and its
+   indexes, so administrators must re-provision both before serving dashboard
+   reads.
+4. **Batch cross-collection publication:** Module 2 atomically replaces each
    output collection separately, not as one transaction. Expose and compare
    `run_id`s; never label two collections as one coherent generation when IDs
    differ.
-6. **Trend retention:** trend bundle TTL is based on processing-time
+5. **Trend retention:** trend bundle TTL is based on processing-time
    `expires_at`, normally seven days but configurable or disabled. Historical
    event-time does not establish expiry. API responses must describe actual
    missing/expired availability without inferring from the event date.
-7. **Unknown user versus unpublished user:** current collections do not provide
+6. **Unknown user versus unpublished user:** current collections do not provide
    a separate canonical user-directory query for this API. A missing pointer
    means “no published snapshot found,” not a verified unknown user.
-8. **Hybrid quality and historical ranking:** no leakage-safe Hybrid quality
+7. **Hybrid quality and historical ranking:** no leakage-safe Hybrid quality
    evaluation or live per-user before/after trend history exists. C8A is a
    fixed synthetic responsiveness experiment only.
-9. **Deployment scope:** localhost binding is acceptable for a supervised
+8. **Deployment scope:** localhost binding is acceptable for a supervised
    academic demonstration. Any shared deployment requires an authentication
    provider and authorization policy that are outside the current repository.
 
