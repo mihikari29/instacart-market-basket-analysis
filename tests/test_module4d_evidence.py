@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from src.module4d.evidence import (
+from src.module4.dashboard.evidence import (
     EVIDENCE_SPECS,
     InvalidEvidence,
     RegisteredEvidenceMissing,

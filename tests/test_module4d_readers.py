@@ -10,8 +10,8 @@ import math
 import pytest
 
 from src.module3.trend_bundle import _build_document
-from src.module4c.trend_reader import TrendSnapshotIntegrityError
-from src.module4d.readers import (
+from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError
+from src.module4.dashboard.readers import (
     DatabaseReadFailure,
     InvalidSnapshot,
     SnapshotChanged,

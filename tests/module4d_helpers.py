@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import hashlib
 
-from src.module4c import (
+from src.module4.hybrid import (
     ALSRecommendation,
     CapturedUserSources,
     HybridRankingConfig,
@@ -15,7 +15,7 @@ from src.module4c import (
     VerifiedSourceContext,
     rank_hybrid_recommendations,
 )
-from src.module4c.sink_mongo import _pointer_document, _row_document, prepare_hybrid_snapshot
+from src.module4.hybrid.sink_mongo import _pointer_document, _row_document, prepare_hybrid_snapshot
 
 
 BASE_TIME = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)

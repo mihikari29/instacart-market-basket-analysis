@@ -2,6 +2,8 @@ FROM apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece56438925893
 USER root
 COPY requirements.txt requirements-dev.txt /tmp/dependencies/
 RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
+COPY requirements-module4d-api.txt /tmp/requirements-module4d-api.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-module4d-api.txt
 
 # Spark does not bundle the Structured Streaming Kafka source. Keep the
 # connector and its compile-time dependencies in the image, pinned and

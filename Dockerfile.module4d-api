@@ -1,5 +1,5 @@
-# Development/test image built on the project's existing pinned Spark/PyMongo image.
-FROM instacart-spark:3.5.5@sha256:e64ed82ffb741e48d74ea64ae8c464cb3473a1d18b92edc444bd1aa4357c3cf7
+# Build the project Spark base first; it pins the Apache Spark digest and checksums its extra jars.
+FROM instacart-spark:3.5.5
 
 USER root
 WORKDIR /workspace
@@ -12,6 +12,8 @@ COPY pyproject.toml /workspace/pyproject.toml
 COPY src/ /workspace/src/
 COPY tests/ /workspace/tests/
 COPY scripts/module4d_api_validation.py /workspace/scripts/module4d_api_validation.py
+COPY scripts/module4c_responsiveness.py /workspace/scripts/module4c_responsiveness.py
+COPY scripts/module4c_streaming_demo.py /workspace/scripts/module4c_streaming_demo.py
 COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
 COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
 COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json

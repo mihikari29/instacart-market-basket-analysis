@@ -4,16 +4,20 @@
 
 The local release audit passed on branch feat/module4c-ranking at commit c475e46da6257b5ca6b9199a146ee5bc4d30606e. The feature branch adds hybrid recommendation serving over the accepted Module 4A–4B outputs and finalized Module 3 trend bundles. This review records implementation boundaries and evidence; it does not establish production capacity or recommendation quality.
 
+At the time of that audit, the Hybrid package path was `src/module4c/`. The
+current canonical location is `src/module4/hybrid/`; the historical branch,
+commit identity, measurements, and evidence remain unchanged.
+
 ## Architecture and implemented components
 
-The request path in src/module4c combines:
+The request path in src/module4/hybrid combines:
 
 1. C4A immutable, hashed finalized-window bundles written by Module 3.
 2. C5 bounded trend reads that select the latest verified bundle at or before an explicit UTC as-of event time and validate its schema, source identity, content hash, timestamp precision, and expiry.
 3. A bounded capture of the active Module 4A–4B readiness pointer, ALS rows, graph/catalog rows, and source identities. Readiness is checked before and after capture under the accepted publication lock.
 4. Deterministic ranking over normalized ALS and trend scores, with stable product-ID tie breaking, explicit ALS-only, trend-only, and hybrid modes, plus documented cold-user fallback behavior.
 5. C6 immutable, versioned per-user recommendation rows and a per-user active pointer. The publisher validates prepared inputs, protects rows with unique version/user/product and version/user/rank indexes, reads back complete publications, and prevents stale or incomparable source generations from replacing the active pointer.
-6. A CLI entry point at python -m src.module4c.cli serve-user. It requires an explicit as-of event time and source namespace, validates the user and ranking inputs, and redacts MongoDB credentials from error output.
+6. A CLI entry point at python -m src.module4.hybrid.cli serve-user. It requires an explicit as-of event time and source namespace, validates the user and ranking inputs, and redacts MongoDB credentials from error output.
 7. C7B invocation coverage, C8A controlled responsiveness measurement, and C8B bounded Kafka → Spark → Module 3 → Module 4C integration evidence.
 
 The C1–C8B work covers configuration and contracts, readiness-aware source capture, deterministic ranking, atomic trend bundles, trend snapshot verification, immutable recommendation publication, the serving CLI, responsiveness measurement, and a bounded streaming demonstration. The established Module 1–3 contracts and the Module 4A–4B outputs remain the serving inputs.

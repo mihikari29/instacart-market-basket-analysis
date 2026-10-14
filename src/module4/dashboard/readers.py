@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME
-from src.module4c.trend_reader import (
+from src.module4.hybrid.trend_reader import (
     TrendSnapshotIntegrityError,
     TrendSnapshotQueryError,
     TrendSnapshotRequestError,

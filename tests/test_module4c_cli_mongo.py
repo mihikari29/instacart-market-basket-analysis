@@ -15,8 +15,8 @@ from pymongo import MongoClient
 from pymongo.uri_parser import parse_uri
 
 from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, _build_document
-from src.module4c.data import READINESS_COLLECTION
-from src.module4c.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+from src.module4.hybrid.data import READINESS_COLLECTION
+from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
 
 pytestmark = pytest.mark.integration
@@ -217,7 +217,7 @@ def _cli(database_info, *, user_id, namespace=NAMESPACE, as_of, lambda_weight=No
     command = [
         sys.executable,
         "-m",
-        "src.module4c.cli",
+        "src.module4.hybrid.cli",
         "serve-user",
         "--user-id",
         str(user_id),

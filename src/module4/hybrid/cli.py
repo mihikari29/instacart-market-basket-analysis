@@ -82,7 +82,7 @@ def _parse_max_event_age_seconds(value: str) -> timedelta:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python3 -m src.module4c.cli")
+    parser = argparse.ArgumentParser(prog="python3 -m src.module4.hybrid.cli")
     commands = parser.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve-user", help="serve recommendations for one user")
     serve.add_argument("--user-id", required=True, type=_parse_user_id)

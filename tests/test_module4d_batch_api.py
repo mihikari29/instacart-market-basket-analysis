@@ -6,10 +6,10 @@ import json
 
 from fastapi.testclient import TestClient
 
-from src.module4d.api import create_app
-from src.module4d.config import ApiConfig
-from src.module4d.batch_readers import PRODUCT_INDEXES
-from src.module4d.evidence import EVIDENCE_SPECS
+from src.module4.dashboard.api import create_app
+from src.module4.dashboard.config import ApiConfig
+from src.module4.dashboard.batch_readers import PRODUCT_INDEXES
+from src.module4.dashboard.evidence import EVIDENCE_SPECS
 from tests.test_module4d_batch_readers import BatchDatabase, department, product
 from tests.test_module4d_readers import Database
 from tests.test_module4d_api import _config

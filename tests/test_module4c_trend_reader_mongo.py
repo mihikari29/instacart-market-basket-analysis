@@ -17,7 +17,7 @@ from src.module3.trend_bundle import (
     BUNDLE_SCHEMA_VERSION,
     _build_document,
 )
-from src.module4c import (
+from src.module4.hybrid import (
     ALSRecommendation,
     HybridRankingConfig,
     ProductMetadata,
@@ -25,7 +25,7 @@ from src.module4c import (
     rank_hybrid_recommendations,
     read_verified_trend_snapshot,
 )
-from src.module4c.trend_reader import (
+from src.module4.hybrid.trend_reader import (
     TrendSnapshotIntegrityError,
     TrendSnapshotQueryError,
 )

@@ -43,7 +43,14 @@ jobs:
           set -o pipefail
           mkdir -p results/module4/acceptance-ci
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-            -m pytest -q 2>&1 | tee results/module4/acceptance-ci/tests.txt
+            -m pytest -q \
+            --ignore=tests/test_module4d_api_mongo.py \
+            --ignore=tests/test_module4d_batch_api_mongo.py 2>&1 | tee results/module4/acceptance-ci/tests.txt
+      - name: Run D1A/D1B API and isolated MongoDB tests
+        run: |
+          set -o pipefail
+          python3 scripts/module4d_api_validation.py --mode all \
+            2>&1 | tee results/module4/acceptance-ci/module4d-api-validation.txt
       - name: Validate full input through host wrapper
         run: |
           set -o pipefail

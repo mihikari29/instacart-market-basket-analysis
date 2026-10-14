@@ -9,7 +9,7 @@ import math
 from pymongo.errors import OperationFailure
 import pytest
 
-from src.module4d.batch_readers import (
+from src.module4.dashboard.batch_readers import (
     BatchDatabaseFailure,
     BatchIndexUnavailable,
     InvalidBatchDocument,

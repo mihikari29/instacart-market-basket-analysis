@@ -22,12 +22,12 @@ from src.module3.config import Config as Module3Config
 from src.module3.trend_bundle import _build_document, write_trend_bundles
 from src.module4.config import Config as Module4Config
 from src.module4.sink_mongo import update_pair_readiness
-from src.module4c import publish_hybrid_recommendations, read_verified_trend_snapshot
-from src.module4c.data import READINESS_COLLECTION
-from src.module4c.trend_reader import TrendSnapshotIntegrityError
-from src.module4d.api import create_app
-from src.module4d.config import ApiConfig
-from src.module4d import readers
+from src.module4.hybrid import publish_hybrid_recommendations, read_verified_trend_snapshot
+from src.module4.hybrid.data import READINESS_COLLECTION
+from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError
+from src.module4.dashboard.api import create_app
+from src.module4.dashboard.config import ApiConfig
+from src.module4.dashboard import readers
 from tests.module4d_helpers import (
     BASE_TIME,
     GRAPH_VERSION,

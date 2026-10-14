@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from pymongo import MongoClient
 
-from src.module4c.trend_reader import (
+from src.module4.hybrid.trend_reader import (
     TrendSnapshotIntegrityError,
     TrendSnapshotQueryError,
     TrendSnapshotRequestError,

@@ -33,7 +33,7 @@ Install the pinned dependencies into the API environment, then run this
 localhost-only command from the repository root:
 
 ```bash
-python3 -m uvicorn src.module4d.api:app --host 127.0.0.1 --port 8000
+python3 -m uvicorn src.module4.dashboard.api:app --host 127.0.0.1 --port 8000
 ```
 
 The service exposes `GET /health`, the D1A routes
@@ -43,6 +43,8 @@ routes `GET /api/v1/batch/products`, `GET /api/v1/batch/departments`,
 `GET /api/v1/analytics/orders-distribution`, and `GET /api/v1/evaluation/als`.
 The health route is process liveness and does not ping MongoDB. The application
 OpenAPI schema describes all D1A and D1B routes.
+For the consolidated package paths and Docker commands, see the
+[Module 4 package migration guide](module4-package-migration.md).
 
 Recommendation reads return `404` when no per-user pointer is published,
 `503` when the pointer is not ready or MongoDB is unavailable, `409` when the

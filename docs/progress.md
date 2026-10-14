@@ -17,6 +17,13 @@
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
 | **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Complete: 21/21 gates; full-data publication and same-version replay validated, 10/10/2026.** |
 | **Module 4C** | Readiness-aware hybrid serving over ALS, graph/catalog, and finalized trends | Deterministic ranking, verified trend bundles, immutable MongoDB versions/pointer, CLI, Kafka/Spark integration | **Implemented and locally validated; see release review. Quality and production capacity remain unevaluated.** |
+| **Module 4D** | Read-only analytics and evidence API for a future dashboard | FastAPI, bounded PyMongo readers, fixed evidence registry | **D0 architecture and D1A/D1B backend implemented; D2 Streamlit and D3 integration remain incomplete.** |
+
+All Module 4 source code now lives under `src/module4/`: the existing 4A/4B
+implementation stays at the package root, Module 4C serving is under
+`src/module4/hybrid/`, and the Module 4D API is under
+`src/module4/dashboard/`. The migration guide documents imports, commands,
+runtime configuration, and validation.
 
 ---
 
@@ -504,3 +511,21 @@ production load, or checkpoint restart recovery. The active A/B readiness
 pointer also does not carry recommendation K; configured recommendation_k must
 match the accepted publication. See the release review for the complete limits
 and the historical Docker cleanup correction.
+
+---
+
+## 8. Module 4D — Read-only dashboard backend
+
+The completed D0 design is implemented in D1A and D1B. The read-only FastAPI
+application exposes verified Hybrid recommendations and finalized trends,
+bounded Module 2 batch analytics, and five registered historical evidence
+views. MongoDB indexes are provisioned by administrators; the API uses a
+database-scoped read-only account and does not initialize Spark, publish data,
+or create indexes.
+
+The package move consolidates the implementation under
+`src/module4/dashboard/` while retaining the separate 4D responsibility. The
+API is not the completed dashboard: D2 Streamlit and D3 full dashboard
+integration remain outstanding. See [the architecture plan](module4d-plan.md),
+[API contract](module4d-api.md), [data contracts](module4d-data-contracts.md),
+and [package migration guide](module4-package-migration.md).

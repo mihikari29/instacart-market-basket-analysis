@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from src.module4c import (
+from src.module4.hybrid import (
     ALSRecommendation,
     HybridRankingConfig,
     ProductMetadata,

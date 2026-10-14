@@ -9,23 +9,23 @@ import inspect
 import pytest
 
 from src.module4.config import Config as Module4Config
-from src.module4c import service as service_module
-from src.module4c.service import HybridServingPublicationError
-from src.module4c.config import (
+from src.module4.hybrid import service as service_module
+from src.module4.hybrid.service import HybridServingPublicationError
+from src.module4.hybrid.config import (
     ALSRecommendation,
     HybridRankingConfig,
     ProductMetadata,
     TrendRecommendation,
     VerifiedSourceContext,
 )
-from src.module4c.data import CapturedUserSources, ReadinessContractError
-from src.module4c.ranking import RankingContractError
-from src.module4c.sink_mongo import (
+from src.module4.hybrid.data import CapturedUserSources, ReadinessContractError
+from src.module4.hybrid.ranking import RankingContractError
+from src.module4.hybrid.sink_mongo import (
     HybridPublicationConflictError,
     HybridPublicationResult,
     PreparedHybridSnapshot,
 )
-from src.module4c.trend_reader import (
+from src.module4.hybrid.trend_reader import (
     TrendSnapshotIntegrityError,
     TrendSnapshotQueryError,
     TrendSnapshotReadResult,

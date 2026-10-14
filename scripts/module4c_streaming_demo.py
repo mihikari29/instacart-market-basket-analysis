@@ -606,7 +606,7 @@ def _assert_trend_bundle(
     window_end: datetime,
 ) -> dict[str, Any]:
     from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME
-    from src.module4c.trend_reader import read_verified_trend_snapshot
+    from src.module4.hybrid.trend_reader import read_verified_trend_snapshot
 
     if bundle.get("source_namespace") != namespace or bundle.get("source_scope") != SOURCE_SCOPE:
         raise RuntimeError("C4B bundle namespace or controlled source scope is incorrect")
@@ -655,7 +655,7 @@ def _assert_trend_bundle(
 
 
 def _seed_als_graph(database: Any, *, run_id: str) -> dict[str, Any]:
-    from src.module4c.data import READINESS_COLLECTION
+    from src.module4.hybrid.data import READINESS_COLLECTION
 
     source_run_id = f"c8b-source-{run_id}"
     model_version = f"c8b-als-{run_id}"
@@ -713,8 +713,8 @@ def expected_source_provenance(readiness: dict[str, Any]) -> dict[str, str]:
 
 
 def _read_active(database: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    from src.module4c.data import READINESS_COLLECTION
-    from src.module4c.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+    from src.module4.hybrid.data import READINESS_COLLECTION
+    from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
     pointer = database[READINESS_COLLECTION].find_one({"_id": f"hybrid:{USER_ID}"})
     if pointer is None or pointer.get("ready") is not True or pointer.get("status") != "ready":
@@ -743,7 +743,7 @@ def _invoke_cli(
     command = [
         sys.executable,
         "-m",
-        "src.module4c.cli",
+        "src.module4.hybrid.cli",
         "serve-user",
         "--user-id",
         str(USER_ID),
@@ -924,8 +924,8 @@ def run_live(args: argparse.Namespace) -> int:
 
     from src.module3.config import Config as Module3Config
     from src.module3.stream import run_stream
-    from src.module4c.data import READINESS_COLLECTION
-    from src.module4c.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+    from src.module4.hybrid.data import READINESS_COLLECTION
+    from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
     validate_run_id(args.run_id)
     validate_mongodb_target(args.mongodb_uri)

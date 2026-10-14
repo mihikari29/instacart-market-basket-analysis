@@ -158,6 +158,6 @@ synthetic experiment measurements.
 - [Module 3 mutable trend sink](../src/module3/sink_mongo.py)
 - [Module 3 progress summary](../src/module3/benchmark.py)
 - [Module 4A/4B indexes and active readiness](../src/module4/sink_mongo.py)
-- [Module 4C per-user row and pointer contract](../src/module4c/sink_mongo.py)
-- [Module 4C A/B and Hybrid source capture](../src/module4c/data.py)
+- [Module 4C per-user row and pointer contract](../src/module4/hybrid/sink_mongo.py)
+- [Module 4C A/B and Hybrid source capture](../src/module4/hybrid/data.py)
 - [Module 4C design and evidence limitations](module4c-release-review.md)

@@ -23,17 +23,17 @@ from scripts.module4c_responsiveness import (
     validate_mongodb_target,
     validate_report,
 )
-from src.module4c.config import (
+from src.module4.hybrid.config import (
     ALSRecommendation,
     HybridRankingConfig,
     ProductMetadata,
     TrendRecommendation,
     VerifiedSourceContext,
 )
-from src.module4c.data import CapturedUserSources
-from src.module4c.ranking import rank_hybrid_recommendations
-from src.module4c.sink_mongo import prepare_hybrid_snapshot
-from src.module4c.trend_reader import TrendSnapshotReadResult
+from src.module4.hybrid.data import CapturedUserSources
+from src.module4.hybrid.ranking import rank_hybrid_recommendations
+from src.module4.hybrid.sink_mongo import prepare_hybrid_snapshot
+from src.module4.hybrid.trend_reader import TrendSnapshotReadResult
 
 
 def _identity(content_token: str, trend_scores: dict[int, float]):

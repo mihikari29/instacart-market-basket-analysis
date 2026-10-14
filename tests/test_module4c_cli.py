@@ -8,11 +8,11 @@ import json
 
 import pytest
 
-from src.module4c import cli
-from src.module4c.config import HybridRankingConfig
-from src.module4c.data import ReadinessContractError
-from src.module4c.service import HybridServingPublicationError, HybridServingResult
-from src.module4c.trend_reader import TrendSnapshotIntegrityError
+from src.module4.hybrid import cli
+from src.module4.hybrid.config import HybridRankingConfig
+from src.module4.hybrid.data import ReadinessContractError
+from src.module4.hybrid.service import HybridServingPublicationError, HybridServingResult
+from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError
 
 
 AS_OF = datetime(2024, 1, 1, 3, 0, tzinfo=timezone.utc)

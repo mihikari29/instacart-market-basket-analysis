@@ -7,6 +7,17 @@ Modules 2, 3, 4A–4B, and 4C actually persist. It does not add an API, dashboar
 dependency, or production-code change. The data inventory and field-level
 contracts are in [module4d-data-contracts.md](module4d-data-contracts.md).
 
+## Implementation status update
+
+The D0 design has since been implemented through D1A (verified read-only
+recommendation and trend API) and D1B (batch analytics and curated evidence
+API). The backend now lives in `src/module4/dashboard/` and its Hybrid reader
+uses `src/module4/hybrid/`. D2 Streamlit and D3 full dashboard integration are
+still pending; this design document does not claim the visualization is done.
+The D1A/D1B dependencies are pinned in
+[`requirements-module4d-api.txt`](../requirements-module4d-api.txt); Streamlit
+remains deferred until D2.
+
 The design follows [Proposal §30](Proposal.md),
 correcting its collection summaries where current code differs. In particular,
 department/hour/day reports are local Module 2 artifacts; the immutable trend
@@ -25,11 +36,11 @@ This fits the existing Python, PyMongo, pandas, and requests stack and is easy
 to demonstrate locally. FastAPI provides typed request validation, explicit
 response schemas, OpenAPI documentation, and a testable boundary around the
 database. Streamlit supports tables and interactive charts with little UI
-boilerplate. The current [requirements.txt](../requirements.txt) does not
-include FastAPI, Uvicorn, Streamlit, or a chart library; D1 will add pinned
-application dependencies only after this architecture is reviewed. Streamlit's
-built-in charts and pandas tables should cover the first release without
-Plotly.
+boilerplate. At D0, the current [requirements.txt](../requirements.txt) did not
+include FastAPI, Uvicorn, Streamlit, or a chart library. D1A/D1B added pinned
+FastAPI and Uvicorn dependencies in the API-specific requirements file;
+Streamlit remains deferred. Streamlit's built-in charts and pandas tables
+should cover the first release without Plotly.
 
 | Choice | Benefits for this repository | Cost or limitation |
 |---|---|---|

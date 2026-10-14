@@ -25,8 +25,8 @@ from pymongo.uri_parser import parse_uri
 from src.module3.config import Config as Module3Config
 from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
 from src.module3.trending import rank_trending_batch, select_top_k
-from src.module4c.data import READINESS_COLLECTION
-from src.module4c.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+from src.module4.hybrid.data import READINESS_COLLECTION
+from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
 
 USER_ID = 8401
@@ -114,7 +114,7 @@ def build_cli_command(
     return [
         python_executable,
         "-m",
-        "src.module4c.cli",
+        "src.module4.hybrid.cli",
         "serve-user",
         "--user-id",
         str(USER_ID),

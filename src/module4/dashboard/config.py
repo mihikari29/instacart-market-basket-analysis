@@ -25,7 +25,7 @@ class ApiConfig:
     connect_timeout_ms: int = 3_000
     socket_timeout_ms: int = 5_000
     max_time_ms: int = 5_000
-    application_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[2], repr=False)
+    application_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[3], repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.mongodb_uri, str) or not self.mongodb_uri.strip():
@@ -81,5 +81,5 @@ class ApiConfig:
         namespaces = tuple(value.strip() for value in namespaces_raw.split(",") if value.strip())
         if not namespaces:
             raise ValueError("MODULE4D_TREND_SOURCE_NAMESPACES is required")
-        root = Path(os.environ.get("MODULE4D_APP_ROOT", Path(__file__).resolve().parents[2]))
+        root = Path(os.environ.get("MODULE4D_APP_ROOT", Path(__file__).resolve().parents[3]))
         return cls(uri, database, namespaces, application_root=root)

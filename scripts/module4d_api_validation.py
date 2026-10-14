@@ -10,6 +10,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import uuid
 
 
@@ -17,15 +18,19 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE_IMAGE = "instacart-spark:3.5.5"
 MONGO_IMAGE = "mongo:7.0.16"
 UNIT_TESTS = (
+    "tests/test_module4_package_layout.py",
     "tests/test_module4d_readers.py",
     "tests/test_module4d_api.py",
     "tests/test_module4d_batch_readers.py",
     "tests/test_module4d_evidence.py",
     "tests/test_module4d_batch_api.py",
     "tests/test_module4c_data.py",
+    "tests/test_module4c_cli.py",
     "tests/test_module4c_ranking.py",
+    "tests/test_module4c_responsiveness.py",
     "tests/test_module4c_service.py",
     "tests/test_module4c_sink_mongo.py",
+    "tests/test_module4c_streaming_demo.py",
     "tests/test_module4c_trend_reader.py",
 )
 def _run(command: list[str], *, check: bool = True, env=None) -> subprocess.CompletedProcess:
@@ -63,7 +68,12 @@ def _copy_context(destination: Path) -> None:
         shutil.copy2(source, target)
     scripts_dir = destination / "scripts"
     scripts_dir.mkdir()
-    shutil.copy2(ROOT / "scripts/module4d_api_validation.py", scripts_dir)
+    for relative in (
+        "scripts/module4d_api_validation.py",
+        "scripts/module4c_responsiveness.py",
+        "scripts/module4c_streaming_demo.py",
+    ):
+        shutil.copy2(ROOT / relative, scripts_dir / Path(relative).name)
     for relative in (
         "docs/evidence/full/analytics.json",
         "docs/evidence/full/current-hardening-2026-10-03.json",
@@ -152,6 +162,78 @@ def _ruff(image_tag: str, session_id: str) -> None:
 
 
 def _runtime_smoke(image_tag: str, session_id: str) -> None:
+    smoke_code = textwrap.dedent(
+        """\
+        import os
+        import socket
+        import sys
+        import threading
+        import time
+        import urllib.request
+
+        os.environ.update({
+            "MODULE4D_MONGODB_URI": "mongodb://127.0.0.1:27017/module4_smoke",
+            "MODULE4D_MONGO_DATABASE": "module4_smoke",
+            "MODULE4D_TREND_SOURCE_NAMESPACES": "smoke",
+        })
+        import src.module4
+        import src.module4.hybrid
+        import src.module4.dashboard
+        from src.module4.hybrid.service import serve_hybrid_user
+        from src.module4.dashboard.api import app
+        import subprocess
+
+        assert callable(serve_hybrid_user)
+        cli = subprocess.run(
+            [sys.executable, "-m", "src.module4.hybrid.cli", "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert cli.returncode == 0 and "serve-user" in cli.stdout
+        from pyspark import SparkContext
+        from pyspark.sql import SparkSession
+
+        assert SparkContext._active_spark_context is None
+        assert SparkSession.getActiveSession() is None
+        assert not any(name == "kafka" or name.startswith(("kafka.", "hdfs.")) for name in sys.modules)
+        required = {
+            "/health",
+            "/api/v1/batch/products",
+            "/api/v1/batch/departments",
+            "/api/v1/evidence",
+            "/api/v1/evidence/{evidence_id}",
+            "/api/v1/analytics/orders-distribution",
+            "/api/v1/evaluation/als",
+            "/api/v1/recommendations/{user_id}",
+            "/api/v1/trends",
+        }
+        assert required <= set(app.openapi()["paths"])
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+
+        import uvicorn
+
+        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+        thread = threading.Thread(target=server.run)
+        thread.start()
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not server.started and thread.is_alive():
+            time.sleep(0.05)
+        assert server.started, "Uvicorn did not start the ASGI application"
+        try:
+            response = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=3)
+            assert response.status == 200 and response.read() == b'{"status":"ok"}'
+        finally:
+            server.should_exit = True
+            thread.join(timeout=10)
+        assert not thread.is_alive(), "Uvicorn did not stop cleanly"
+        print("Consolidated imports, OpenAPI, and Uvicorn health startup passed without starting Spark, Kafka, HDFS, or a MongoDB server")
+        """
+    )
     _run(
         [
             "docker",
@@ -166,7 +248,7 @@ def _runtime_smoke(image_tag: str, session_id: str) -> None:
             image_tag,
             "python3",
             "-c",
-            "from src.module4d.api import app; paths=app.openapi()['paths']; required={'/api/v1/batch/products','/api/v1/batch/departments','/api/v1/evidence','/api/v1/evidence/{evidence_id}','/api/v1/analytics/orders-distribution','/api/v1/evaluation/als','/api/v1/recommendations/{user_id}','/api/v1/trends'}; assert required <= set(paths); print('API import and OpenAPI runtime smoke passed')",
+            smoke_code,
         ]
     )
 

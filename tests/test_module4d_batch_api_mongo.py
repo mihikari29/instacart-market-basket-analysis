@@ -14,9 +14,9 @@ from pymongo.monitoring import CommandListener
 from pymongo.uri_parser import parse_uri
 import pytest
 
-from src.module4d.api import create_app
-from src.module4d.batch_readers import PRODUCT_INDEXES
-from src.module4d.config import ApiConfig
+from src.module4.dashboard.api import create_app
+from src.module4.dashboard.batch_readers import PRODUCT_INDEXES
+from src.module4.dashboard.config import ApiConfig
 
 
 TEST_URI_ENV = "D1B_MONGODB_TEST_URI"

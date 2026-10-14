@@ -8,13 +8,12 @@ import sys
 
 from fastapi.testclient import TestClient
 import pytest
-from pyspark import SparkContext
 
 from src.module3.trend_bundle import _build_document
-from src.module4c.trend_reader import TrendSnapshotIntegrityError, read_verified_trend_snapshot
-from src.module4d.api import create_app
-from src.module4d.config import ApiConfig
-from src.module4d import readers
+from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError, read_verified_trend_snapshot
+from src.module4.dashboard.api import create_app
+from src.module4.dashboard.config import ApiConfig
+from src.module4.dashboard import readers
 from tests.module4d_helpers import BASE_TIME, NAMESPACE, make_snapshot
 from tests.test_module4d_readers import Database
 
@@ -359,11 +358,27 @@ def test_lifespan_closes_owned_mongo_client_once():
 
 
 def test_api_import_and_openapi_do_not_start_spark_kafka_or_hdfs():
-    database = Database()
-    app = _app(database)
-    with TestClient(app) as client:
-        assert client.get("/openapi.json").status_code == 200
-    assert database.names == []
-    assert SparkContext._active_spark_context is None
-    assert "src.module3.cli" not in sys.modules
-    assert "src.module3.streaming" not in sys.modules
+    import subprocess
+
+    smoke = """
+import sys
+from fastapi.testclient import TestClient
+from pyspark import SparkContext
+from src.module4.dashboard.api import create_app
+from src.module4.dashboard.config import ApiConfig
+
+settings = ApiConfig("mongodb://127.0.0.1:27017/module4_import_smoke", "module4_import_smoke", ("smoke",))
+app = create_app(settings, database=object())
+with TestClient(app) as client:
+    assert client.get("/openapi.json").status_code == 200
+assert SparkContext._active_spark_context is None
+assert "src.module3.cli" not in sys.modules
+assert "src.module3.streaming" not in sys.modules
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", smoke],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
