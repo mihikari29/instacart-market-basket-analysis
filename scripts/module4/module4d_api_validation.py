@@ -14,7 +14,7 @@ import textwrap
 import uuid
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 MONGO_IMAGE = "mongo:7.0.16"
 UNIT_TESTS = (
     "tests/test_module4_package_layout.py",
@@ -49,8 +49,11 @@ def _capture(command: list[str]) -> subprocess.CompletedProcess:
 
 
 def _copy_context(destination: Path) -> None:
-    for name in ("Dockerfile", ".dockerignore", "requirements.txt", "requirements-dev.txt", "requirements-module4d-api.txt"):
+    for name in ("Dockerfile", ".dockerignore", "requirements.txt", "requirements-dev.txt"):
         shutil.copy2(ROOT / name, destination / name)
+    requirements_dir = destination / "deploy/module4/requirements"
+    requirements_dir.mkdir(parents=True)
+    shutil.copy2(ROOT / "deploy/module4/requirements/api.txt", requirements_dir / "api.txt")
     shutil.copy2(ROOT / "pyproject.toml", destination / "pyproject.toml")
     shutil.copytree(ROOT / "src", destination / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     tests_dir = destination / "tests"
@@ -65,16 +68,17 @@ def _copy_context(destination: Path) -> None:
         source = ROOT / relative
         target = tests_dir / source.name
         shutil.copy2(source, target)
-    scripts_dir = destination / "scripts"
-    scripts_dir.mkdir()
     for relative in (
-        "scripts/module4d_api_validation.py",
-        "scripts/module4d_demo_fixture.py",
-        "scripts/module4d_demo_validate.py",
-        "scripts/module4c_responsiveness.py",
-        "scripts/module4c_streaming_demo.py",
+        "scripts/module4/__init__.py",
+        "scripts/module4/module4d_api_validation.py",
+        "scripts/module4/module4d_demo_fixture.py",
+        "scripts/module4/module4d_demo_validate.py",
+        "scripts/module4/module4c_responsiveness.py",
+        "scripts/module4/module4c_streaming_demo.py",
     ):
-        shutil.copy2(ROOT / relative, scripts_dir / Path(relative).name)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / relative, target)
     for relative in (
         "docs/evidence/full/analytics.json",
         "docs/evidence/full/current-hardening-2026-10-03.json",

@@ -434,11 +434,13 @@ evidence artifacts.
 
 ```bash
 docker compose build spark-master spark-worker
-bash scripts/module4d_demo.sh up
+bash scripts/module4/module4d_demo.sh up
 # Open http://127.0.0.1:18501; use the printed run ID for cleanup.
-bash scripts/module4d_demo.sh down <12-hex-run-id>
+bash scripts/module4/module4d_demo.sh down <12-hex-run-id>
 ```
 
 The synthetic demo uses disposable storage and separate networks from the main
 pipeline. See [the Docker runbook](docs/docker.md) for individual target builds,
 credentials/index setup, context safeguards, and the full validation commands.
+The [repository layout guide](docs/repository-layout.md) explains where shared
+and Module 4 configuration, deployment files, and operational scripts live.

@@ -37,15 +37,17 @@ integration and release packaging belong to D3.
 ## Dependencies and environment
 
 Runtime direct dependencies are pinned in
-[`requirements-module4d-ui.txt`](../requirements-module4d-ui.txt):
+[`deploy/module4/requirements/ui.txt`](../deploy/module4/requirements/ui.txt):
 
 - Streamlit `1.65.0`
 - Requests `2.34.2`
 
 The test environment is defined by
-[`requirements-module4d-ui-dev.txt`](../requirements-module4d-ui-dev.txt),
+[`deploy/module4/requirements/ui-dev.txt`](../deploy/module4/requirements/ui-dev.txt),
 which also pins pytest `8.4.2`. Streamlit's built-in tables and bar charts are
 used; no chart library is added directly.
+The [repository layout guide](repository-layout.md) describes the surrounding
+deployment and script directories.
 
 Create an isolated environment and install the UI runtime:
 
@@ -53,7 +55,7 @@ Create an isolated environment and install the UI runtime:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements-module4d-ui.txt
+python -m pip install -r deploy/module4/requirements/ui.txt
 ```
 
 The isolated runtime can also be built without the Spark image or repository
@@ -126,7 +128,7 @@ the UI has no network path to MongoDB and no MongoDB settings.
 From the repository root, start the isolated demonstration:
 
 ```bash
-bash scripts/module4d_demo.sh up
+bash scripts/module4/module4d_demo.sh up
 ```
 
 Open <http://127.0.0.1:18501>. The API health endpoint is at
@@ -142,7 +144,7 @@ Use the printed run ID to stop its services and discard its tmpfs database,
 private credentials file, and uniquely tagged API/UI images:
 
 ```bash
-bash scripts/module4d_demo.sh down <12-hex-run-id>
+bash scripts/module4/module4d_demo.sh down <12-hex-run-id>
 ```
 
 The startup script removes only that run's task-labeled containers and networks
@@ -273,7 +275,7 @@ session cache. There is no timed or continuous polling.
 Run frontend unit and AppTest cases with:
 
 ```bash
-python -m pip install -r requirements-module4d-ui-dev.txt
+python -m pip install -r deploy/module4/requirements/ui-dev.txt
 python -m pytest -q tests/test_module4d_ui_client.py tests/test_module4d_ui_app.py tests/test_module4d_ui_evaluation.py
 ```
 

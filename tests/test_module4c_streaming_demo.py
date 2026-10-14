@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts.module4c_streaming_demo import (
+from scripts.module4.module4c_streaming_demo import (
     FIXTURE_INGESTION_MS,
     REQUIRED_EVENT_FIELDS,
     SOURCE_SCOPE,
@@ -485,7 +485,7 @@ class _DockerSubprocess:
 
 
 def _run_mocked_docker_cleanup(monkeypatch, tmp_path, fake, run_id=RUN_ID):
-    monkeypatch.setattr("scripts.module4c_streaming_demo.subprocess.run", fake)
+    monkeypatch.setattr("scripts.module4.module4c_streaming_demo.subprocess.run", fake)
     return cleanup_task_docker_resources(run_id, evidence_dir=Path(tmp_path))
 
 

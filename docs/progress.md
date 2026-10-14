@@ -25,6 +25,12 @@ implementation stays at the package root, Module 4C serving is under
 `src/module4/dashboard/`. The migration guide documents imports, commands,
 runtime configuration, and validation.
 
+Shared dependencies and pipeline services remain at the repository root.
+Module 4 deployment manifests and the isolated dashboard Compose file live in
+`deploy/module4/`; its operational scripts live in `scripts/module4/`. See the
+[repository layout guide](repository-layout.md) for Docker targets, demo
+commands, and acceptance validation.
+
 ---
 
 ## 2. Module 1 — Ingestion & Storage

@@ -56,7 +56,7 @@ jobs:
       - name: Run D1A/D1B API and isolated MongoDB tests
         run: |
           set -o pipefail
-          python3 scripts/module4d_api_validation.py --mode all 2>&1 | tee module4d-api-validation.log
+          python3 scripts/module4/module4d_api_validation.py --mode all 2>&1 | tee module4d-api-validation.log
 
       - name: Verify staged flow and same-version A/B publication replay
         run: |
