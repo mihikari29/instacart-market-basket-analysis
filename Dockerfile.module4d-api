@@ -12,6 +12,8 @@ COPY pyproject.toml /workspace/pyproject.toml
 COPY src/ /workspace/src/
 COPY tests/ /workspace/tests/
 COPY scripts/module4d_api_validation.py /workspace/scripts/module4d_api_validation.py
+COPY scripts/module4d_demo_fixture.py /workspace/scripts/module4d_demo_fixture.py
+COPY scripts/module4d_demo_validate.py /workspace/scripts/module4d_demo_validate.py
 COPY scripts/module4c_responsiveness.py /workspace/scripts/module4c_responsiveness.py
 COPY scripts/module4c_streaming_demo.py /workspace/scripts/module4c_streaming_demo.py
 COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json

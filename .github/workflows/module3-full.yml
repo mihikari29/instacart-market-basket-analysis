@@ -12,6 +12,9 @@ on:
       - 'src/module1/generate.py'
       - 'src/module1/config.py'
       - 'scripts/module3*.py'
+      - 'scripts/module4d_demo_fixture.py'
+      - 'scripts/module4d_demo_validate.py'
+      - 'compose.module4d-demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -28,6 +31,9 @@ on:
       - 'src/module1/event_reader.py'
       - 'src/module1/generate.py'
       - 'scripts/module3*.py'
+      - 'scripts/module4d_demo_fixture.py'
+      - 'scripts/module4d_demo_validate.py'
+      - 'compose.module4d-demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -66,7 +72,25 @@ jobs:
           docker compose build spark-master
           docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q \
             --ignore=tests/test_module4d_api_mongo.py \
-            --ignore=tests/test_module4d_batch_api_mongo.py
+            --ignore=tests/test_module4d_batch_api_mongo.py \
+            --ignore=tests/test_module4d_ui_app.py \
+            --ignore=tests/test_module4d_ui_client.py \
+            --ignore=tests/test_module4d_ui_evaluation.py
+      - name: Run Streamlit UI regressions in the UI development image
+        run: |
+          image="instacart-module4d-ui-dev:module3-${GITHUB_RUN_ID}"
+          docker build --label com.codex.task=module4d-d3-release \
+            --build-arg MODULE4D_UI_DEV=1 -f Dockerfile.module4d-ui -t "$image" .
+          docker run --rm \
+            --label com.codex.task=module4d-d3-release \
+            --label com.codex.resource=ui-regression-tests \
+            -v "$PWD:/workspace:ro" -w /workspace \
+            -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
+            -e PYTEST_ADDOPTS="-p no:cacheprovider" "$image" \
+            python -m pytest -q \
+            tests/test_module4d_ui_app.py \
+            tests/test_module4d_ui_client.py \
+            tests/test_module4d_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
         run: python3 scripts/module4d_api_validation.py --mode all
       - name: Start services (Spark, Kafka, Mongo)
@@ -106,4 +130,7 @@ jobs:
             results/module3/**
       - name: Stop ephemeral services
         if: always()
-        run: docker compose down
+        run: |
+          docker compose down
+          docker image rm --force "instacart-module4d-ui-dev:module3-${GITHUB_RUN_ID}" \
+            >/dev/null 2>&1 || true

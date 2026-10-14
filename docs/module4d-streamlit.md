@@ -1,4 +1,4 @@
-# Module 4D Streamlit Dashboard (D2B)
+# Module 4D Streamlit Dashboard (D3 release)
 
 ## Layout and boundary
 
@@ -109,6 +109,49 @@ positive user ID with a published snapshot. Use **Refresh dashboard data** to
 clear this browser session's cached successful reads; submit the page form to
 explicitly load its analytics or user snapshot again. Requests are manual;
 widget interaction does not continuously poll the API.
+
+## Isolated synthetic Docker demonstration
+
+The release Compose file starts only MongoDB, FastAPI, and Streamlit. Its
+MongoDB data and unique database are disposable; the fixture is synthetic and
+does not represent observed customer purchases. It publishes Module 2 metrics,
+two finalized Module 3 trend bundles, Module 4A/4B readiness, and warm/fallback
+Module 4C snapshots through the accepted publishers. MongoDB has no host port.
+The API and UI host ports bind to `127.0.0.1`. MongoDB and FastAPI share the
+database network; FastAPI and Streamlit share a separate frontend network, so
+the UI has no network path to MongoDB and no MongoDB settings.
+
+From the repository root, start the isolated demonstration:
+
+```bash
+bash scripts/module4d_demo.sh up
+```
+
+Open <http://127.0.0.1:18501>. The API health endpoint is at
+<http://127.0.0.1:18000/health>. The fixture provisions required C6, trend,
+and Module 2 ranking indexes using the administrator. It then creates a
+database-scoped built-in `read` user and verifies that reads and index metadata
+are allowed while inserts and `createIndexes` are denied. The API receives
+only this read-only identity. Module 2 publication replaces
+`batch_product_metrics`, so recreate the dashboard ranking indexes after each
+real publication.
+
+Use the printed run ID to stop its services and discard its tmpfs database,
+private credentials file, and uniquely tagged API/UI images:
+
+```bash
+bash scripts/module4d_demo.sh down <12-hex-run-id>
+```
+
+The startup script removes only that run's task-labeled containers and networks
+if setup fails. A failed shutdown keeps the private environment file so cleanup
+can be retried. The command never prunes shared Docker resources.
+
+The fixture uses a single small local Spark session to derive synthetic Module
+2 metrics. The persistent demo starts no Spark cluster, Kafka, or HDFS and runs
+no full-data pipeline; opening or refreshing dashboard pages does not start
+Spark. See the [release review](module4d-release-review.md) for actual browser,
+route, regression, provenance, and limitation evidence.
 
 ## API routes used
 
@@ -223,7 +266,7 @@ cached; the cache is capped at 32 keys. Form submissions bypass cache for the
 requested analytics or user snapshot. The global refresh button clears the
 session cache. There is no timed or continuous polling.
 
-## Tests and remaining milestones
+## Tests and release validation
 
 Run frontend unit and AppTest cases with:
 
@@ -243,7 +286,10 @@ data. Missing or invalid reports render as section-level errors and are not
 cached as successful payloads. Use **Refresh evaluation and evidence** or the
 global refresh control to bypass the per-session successful-response cache.
 
-Remaining D3 work includes live integration with the configured Mongo-backed
-API, release packaging, scoped network and volume setup, and a reproducible
-browser-accessible demonstration. D2B smoke results do not establish D3
-acceptance.
+D3 verifies the published fixture through FastAPI, the dashboard, and pinned
+Chromium. The UI receives no database credentials. Browser automation also
+checks navigation, source-derived table/chart content, refresh, unknown-user
+error and recovery, fallback metadata, and the absence of JavaScript page
+exceptions. Exact run details and the separate API, archived-evidence, offline
+ALS, Hybrid-quality, and scalability claims are in the
+[release review](module4d-release-review.md).
