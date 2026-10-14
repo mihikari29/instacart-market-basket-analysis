@@ -60,7 +60,7 @@ The isolated runtime can also be built without the Spark image or repository
 data artifacts:
 
 ```bash
-docker build -f Dockerfile.module4d-ui -t instacart-module4d-ui:local .
+docker build -f Dockerfile --target ui -t instacart-module4d-ui:local .
 docker run --rm --network module4-dashboard \
   -p 127.0.0.1:8501:8501 \
   -e MODULE4D_API_BASE_URL=http://module4d-api:8000 \
@@ -70,8 +70,10 @@ docker run --rm --network module4-dashboard \
 
 The API container must join the same task-scoped network with the DNS name
 `module4d-api`. The host UI port remains bound to loopback. The Docker build
-context is restricted by `Dockerfile.module4d-ui.dockerignore` to the pinned
-requirements and UI package; it excludes datasets, `results/`, and `.git/`.
+context uses the root `.dockerignore` allowlist; the `ui` target copies only its
+pinned requirement manifests and UI package. Datasets, `results/`, `.git/`,
+private environment files, and caches are excluded. It builds independently of
+the Spark stage. See [the Docker runbook](docker.md) for the target boundaries.
 
 The UI requires these environment settings:
 

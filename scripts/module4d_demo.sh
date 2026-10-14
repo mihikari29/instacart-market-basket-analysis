@@ -83,7 +83,6 @@ trap cleanup_failed_start ERR INT TERM
 
 python3 scripts/module4d_demo_env.py --output "$env_file"
 chmod 600 "$env_file"
-docker compose -f compose.yaml build spark-master
 compose=(docker compose --project-name "$project" --env-file "$env_file" -f compose.module4d-demo.yaml)
 "${compose[@]}" config --quiet
 "${compose[@]}" build module4d-api module4d-ui

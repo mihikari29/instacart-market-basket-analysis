@@ -15,7 +15,6 @@ import uuid
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE_IMAGE = "instacart-spark:3.5.5"
 MONGO_IMAGE = "mongo:7.0.16"
 UNIT_TESTS = (
     "tests/test_module4_package_layout.py",
@@ -50,8 +49,8 @@ def _capture(command: list[str]) -> subprocess.CompletedProcess:
 
 
 def _copy_context(destination: Path) -> None:
-    shutil.copy2(ROOT / "Dockerfile.module4d-api", destination / "Dockerfile.module4d-api")
-    shutil.copy2(ROOT / "requirements-module4d-api.txt", destination / "requirements-module4d-api.txt")
+    for name in ("Dockerfile", ".dockerignore", "requirements.txt", "requirements-dev.txt", "requirements-module4d-api.txt"):
+        shutil.copy2(ROOT / name, destination / name)
     shutil.copy2(ROOT / "pyproject.toml", destination / "pyproject.toml")
     shutil.copytree(ROOT / "src", destination / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     tests_dir = destination / "tests"
@@ -92,7 +91,6 @@ def _copy_context(destination: Path) -> None:
 def _build(image_tag: str) -> None:
     if shutil.which("docker") is None:
         raise RuntimeError("Docker CLI is required for the reproducible D1B image")
-    _run(["docker", "image", "inspect", "--format", "{{.Id}}", BASE_IMAGE])
     with tempfile.TemporaryDirectory(prefix="d1b-api-context-") as temporary:
         context = Path(temporary)
         _copy_context(context)
@@ -106,7 +104,9 @@ def _build(image_tag: str) -> None:
                 "--tag",
                 image_tag,
                 "--file",
-                "Dockerfile.module4d-api",
+                "Dockerfile",
+                "--target",
+                "api",
                 str(context),
             ],
             env={**os.environ, "DOCKER_BUILDKIT": "1"},
@@ -377,7 +377,7 @@ def main() -> int:
     session_id = uuid.uuid4().hex
     image_tag = f"module4d-api-test:{session_id[:12]}"
     try:
-        print(f"base_image={BASE_IMAGE} mongo_image={MONGO_IMAGE} mode={args.mode}", flush=True)
+        print(f"dockerfile=Dockerfile target=api mongo_image={MONGO_IMAGE} mode={args.mode}", flush=True)
         _build(image_tag)
         _runtime_smoke(image_tag, session_id)
         if args.mode in {"all", "unit"}:

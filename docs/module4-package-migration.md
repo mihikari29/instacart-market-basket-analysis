@@ -55,16 +55,16 @@ and does not query MongoDB.
 
 ## Docker build and run
 
-Build the pinned API image from the repository root. The API-specific
-`Dockerfile.module4d-api.dockerignore` keeps raw `results/`, `.git/`, private
-key files, and the large source datasets out of the build context. The
-Dockerfile copies the consolidated `src/` tree and only the five registered
-evidence files. The default `.dockerignore` keeps the Spark image context to
-its Dockerfile and pinned dependency files.
+Build the `api` target of the canonical root `Dockerfile`. It inherits the
+internal pinned `spark` stage without requiring a separately tagged Spark
+image. The shared `.dockerignore` excludes raw `results/`, `.git/`, datasets,
+private environment/key files, and caches. Each stage copies its own explicit
+resources; API packages the consolidated Python source tree, tests, selected
+validation scripts, and only the five registered evidence files. See the
+[Docker runbook](docker.md) for all four targets and the context safety audit.
 
 ```bash
-docker compose build spark-master
-docker build --pull=false -f Dockerfile.module4d-api \
+docker build --pull=false -f Dockerfile --target api \
   -t instacart-module4d-api:local .
 docker run --rm --env-file /secure/path/module4d.env \
   -p 127.0.0.1:8000:8000 instacart-module4d-api:local \
@@ -144,7 +144,7 @@ service and read-only account. The three UI test files run with dependencies
 from a development image built using:
 
 ```bash
-docker build --build-arg MODULE4D_UI_DEV=1 -f Dockerfile.module4d-ui \
+docker build --build-arg MODULE4D_UI_DEV=1 -f Dockerfile --target ui \
   -t instacart-module4d-ui-dev:local .
 ```
 

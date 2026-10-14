@@ -47,7 +47,7 @@ jobs:
         run: |
           docker build --label com.codex.task=module4d-d3-release \
             --build-arg MODULE4D_UI_DEV=1 \
-            -f Dockerfile.module4d-ui \
+            -f Dockerfile --target ui \
             -t instacart-module4d-ui-dev:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT} .
           docker run --rm \
             --label com.codex.task=module4d-d3-release \
@@ -90,7 +90,7 @@ jobs:
           "${compose[@]}" run --rm validator
 
           docker build --label com.codex.task=module4d-d3-release \
-            -f Dockerfile.module4d-browser -t "$browser_image" .
+            -f Dockerfile --target browser -t "$browser_image" .
           namespace="$(sed -n 's/^MODULE4D_DEMO_TREND_NAMESPACE=//p' "$env_file")"
           docker run --rm --network host --ipc=host \
             --label com.codex.task=module4d-d3-release \

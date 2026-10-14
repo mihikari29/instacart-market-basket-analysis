@@ -778,7 +778,7 @@ thành công chưa chứng minh DNS hoặc kết nối runtime thành công.
 
 ### 14.2. W03 — Runtime GraphFrames được kiểm chứng
 
-File chính: `Dockerfile.spark`, `requirements*.txt`, `spark.py`, `graph.py`.
+File chính: `Dockerfile` (target `spark`), `requirements*.txt`, `spark.py`, `graph.py`.
 
 - Giữ Spark 3.5.5, Java 17, Scala 2.12; chọn/pin Python wrapper và JAR GraphFrames
   thực sự tương thích. Hiện Python package là `graphframes==0.6`, JAR là
