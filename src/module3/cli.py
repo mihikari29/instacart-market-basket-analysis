@@ -115,6 +115,39 @@ def main(argv=None):
         default=int(os.environ.get("MONGO_TTL_SECONDS", Config.ttl_seconds)),
         help="Mongo TTL on updated_at (default 7 days; 0 explicitly disables retention)",
     )
+    bundle_publication = parser.add_mutually_exclusive_group()
+    bundle_publication.add_argument(
+        "--publish-trend-bundles",
+        dest="publish_trend_bundles",
+        action="store_true",
+        help="Also publish immutable finalized-window documents to MongoDB",
+    )
+    bundle_publication.add_argument(
+        "--no-publish-trend-bundles",
+        dest="publish_trend_bundles",
+        action="store_false",
+        help="Disable optional finalized-window bundle publication",
+    )
+    parser.set_defaults(
+        publish_trend_bundles=parse_bool(
+            os.environ.get(
+                "MODULE3_PUBLISH_TREND_BUNDLES",
+                str(Config.publish_trend_bundles),
+            )
+        )
+    )
+    parser.add_argument(
+        "--trend-source-namespace",
+        default=os.environ.get(
+            "MODULE3_TREND_SOURCE_NAMESPACE", Config.trend_source_namespace
+        ),
+        help="Stable identity for this logical source/replay; do not use a run ID",
+    )
+    parser.add_argument(
+        "--trend-source-scope",
+        default=os.environ.get("MODULE3_TREND_SOURCE_SCOPE", Config.trend_source_scope),
+        help="Descriptive source scope (defaults to unknown_or_mixed)",
+    )
 
     # Run / benchmark durations
     parser.add_argument("--duration-seconds", type=int, default=60,
@@ -166,6 +199,9 @@ def main(argv=None):
         mongo_collection=args.mongo_collection,
         mongo_top_k_per_window=args.mongo_top_k_per_window,
         ttl_seconds=args.ttl_seconds,
+        publish_trend_bundles=args.publish_trend_bundles,
+        trend_source_namespace=args.trend_source_namespace,
+        trend_source_scope=args.trend_source_scope,
     )
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]

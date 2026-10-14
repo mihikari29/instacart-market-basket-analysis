@@ -6,6 +6,7 @@ orchestration with finite durations.
 
 import json
 import time
+from dataclasses import asdict
 from pathlib import Path
 from threading import Thread
 
@@ -14,11 +15,62 @@ from pyspark.sql.streaming import StreamingQuery
 from .config import Config
 from .parse import from_kafka
 from .sink_mongo import write_mongo
+from .trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
 from .trending import build_window_counts, rank_trending_batch, select_top_k
 from .checkpoint import ensure_checkpoint
 
 
 PROGRESS_LOG_NAME = "streaming_progress.jsonl"
+
+
+def _publish_finalized_batch(batch_df, batch_id, config: Config) -> dict:
+    """Publish finalized Top-K rows, then optional immutable window bundles."""
+    ranked = rank_trending_batch(batch_df, config)
+    top_k = select_top_k(ranked, config)
+
+    # Keep the established row sink first. If it raises, bundles are not attempted.
+    result = write_mongo(top_k, batch_id, config)
+    if not config.publish_trend_bundles:
+        return result
+
+    if not config.trend_source_namespace:
+        # Config validates this invariant; retain a local guard for non-Config
+        # callers and to prevent publication with an unstable implicit identity.
+        raise ValueError(
+            "trend_source_namespace is required when trend bundle publication is enabled"
+        )
+
+    started = time.perf_counter()
+    from pymongo import MongoClient
+
+    with MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=10000) as client:
+        collection = client[config.mongo_database][BUNDLE_COLLECTION_NAME]
+        bundle_report = write_trend_bundles(
+            top_k,
+            collection,
+            config,
+            source_namespace=config.trend_source_namespace,
+            source_scope=config.trend_source_scope,
+            retention_seconds=config.ttl_seconds,
+        )
+
+    result = dict(result)
+    result["trend_bundles"] = {
+        "collection": BUNDLE_COLLECTION_NAME,
+        "source_namespace": config.trend_source_namespace,
+        "source_scope": config.trend_source_scope,
+        **asdict(bundle_report),
+        "publication_duration_ms": round((time.perf_counter() - started) * 1000, 3),
+    }
+    return result
+
+
+def _foreach_batch(batch_df, batch_id, config: Config, sink_log: Path) -> dict:
+    """Log only after every enabled publisher has completed successfully."""
+    result = _publish_finalized_batch(batch_df, batch_id, config)
+    with sink_log.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(result, default=str, sort_keys=True) + "\n")
+    return result
 
 
 def _progress_logger(query: StreamingQuery, output_dir: Path, stop_event) -> Thread:
@@ -109,11 +161,7 @@ def run_stream(
     sink_log = output_dir / "sink_batches.jsonl"
 
     def _foreach(batch_df, batch_id):
-        ranked = rank_trending_batch(batch_df, config)
-        top_k = select_top_k(ranked, config)
-        result = write_mongo(top_k, batch_id, config)
-        with sink_log.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(result, default=str, sort_keys=True) + "\n")
+        _foreach_batch(batch_df, batch_id, config, sink_log)
 
     writer = (
         counts.writeStream

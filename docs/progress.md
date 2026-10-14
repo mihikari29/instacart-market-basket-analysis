@@ -16,6 +16,7 @@
 | **Module 2** | Batch Layer, historical analytics, MongoDB serving, join/pruning/cache benchmarks | Apache Spark 3.5.5, PySpark, Standalone Cluster, MongoDB 7.0 | **Complete and validated on the full dataset** |
 | **Module 3** | Speed Layer, event-time stream processing, watermark, realtime trending | Spark Structured Streaming, Kafka Consumer, MongoDB Sink | **Complete and validated** |
 | **Module 4A–4B** | Collaborative filtering and product co-purchase graph | Spark MLlib (ALS), GraphFrames, MongoDB snapshot sink | **Complete: 21/21 gates; full-data publication and same-version replay validated, 10/10/2026.** |
+| **Module 4C** | Readiness-aware hybrid serving over ALS, graph/catalog, and finalized trends | Deterministic ranking, verified trend bundles, immutable MongoDB versions/pointer, CLI, Kafka/Spark integration | **Implemented and locally validated; see release review. Quality and production capacity remain unevaluated.** |
 
 ---
 
@@ -472,17 +473,34 @@ docker run --rm -v "$PWD:/workspace" -w /workspace --entrypoint python3 \
 
 ---
 
-## 7. Next stage — Module 4C–4D / Serving integration
+## 7. Module 4C — Hybrid serving and streaming integration
 
-Module 4A–4B is complete and validated on the full dataset. The active pair is
-model `als-full-20261010-fixed`, graph `graph-full-20261010-fixed`, run
-`full-ab-20261010-fixed-replay`; `module4_snapshot_readiness` (`_id=active`)
-reports `ready=true`. Consumers check this pointer and both versions before
-reading `user_recommendations` and `product_graph_metrics`, joining on
-`user_id`/`product_id`.
+Module 4C combines the accepted Module 4A–4B readiness generation with verified
+Module 3 finalized-window bundles. Its serving path captures bounded ALS and
+graph/catalog inputs, ranks them deterministically with explicit ALS-only,
+trend-only, and hybrid modes, then publishes immutable per-user recommendation
+versions and promotes a non-regressing active pointer. The CLI requires an
+explicit event-time cutoff and source namespace. C1–C8B implementation and
+acceptance evidence are summarized in the [Module 4C release review](module4c-release-review.md)
+and [evidence receipts](evidence/module4c/README.md).
 
-API/dashboard integration and blending with `realtime_trending` belong to the
-separate Module 4C–4D backlog. Official evaluation involving trend needs an
-explicit time cutoff to prevent prior/train leakage. Connected Components and
-further model-quality tuning remain optional work outside the mandatory A/B
-checklist.
+Local validation includes the focused C4A/C4B/Module 4C suite (204 passed), the
+Module 3 integration suite (17 passed), isolated MongoDB 7.0.16 concurrency
+tests (11 passed), and repository-wide validation (542 passed, 69 service-backed
+Mongo tests skipped because their I1/I2/I3 or Module 4 test URI was not
+configured). C8A and C8B are bounded synthetic experiments; their exact report
+hashes and observations are preserved in the evidence receipts.
+
+No official-train recommendation-quality result is available. Module 1's
+ordinary event artifacts merge prior and train inputs without retaining
+eval_set provenance, so a leakage-safe temporal cutoff cannot be inferred from
+those artifacts alone. A defensible chronology or reprocessed source is needed
+before comparing Hybrid with ALS-only, personal frequency, or global
+popularity. The synthetic C8A fixture also showed no Top-1 or rank-order change
+at the default lambda 0.7, despite a controlled trend-score shift.
+
+The release evidence does not establish multi-node capacity, sustained
+production load, or checkpoint restart recovery. The active A/B readiness
+pointer also does not carry recommendation K; configured recommendation_k must
+match the accepted publication. See the release review for the complete limits
+and the historical Docker cleanup correction.

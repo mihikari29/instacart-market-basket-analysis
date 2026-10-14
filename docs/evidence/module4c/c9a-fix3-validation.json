@@ -1,0 +1,75 @@
+{
+  "fix_commit": "c475e46da6257b5ca6b9199a146ee5bc4d30606e",
+  "fix_commit_message": "fix(module3): handle identical concurrent trend bundle retries",
+  "approved_source_scope": [
+    "src/module3/trend_bundle.py",
+    "tests/test_module3_trend_bundle.py",
+    "tests/test_module3_trend_bundle_mongo.py"
+  ],
+  "runtime": {
+    "image": "instacart-spark:3.5.5",
+    "source_mount": "read-only",
+    "network": "disabled",
+    "spark_local_ip": "127.0.0.1"
+  },
+  "tests": {
+    "focused_c4a_c4b_module4c": {
+      "result": "passed",
+      "passed": 204,
+      "failed": 0,
+      "skipped": 0
+    },
+    "module3_integration": {
+      "result": "passed",
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "isolated_live_mongodb_concurrency": {
+      "mongodb_version": "7.0.16",
+      "result": "passed",
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "real_server_duplicate_key_failpoint_exercised": true
+    },
+    "repository_wide": {
+      "result": "passed",
+      "passed": 542,
+      "failed": 0,
+      "skipped": 69,
+      "warnings": 5,
+      "skip_categories": [
+        "C4A and I1 data Mongo integration tests require I1_MONGODB_TEST_URI",
+        "C5/C6 Mongo integration tests require I2_MONGODB_TEST_URI",
+        "C7B Mongo integration tests require I3_MONGODB_TEST_URI",
+        "Module 4 Mongo integration tests require MODULE4_MONGO_TEST_URI"
+      ]
+    }
+  },
+  "static_checks": {
+    "repository_ruff": {"command": "ruff check --no-cache .", "result": "passed", "exit_code": 0},
+    "docker_compose_config": {"command": "docker compose config --quiet", "result": "passed", "exit_code": 0},
+    "python_compileall": {"command": "python3 -m compileall -q src tests scripts", "result": "passed", "exit_code": 0},
+    "git_diff_check": {"command": "git diff --check", "result": "passed", "exit_code": 0}
+  },
+  "historical_report_checksums": {
+    "c8a": {
+      "sha256": "cfb07b5d37fc244f9cbf9b5e7d22f4660ca3db47ec0f3f6352477718be095362",
+      "verified": true
+    },
+    "c8b": {
+      "sha256": "9035deca000e138840286514543769cfb11fe8680a5cf7c4c3c9fffc23523ecd",
+      "verified": true
+    }
+  },
+  "task_owned_docker_cleanup": {
+    "result": "passed",
+    "container": "c9a-fix3-mongo-c9a-fix3-702c3362e5de42339a0f9b76c9a9486c",
+    "network": "c9a-fix3-net-c9a-fix3-702c3362e5de42339a0f9b76c9a9486c",
+    "remaining_task_containers": 0,
+    "remaining_task_networks": 0,
+    "remaining_task_volumes": 0,
+    "global_prune_used": false
+  }
+}
