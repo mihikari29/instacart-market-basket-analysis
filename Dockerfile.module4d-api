@@ -1,0 +1,18 @@
+# Development/test image built on the project's existing pinned Spark/PyMongo image.
+FROM instacart-spark:3.5.5@sha256:e64ed82ffb741e48d74ea64ae8c464cb3473a1d18b92edc444bd1aa4357c3cf7
+
+USER root
+WORKDIR /workspace
+COPY requirements-module4d-api.txt /tmp/requirements-module4d-api.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-module4d-api.txt \
+    && python3 -m pip check \
+    && python3 -c "import pymongo; assert pymongo.version == '4.11.3', pymongo.version"
+
+COPY pyproject.toml /workspace/pyproject.toml
+COPY src/ /workspace/src/
+COPY tests/ /workspace/tests/
+COPY scripts/module4d_api_validation.py /workspace/scripts/module4d_api_validation.py
+ENV PYTHONPATH=/workspace
+
+# The image is exercised with explicit test commands by the validation script.
+CMD ["python3", "-m", "pytest", "-q"]
