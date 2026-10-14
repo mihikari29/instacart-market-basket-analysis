@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-import hashlib
 import math
 from numbers import Real
 import re
@@ -115,6 +114,10 @@ class InvalidSnapshot(SnapshotReadError):
 
 class DatabaseReadFailure(SnapshotReadError):
     """MongoDB could not complete a bounded read."""
+
+
+class TrendSnapshotIndexUnavailable(SnapshotReadError):
+    """The administrator-provisioned index required by C5 selection is absent."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -531,22 +534,64 @@ def read_hybrid_snapshot(database: Any, user_id: int, *, max_time_ms: int = 5_00
     }
 
 
+TREND_SELECTION_INDEX_NAME = "idx_source_namespace_window_end_desc"
+
+
+def _supports_trend_selection(index: Any) -> bool:
+    if not isinstance(index, Mapping):
+        return False
+    if index.get("hidden") is True or "partialFilterExpression" in index:
+        return False
+    collation = index.get("collation")
+    if isinstance(collation, Mapping) and collation.get("locale") != "simple":
+        return False
+    keys = index.get("key")
+    if not isinstance(keys, (list, tuple)) or len(keys) < 2:
+        return False
+    namespace_key, window_key = keys[:2]
+    return (
+        isinstance(namespace_key, (list, tuple))
+        and len(namespace_key) == 2
+        and namespace_key[0] == "source_namespace"
+        and type(namespace_key[1]) is int
+        and namespace_key[1] in (-1, 1)
+        and isinstance(window_key, (list, tuple))
+        and len(window_key) == 2
+        and window_key[0] == "window_end"
+        and type(window_key[1]) is int
+        and window_key[1] in (-1, 1)
+    )
+
+
+def _trend_selection_index_name(collection: Any) -> str:
+    try:
+        indexes = collection.index_information()
+    except Exception as exc:
+        raise TrendSnapshotQueryError("failed to inspect finalized trend indexes") from exc
+    if not isinstance(indexes, Mapping):
+        raise TrendSnapshotQueryError("MongoDB returned invalid finalized trend index metadata")
+    compatible = sorted(
+        name for name, definition in indexes.items() if isinstance(name, str) and _supports_trend_selection(definition)
+    )
+    if TREND_SELECTION_INDEX_NAME in compatible:
+        return TREND_SELECTION_INDEX_NAME
+    if compatible:
+        return compatible[0]
+    raise TrendSnapshotIndexUnavailable("the finalized trend selection index is not provisioned")
+
+
 class _TrendCursorAdapter:
-    """Translate C5's logical query/sort to the bundle's indexed _id range."""
+    """Close the cursor while passing C5's sort and limit through unchanged."""
 
     def __init__(self, cursor: Any) -> None:
         self._cursor = cursor
 
     def sort(self, keys: list[tuple[str, int]]) -> _TrendCursorAdapter:
-        if keys != [("window_end", -1)]:
-            raise ValueError("C5 trend read requested an unsupported sort")
-        self._cursor.sort([("_id", -1)])
+        self._cursor.sort(keys)
         return self
 
     def limit(self, value: int) -> _TrendCursorAdapter:
-        if value != 1:
-            raise ValueError("C5 trend read must remain limited to one bundle")
-        self._cursor.limit(1)
+        self._cursor.limit(value)
         return self
 
     def __iter__(self):
@@ -560,34 +605,18 @@ class _TrendCursorAdapter:
 
 
 class _IndexedTrendCollectionAdapter:
-    """Expose the C5 collection protocol while querying only deterministic bundle IDs."""
+    """Add the verified supporting index hint without changing C5's logical query."""
 
     name = BUNDLE_COLLECTION_NAME
 
-    def __init__(self, collection: Any, max_time_ms: int) -> None:
+    def __init__(self, collection: Any, index_name: str, max_time_ms: int) -> None:
         self._collection = collection
+        self._index_name = index_name
         self._max_time_ms = max_time_ms
 
     def find(self, query: Mapping[str, Any]) -> _TrendCursorAdapter:
-        if set(query) != {"source_namespace", "window_end"}:
-            raise ValueError("C5 trend query has an unsupported shape")
-        namespace = query["source_namespace"]
-        bound = query["window_end"]
-        if not isinstance(namespace, str) or not isinstance(bound, Mapping) or set(bound) != {"$lte"}:
-            raise ValueError("C5 trend query has invalid namespace or event-time bound")
-        cutoff = bound["$lte"]
-        if not isinstance(cutoff, datetime):
-            raise ValueError("C5 trend query cutoff must be a datetime")
-        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
-            cutoff = cutoff.replace(tzinfo=timezone.utc)
-        cutoff = cutoff.astimezone(timezone.utc)
-        canonical_cutoff = cutoff.isoformat(timespec="microseconds").replace("+00:00", "Z")
-        prefix = f"trend-window:{hashlib.sha256(namespace.encode('utf-8')).hexdigest()}:"
-        cursor = self._collection.find(
-            {"_id": {"$gte": prefix, "$lte": prefix + canonical_cutoff}},
-            max_time_ms=self._max_time_ms,
-        )
-        cursor = cursor.hint("_id_")
+        cursor = self._collection.find(query, max_time_ms=self._max_time_ms)
+        cursor = cursor.hint(self._index_name)
         return _TrendCursorAdapter(cursor)
 
 
@@ -607,13 +636,19 @@ def read_trend_snapshot(
         age = timedelta(seconds=max_event_age_seconds)
     try:
         collection = database[TREND_BUNDLE_COLLECTION]
+        index_name = _trend_selection_index_name(collection)
         return read_verified_trend_snapshot(
-            _IndexedTrendCollectionAdapter(collection, max_time_ms),
+            _IndexedTrendCollectionAdapter(collection, index_name, max_time_ms),
             source_namespace=source_namespace,
             as_of_event_time=as_of_event_time,
             max_event_age=age,
         )
-    except (TrendSnapshotRequestError, TrendSnapshotIntegrityError, TrendSnapshotQueryError):
+    except (
+        TrendSnapshotRequestError,
+        TrendSnapshotIntegrityError,
+        TrendSnapshotQueryError,
+        TrendSnapshotIndexUnavailable,
+    ):
         raise
     except Exception as exc:
         raise TrendSnapshotQueryError("failed to read the finalized trend bundle") from exc

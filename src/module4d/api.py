@@ -25,6 +25,7 @@ from .readers import (
     SnapshotChanged,
     SnapshotNotFound,
     SnapshotNotReady,
+    TrendSnapshotIndexUnavailable,
     read_hybrid_snapshot,
     read_trend_snapshot,
 )
@@ -143,6 +144,15 @@ def create_app(
     @app.exception_handler(TrendSnapshotIntegrityError)
     async def trend_integrity_error(request: Request, _exc: TrendSnapshotIntegrityError):
         return _error(request, 502, "invalid_source_document", "The finalized trend bundle failed validation.")
+
+    @app.exception_handler(TrendSnapshotIndexUnavailable)
+    async def trend_index_unavailable(request: Request, _exc: TrendSnapshotIndexUnavailable):
+        return _error(
+            request,
+            503,
+            "trend_index_unavailable",
+            "The finalized trend query index is not provisioned.",
+        )
 
     @app.exception_handler(TrendSnapshotQueryError)
     async def trend_query_error(request: Request, _exc: TrendSnapshotQueryError):

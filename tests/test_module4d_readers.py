@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import math
 
 import pytest
 
 from src.module3.trend_bundle import _build_document
+from src.module4c.trend_reader import TrendSnapshotIntegrityError
 from src.module4d.readers import (
     DatabaseReadFailure,
     InvalidSnapshot,
     SnapshotChanged,
     SnapshotNotFound,
     SnapshotNotReady,
+    TREND_SELECTION_INDEX_NAME,
+    TrendSnapshotIndexUnavailable,
+    TrendSnapshotQueryError,
     read_hybrid_snapshot,
     read_trend_snapshot,
 )
@@ -27,6 +31,7 @@ class Cursor:
         self.rows = list(rows)
         self.sort_keys = None
         self.limit_value = None
+        self.hint_value = None
         self.max_time = None
         self.closed = False
 
@@ -36,7 +41,8 @@ class Cursor:
             self.rows.sort(key=lambda row: row.get(key), reverse=direction < 0)
         return self
 
-    def hint(self, _value):
+    def hint(self, value):
+        self.hint_value = value
         return self
 
     def limit(self, value):
@@ -66,6 +72,24 @@ class Collection:
         self.fail_find_one = False
         self.find_one_hook = None
         self.write_calls = []
+        self.indexes = (
+            {
+                "_id_": {"key": [("_id", 1)]},
+                TREND_SELECTION_INDEX_NAME: {
+                    "key": [("source_namespace", 1), ("window_end", -1)]
+                },
+            }
+            if name == "realtime_trending_windows"
+            else {"_id_": {"key": [("_id", 1)]}}
+        )
+        self.index_information_calls = 0
+        self.fail_index_information = False
+
+    def index_information(self):
+        self.index_information_calls += 1
+        if self.fail_index_information:
+            raise OSError("mongodb://private-user:secret@private-host")
+        return deepcopy(self.indexes)
 
     def find_one(self, query, **kwargs):
         self.find_one_calls.append((deepcopy(query), dict(kwargs)))
@@ -90,6 +114,25 @@ class Collection:
                 deepcopy(row)
                 for row in self.documents
                 if bounds["$gte"] <= row.get("_id", "") <= bounds["$lte"]
+            ]
+        elif set(query) == {"source_namespace", "window_end"}:
+            namespace = query["source_namespace"]
+            cutoff = query["window_end"]["$lte"]
+
+            def as_utc(value):
+                if not isinstance(value, datetime):
+                    return None
+                if value.tzinfo is None or value.utcoffset() is None:
+                    return value.replace(tzinfo=timezone.utc)
+                return value.astimezone(timezone.utc)
+
+            cutoff_utc = as_utc(cutoff)
+            rows = [
+                deepcopy(row)
+                for row in self.documents
+                if row.get("source_namespace") == namespace
+                and as_utc(row.get("window_end")) is not None
+                and as_utc(row["window_end"]) <= cutoff_utc
             ]
         else:
             rows = [
@@ -306,27 +349,31 @@ def test_mongo_query_error_is_not_misclassified_as_missing_and_is_sanitized_upst
     assert "secret" not in str(error.value)
 
 
-def test_trend_reader_uses_only_the_deterministic_id_index_range_and_c5_verifier():
-    start = BASE_TIME - timedelta(hours=2)
-    end = BASE_TIME - timedelta(hours=1)
+def _trend_document(window_end, *, namespace=NAMESPACE, product_id=501, scope="historical_test"):
+    start = window_end - timedelta(hours=1)
     item = {
         "window_start": start,
-        "window_end": end,
-        "product_id": 501,
+        "window_end": window_end,
+        "product_id": product_id,
         "purchase_count_30m": 2,
         "purchase_count_120m": 5,
         "trend_score": 0.75,
         "trend_rank": 1,
     }
-    document = _build_document(
-        {"window_start": start, "window_end": end, "items": [item], "_row_count": 1},
-        source_namespace=NAMESPACE,
-        source_scope="historical_test",
+    return _build_document(
+        {"window_start": start, "window_end": window_end, "items": [item], "_row_count": 1},
+        source_namespace=namespace,
+        source_scope=scope,
         top_k=20,
         config_hash=hashlib.sha256(b"config").hexdigest(),
         published_at=BASE_TIME,
         retention_seconds=0,
     )
+
+
+def test_trend_reader_passes_c5_selection_unchanged_and_hints_the_verified_index():
+    end = BASE_TIME - timedelta(hours=1)
+    document = _trend_document(end)
     database = Database(trend_documents=[document])
 
     result = read_trend_snapshot(
@@ -339,13 +386,189 @@ def test_trend_reader_uses_only_the_deterministic_id_index_range_and_c5_verifier
     assert result.source_scope == "historical_test"
     assert result.trend_recommendations[0].trend_score == 0.75
     query, kwargs = database.trends.find_calls[0]
-    prefix = f"trend-window:{hashlib.sha256(NAMESPACE.encode()).hexdigest()}:"
-    assert query == {"_id": {"$gte": prefix, "$lte": prefix + BASE_TIME.isoformat(timespec="microseconds").replace("+00:00", "Z")}}
+    assert query == {"source_namespace": NAMESPACE, "window_end": {"$lte": BASE_TIME}}
     assert kwargs == {"max_time_ms": 5000}
-    assert database.trends.cursors[0].sort_keys == [("_id", -1)]
+    assert database.trends.cursors[0].hint_value == TREND_SELECTION_INDEX_NAME
+    assert database.trends.cursors[0].sort_keys == [("window_end", -1)]
     assert database.trends.cursors[0].limit_value == 1
     assert database.trends.cursors[0].closed
+    assert database.trends.index_information_calls == 1
     assert not database.trends.write_calls
+
+
+def test_newest_noncanonical_id_is_an_integrity_error_without_older_fallback():
+    older = _trend_document(BASE_TIME - timedelta(hours=2))
+    newer = _trend_document(BASE_TIME - timedelta(hours=1))
+    newer["_id"] = "malformed-newest-id"
+    database = Database(trend_documents=[older, newer])
+
+    with pytest.raises(TrendSnapshotIntegrityError):
+        read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert database.trends.cursors[0].rows == [newer]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda document: document.update(content_sha256="f" * 64),
+        lambda document: document.update(schema_version=999),
+    ],
+)
+def test_corrupt_newest_bundle_is_not_skipped_for_an_older_valid_one(mutation):
+    older = _trend_document(BASE_TIME - timedelta(hours=2))
+    newer = _trend_document(BASE_TIME - timedelta(hours=1))
+    mutation(newer)
+    with pytest.raises(TrendSnapshotIntegrityError):
+        read_trend_snapshot(
+            Database(trend_documents=[older, newer]),
+            source_namespace=NAMESPACE,
+            as_of_event_time=BASE_TIME,
+        )
+
+
+def test_namespace_prefix_and_similar_character_collisions_do_not_leak():
+    exact = _trend_document(BASE_TIME - timedelta(hours=1), product_id=501)
+    prefix_collision = _trend_document(
+        BASE_TIME - timedelta(minutes=5), namespace=NAMESPACE + "-child", product_id=502
+    )
+    similar_characters = _trend_document(
+        BASE_TIME - timedelta(minutes=3), namespace=NAMESPACE.replace("d1a", "d1A"), product_id=503
+    )
+    database = Database(trend_documents=[exact, prefix_collision, similar_characters])
+
+    result = read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+
+    assert result.available
+    assert result.source_namespace == NAMESPACE
+    assert [row.product_id for row in result.trend_recommendations] == [501]
+    assert database.trends.find_calls[0][0] == {
+        "source_namespace": NAMESPACE,
+        "window_end": {"$lte": BASE_TIME},
+    }
+
+
+@pytest.mark.parametrize(
+    "window_delta,expected_available",
+    [
+        (timedelta(0), True),
+        (-timedelta(milliseconds=1), True),
+        (timedelta(milliseconds=1), False),
+    ],
+)
+def test_c5_millisecond_cutoff_includes_equal_and_prior_but_excludes_next(
+    window_delta, expected_available
+):
+    document = _trend_document(BASE_TIME + window_delta)
+    result = read_trend_snapshot(
+        Database(trend_documents=[document]),
+        source_namespace=NAMESPACE,
+        as_of_event_time=BASE_TIME,
+    )
+    assert result.available is expected_available
+    assert result.status == ("available" if expected_available else "missing")
+
+
+def test_bson_decoded_naive_utc_timestamps_preserve_c5_selection():
+    from bson import BSON
+
+    document = _trend_document(BASE_TIME)
+    decoded = BSON.encode(document).decode()
+    assert decoded["window_end"].tzinfo is None
+    result = read_trend_snapshot(
+        Database(trend_documents=[decoded]),
+        source_namespace=NAMESPACE,
+        as_of_event_time=BASE_TIME.astimezone(timezone(timedelta(hours=5, minutes=30))),
+    )
+    assert result.available
+    assert result.window_end == BASE_TIME
+
+
+def test_no_eligible_bundle_returns_c5_missing_result():
+    future = _trend_document(BASE_TIME + timedelta(milliseconds=1))
+    result = read_trend_snapshot(
+        Database(trend_documents=[future]), source_namespace=NAMESPACE, as_of_event_time=BASE_TIME
+    )
+    assert not result.available
+    assert result.status == "missing"
+
+
+@pytest.mark.parametrize("max_event_age_seconds,expected", [(None, "expired"), (0, "stale")])
+def test_expired_or_stale_newest_bundle_does_not_fall_back(max_event_age_seconds, expected):
+    older = _trend_document(BASE_TIME - timedelta(hours=2))
+    newest = _trend_document(BASE_TIME - timedelta(hours=1))
+    if max_event_age_seconds is None:
+        newest["published_at"] = BASE_TIME - timedelta(days=2)
+        newest["expires_at"] = BASE_TIME - timedelta(days=1)
+    else:
+        newest["published_at"] = BASE_TIME
+        newest.pop("expires_at", None)
+    result = read_trend_snapshot(
+        Database(trend_documents=[older, newest]),
+        source_namespace=NAMESPACE,
+        as_of_event_time=BASE_TIME,
+        max_event_age_seconds=max_event_age_seconds,
+    )
+    assert not result.available
+    assert result.status == expected
+
+
+def test_missing_or_unsuitable_selection_index_fails_before_any_find():
+    database = Database(trend_documents=[_trend_document(BASE_TIME - timedelta(hours=1))])
+    database.trends.indexes = {"_id_": {"key": [("_id", 1)]}}
+    with pytest.raises(TrendSnapshotIndexUnavailable):
+        read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert database.trends.find_calls == []
+
+    database.trends.indexes = {
+        "wrong_order": {
+            "key": [("window_end", -1), ("source_namespace", 1)]
+        }
+    }
+    with pytest.raises(TrendSnapshotIndexUnavailable):
+        read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert database.trends.find_calls == []
+
+
+@pytest.mark.parametrize(
+    "unusable",
+    [
+        {"partialFilterExpression": {"source_namespace": NAMESPACE}},
+        {"hidden": True},
+        {"collation": {"locale": "en", "strength": 2}},
+    ],
+)
+def test_partial_hidden_or_non_simple_collation_index_is_not_accepted(unusable):
+    database = Database(trend_documents=[_trend_document(BASE_TIME - timedelta(hours=1))])
+    database.trends.indexes = {
+        "otherwise_compatible": {
+            "key": [("source_namespace", 1), ("window_end", -1)],
+            **unusable,
+        }
+    }
+    with pytest.raises(TrendSnapshotIndexUnavailable):
+        read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert database.trends.find_calls == []
+
+
+def test_reverse_scan_compatible_index_is_accepted():
+    database = Database(trend_documents=[_trend_document(BASE_TIME - timedelta(hours=1))])
+    database.trends.indexes = {
+        "reverse_scan_compatible": {
+            "key": [("source_namespace", -1), ("window_end", 1), ("_id", 1)]
+        }
+    }
+    result = read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert result.available
+    assert database.trends.cursors[0].hint_value == "reverse_scan_compatible"
+
+
+def test_index_metadata_failure_is_a_sanitized_query_failure():
+    database = Database()
+    database.trends.fail_index_information = True
+    with pytest.raises(TrendSnapshotQueryError) as error:
+        read_trend_snapshot(database, source_namespace=NAMESPACE, as_of_event_time=BASE_TIME)
+    assert "private-host" not in str(error.value)
+    assert "secret" not in str(error.value)
 
 
 @pytest.mark.parametrize(

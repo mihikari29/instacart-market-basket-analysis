@@ -18,9 +18,11 @@ MODULE4D_TREND_SOURCE_NAMESPACES=<comma-separated exact namespace allowlist>
 
 Startup fails if any value is missing. There is no project database fallback.
 The account needs read access to `module4_snapshot_readiness`,
-`final_recommendations`, and `realtime_trending_windows`. The API does not
-create collections or indexes. It expects the C6 `uq_serving_user_rank` index
-and the ordinary `_id_` index on trend bundles.
+`final_recommendations`, and `realtime_trending_windows`, including permission
+to inspect index metadata. The API does not create collections or indexes. It
+expects the C6 `uq_serving_user_rank` index and the ordinary `_id_` index on
+trend bundles. Trend selection also requires the administrator-provisioned
+compound index described below.
 
 ## Local demonstration
 
@@ -45,11 +47,44 @@ multi-document transaction. The Hybrid reader never consults the A/B `_id="activ
 pointer, because the stored Hybrid snapshot can validly reference an older A/B
 generation.
 
-The trend implementation calls the accepted C5 verifier through an adapter
-that translates its namespace/event-time selection into the deterministic
-`_id` range documented in D0. The API returns C5's validated metadata and
-scores. Missing, expired, and explicitly stale snapshots keep their C5 status
-and reason; an integrity error fails closed.
+The trend implementation delegates candidate selection and integrity checks
+to the accepted C5 verifier. Its collection adapter passes C5's exact
+`source_namespace` and `window_end <= query_cutoff` predicate, descending
+`window_end` sort, and one-document limit through unchanged. It only adds
+`maxTimeMS`, closes the cursor, and hints a compatible index selected from
+read-only index metadata. This preserves which document C5 selects: a newest
+malformed or corrupted bundle returns `502 invalid_source_document`, and the
+reader never falls back to an older bundle.
+
+### Required trend query index
+
+The Module 3 bundle writer maintains the optional `expires_at` TTL index, but
+does not create the index needed for namespace/time selection. An administrator
+must provision the following index in the configured database before starting
+the API:
+
+```javascript
+db.realtime_trending_windows.createIndex(
+  { source_namespace: 1, window_end: -1 },
+  { name: "idx_source_namespace_window_end_desc" }
+)
+```
+
+For a local academic demo, connect `mongosh` with an administrator URI scoped
+to the same database configured by `MODULE4D_MONGO_DATABASE`, run the command
+above, then start the API with its database-scoped read-only account. Do not
+grant index-management rights to the API account. The API checks index metadata
+on each trend request, accepts only a compatible non-hidden, non-partial index
+with `source_namespace` and `window_end` as its first two keys, and hints that
+index. If it cannot inspect indexes, the request returns a sanitized
+`503 service_unavailable`. If no suitable index exists, it returns
+`503 trend_index_unavailable` before issuing a data query; it never falls back
+to a collection scan or the former `_id` range.
+
+Missing, expired, and explicitly stale snapshots keep their C5 status and
+reason. Event-time staleness is evaluated only when `max_event_age_seconds` is
+provided. Processing-time `expires_at` is a separate expiration condition; an
+expired newest bundle is reported as expired even when an older bundle remains.
 
 The unchanged C5 import graph imports PySpark modules. The API image therefore
 uses the existing project image that already contains PySpark. API startup and
@@ -70,4 +105,8 @@ the API dependency pins, and test tooling. Its MongoDB service is version
 7.0.16, uses a dedicated network and tmpfs storage, publishes no host port, and
 is removed with the test network after the run. The live fixture seeds data
 through the accepted C4A and C6 writer contracts, then uses a database-scoped
-read-only account for HTTP requests.
+read-only account for HTTP requests. The administrative fixture client
+provisions the required trend selection index. Live tests compare C5 and HTTP
+behavior for a malformed newest `_id`, exercise similar namespaces and BSON
+millisecond boundaries, inspect an `IXSCAN` explain plan, and verify that a
+missing index fails before any trend `find` command.

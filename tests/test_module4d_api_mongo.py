@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import hashlib
 import os
 import time
 import uuid
@@ -18,11 +19,12 @@ import pytest
 from pyspark.sql import SparkSession
 
 from src.module3.config import Config as Module3Config
-from src.module3.trend_bundle import write_trend_bundles
+from src.module3.trend_bundle import _build_document, write_trend_bundles
 from src.module4.config import Config as Module4Config
 from src.module4.sink_mongo import update_pair_readiness
 from src.module4c import publish_hybrid_recommendations, read_verified_trend_snapshot
 from src.module4c.data import READINESS_COLLECTION
+from src.module4c.trend_reader import TrendSnapshotIntegrityError
 from src.module4d.api import create_app
 from src.module4d.config import ApiConfig
 from src.module4d import readers
@@ -65,6 +67,41 @@ def _guarded_test_uri() -> str:
     if options != {"authsource": "admin"}:
         pytest.fail(f"{TEST_URI_ENV} may contain only authSource=admin")
     return uri
+
+
+def _trend_document(
+    window_end: datetime,
+    *,
+    namespace: str = NAMESPACE,
+    product_id: int = 900,
+    published_at: datetime | None = None,
+    retention_seconds: int = 0,
+    source_scope: str = SCOPE,
+) -> dict:
+    window_start = window_end - timedelta(minutes=30)
+    item = {
+        "window_start": window_start,
+        "window_end": window_end,
+        "product_id": product_id,
+        "purchase_count_30m": 2,
+        "purchase_count_120m": 3,
+        "trend_score": 0.75,
+        "trend_rank": 1,
+    }
+    return _build_document(
+        {
+            "window_start": window_start,
+            "window_end": window_end,
+            "items": [item],
+            "_row_count": 1,
+        },
+        source_namespace=namespace,
+        source_scope=source_scope,
+        top_k=20,
+        config_hash=hashlib.sha256(b"d1a-fix trend config").hexdigest(),
+        published_at=published_at or BASE_TIME + timedelta(minutes=1),
+        retention_seconds=retention_seconds,
+    )
 
 
 @pytest.mark.parametrize(
@@ -222,6 +259,10 @@ def live_service():
             published_at=BASE_TIME + timedelta(minutes=1),
             retention_seconds=0,
         )
+        database["realtime_trending_windows"].create_index(
+            [("source_namespace", 1), ("window_end", -1)],
+            name=readers.TREND_SELECTION_INDEX_NAME,
+        )
         verified_trend = read_verified_trend_snapshot(
             database["realtime_trending_windows"],
             source_namespace=NAMESPACE,
@@ -312,6 +353,7 @@ def test_live_readonly_role_rejects_insert_and_update(live_service):
     readonly = MongoClient(live_service.readonly_uri, serverSelectionTimeoutMS=2500)
     database = readonly[live_service.database_name]
     existing = database["final_recommendations"].find_one({"user_id": USER_HYBRID})
+    trends = database["realtime_trending_windows"]
     with pytest.raises(OperationFailure) as insert_error:
         database["final_recommendations"].insert_one({"_id": "forbidden-d1a-write"})
     with pytest.raises(OperationFailure) as update_error:
@@ -320,6 +362,10 @@ def test_live_readonly_role_rejects_insert_and_update(live_service):
         )
     assert insert_error.value.code == 13
     assert update_error.value.code == 13
+    with pytest.raises(OperationFailure) as index_error:
+        trends.create_index([("forbidden_probe", 1)], name="forbidden_d1a_index")
+    assert index_error.value.code == 13
+    assert readers.TREND_SELECTION_INDEX_NAME in trends.index_information()
     readonly.close()
 
 
@@ -337,7 +383,7 @@ def test_live_http_reads_hybrid_empty_trend_only_and_als_only_snapshots(live_ser
     assert all(item["from_als"] and not item["from_trend"] for item in als_only.json()["recommendations"])
 
 
-def test_live_trend_api_reads_atomic_bundle_through_id_range(live_service):
+def test_live_trend_api_reads_atomic_bundle_with_c5_selection(live_service):
     with _api_client(live_service) as client:
         response = client.get(
             "/api/v1/trends",
@@ -350,6 +396,196 @@ def test_live_trend_api_reads_atomic_bundle_through_id_range(live_service):
     assert body["row_count"] == 2
     assert body["content_sha256"]
     assert [item["trend_rank"] for item in body["items"]] == [1, 2]
+    assert body["window_end"] == (BASE_TIME - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+
+
+def test_live_malformed_newest_id_matches_c5_error_and_never_falls_back(live_service):
+    collection = live_service.database["realtime_trending_windows"]
+    older = _trend_document(BASE_TIME - timedelta(hours=2), product_id=910)
+    newer = _trend_document(BASE_TIME - timedelta(minutes=30), product_id=911)
+    newer["_id"] = f"malformed-newest-{uuid.uuid4().hex}"
+    inserted_ids = [older["_id"], newer["_id"]]
+    collection.insert_many([older, newer])
+    before = list(collection.find({"_id": {"$in": inserted_ids}}).sort("_id", 1))
+    listener = _CommandRecorder()
+    try:
+        with pytest.raises(TrendSnapshotIntegrityError):
+            read_verified_trend_snapshot(
+                collection,
+                source_namespace=NAMESPACE,
+                as_of_event_time=BASE_TIME,
+                processing_time_utc=datetime.now(timezone.utc),
+            )
+
+        with _api_client(live_service, listener) as client:
+            response = client.get(
+                "/api/v1/trends",
+                params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+            )
+        assert response.status_code == 502
+        assert response.json()["error"]["code"] == "invalid_source_document"
+        assert "malformed-newest" not in response.text
+        trend_finds = [
+            command
+            for name, _collection_name, command in listener.events
+            if name == "find" and command.get("find") == collection.name
+        ]
+        assert len(trend_finds) == 1
+        assert trend_finds[0]["filter"] == {
+            "source_namespace": NAMESPACE,
+            "window_end": {"$lte": BASE_TIME},
+        }
+        assert trend_finds[0]["sort"] == {"window_end": -1}
+        assert trend_finds[0]["limit"] == 1
+        assert trend_finds[0]["hint"] == readers.TREND_SELECTION_INDEX_NAME
+        prohibited = {"insert", "update", "delete", "createIndexes", "drop", "dropDatabase", "bulkWrite"}
+        assert prohibited.isdisjoint({name for name, _collection_name, _command in listener.events})
+        assert list(collection.find({"_id": {"$in": inserted_ids}}).sort("_id", 1)) == before
+    finally:
+        collection.delete_many({"_id": {"$in": inserted_ids}})
+
+
+def test_live_trend_namespace_prefix_and_character_variants_are_isolated(live_service):
+    collection = live_service.database["realtime_trending_windows"]
+    similar = [
+        _trend_document(
+            BASE_TIME - timedelta(minutes=10),
+            namespace=NAMESPACE + "-child",
+            product_id=920,
+            source_scope="prefix_collision",
+        ),
+        _trend_document(
+            BASE_TIME - timedelta(minutes=5),
+            namespace=NAMESPACE.replace("d1a", "d1A"),
+            product_id=921,
+            source_scope="similar_characters",
+        ),
+    ]
+    ids = [document["_id"] for document in similar]
+    collection.insert_many(similar)
+    try:
+        with _api_client(live_service) as client:
+            response = client.get(
+                "/api/v1/trends",
+                params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source_namespace"] == NAMESPACE
+        assert body["source_scope"] == SCOPE
+        assert {row["product_id"] for row in body["items"]} == {110, 111}
+    finally:
+        collection.delete_many({"_id": {"$in": ids}})
+
+
+def test_live_bson_millisecond_boundary_and_offset_timezone_are_exact(live_service):
+    collection = live_service.database["realtime_trending_windows"]
+    cutoff_utc = BASE_TIME + timedelta(microseconds=123_456)
+    windows = [
+        _trend_document(cutoff_utc.replace(microsecond=122_000), product_id=930),
+        _trend_document(cutoff_utc.replace(microsecond=123_000), product_id=931),
+        _trend_document(cutoff_utc.replace(microsecond=124_000), product_id=932),
+    ]
+    ids = [document["_id"] for document in windows]
+    collection.insert_many(windows)
+    try:
+        local_offset = timezone(timedelta(hours=2))
+        cutoff_text = cutoff_utc.astimezone(local_offset).isoformat()
+        with _api_client(live_service) as client:
+            response = client.get(
+                "/api/v1/trends",
+                params={"source_namespace": NAMESPACE, "as_of_event_time": cutoff_text},
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is True
+        assert body["items"][0]["product_id"] == 931
+        assert body["window_end"] == cutoff_utc.replace(microsecond=123_000).isoformat().replace("+00:00", "Z")
+    finally:
+        collection.delete_many({"_id": {"$in": ids}})
+
+
+@pytest.mark.parametrize("state", ["expired", "stale"])
+def test_live_expired_or_stale_newest_window_does_not_fall_back(live_service, state):
+    collection = live_service.database["realtime_trending_windows"]
+    older = _trend_document(BASE_TIME - timedelta(hours=2), product_id=940)
+    newest = _trend_document(
+        BASE_TIME - timedelta(minutes=20),
+        product_id=941,
+        published_at=BASE_TIME + timedelta(minutes=1),
+        retention_seconds=1 if state == "expired" else 0,
+    )
+    ids = [older["_id"], newest["_id"]]
+    collection.insert_many([older, newest])
+    try:
+        params = {"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()}
+        if state == "stale":
+            params["max_event_age_seconds"] = "0"
+        with _api_client(live_service) as client:
+            response = client.get("/api/v1/trends", params=params)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is False
+        assert body["status"] == state
+        assert body["items"] == []
+    finally:
+        collection.delete_many({"_id": {"$in": ids}})
+
+
+def _plan_stages(node):
+    if isinstance(node, dict):
+        stage = node.get("stage")
+        yield stage
+        for value in node.values():
+            yield from _plan_stages(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _plan_stages(value)
+
+
+def test_live_c5_selection_query_uses_approved_compound_index(live_service):
+    collection = live_service.database["realtime_trending_windows"]
+    indexes = collection.index_information()
+    definition = indexes[readers.TREND_SELECTION_INDEX_NAME]
+    assert definition["key"] == [("source_namespace", 1), ("window_end", -1)]
+
+    plan = (
+        collection.find(
+            {"source_namespace": NAMESPACE, "window_end": {"$lte": BASE_TIME}},
+            max_time_ms=2500,
+        )
+        .sort([("window_end", -1)])
+        .limit(1)
+        .hint(readers.TREND_SELECTION_INDEX_NAME)
+        .explain()
+    )
+    stages = list(_plan_stages(plan.get("queryPlanner", {}).get("winningPlan", {})))
+    assert "IXSCAN" in stages
+    assert "COLLSCAN" not in stages
+    assert readers.TREND_SELECTION_INDEX_NAME in repr(plan)
+
+
+def test_live_missing_compound_index_fails_without_finding_or_scanning(live_service):
+    collection = live_service.database["realtime_trending_windows"]
+    index_name = readers.TREND_SELECTION_INDEX_NAME
+    collection.drop_index(index_name)
+    listener = _CommandRecorder()
+    try:
+        with _api_client(live_service, listener) as client:
+            response = client.get(
+                "/api/v1/trends",
+                params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+            )
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "trend_index_unavailable"
+        assert not any(
+            name == "find" and command.get("find") == collection.name
+            for name, _collection_name, command in listener.events
+        )
+    finally:
+        collection.create_index(
+            [("source_namespace", 1), ("window_end", -1)], name=index_name
+        )
 
 
 def test_live_pointer_change_during_read_returns_409_and_restores_fixture(monkeypatch, live_service):
@@ -458,7 +694,12 @@ def test_live_gets_issue_no_write_commands_and_do_not_change_indexes_or_active_p
     )
     assert any(
         command.get("find") == "realtime_trending_windows"
-        and set(command.get("filter", {})) == {"_id"}
-        and command.get("hint") == "_id_"
+        and command.get("filter") == {
+            "source_namespace": NAMESPACE,
+            "window_end": {"$lte": BASE_TIME},
+        }
+        and command.get("sort") == {"window_end": -1}
+        and command.get("limit") == 1
+        and command.get("hint") == readers.TREND_SELECTION_INDEX_NAME
         for command in find_commands
     )

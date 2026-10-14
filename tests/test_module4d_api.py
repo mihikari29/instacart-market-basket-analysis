@@ -11,8 +11,10 @@ import pytest
 from pyspark import SparkContext
 
 from src.module3.trend_bundle import _build_document
+from src.module4c.trend_reader import TrendSnapshotIntegrityError, read_verified_trend_snapshot
 from src.module4d.api import create_app
 from src.module4d.config import ApiConfig
+from src.module4d import readers
 from tests.module4d_helpers import BASE_TIME, NAMESPACE, make_snapshot
 from tests.test_module4d_readers import Database
 
@@ -48,9 +50,9 @@ def test_backend_configuration_requires_explicit_database_uri_and_namespace(monk
         ApiConfig.from_environment()
 
 
-def _trend_document(*, digest_valid=True, retention_seconds=0):
+def _trend_document(*, digest_valid=True, retention_seconds=0, window_end=None):
     start = BASE_TIME - timedelta(hours=2)
-    end = BASE_TIME - timedelta(hours=1)
+    end = window_end or BASE_TIME - timedelta(hours=1)
     item = {
         "window_start": start,
         "window_end": end,
@@ -72,6 +74,29 @@ def _trend_document(*, digest_valid=True, retention_seconds=0):
     if not digest_valid:
         document["content_sha256"] = "f" * 64
     return document
+
+
+def test_trend_api_does_not_fall_back_after_newest_noncanonical_id_is_selected():
+    older = _trend_document()
+    newer = _trend_document(window_end=BASE_TIME - timedelta(minutes=30))
+    newer["_id"] = "corrupt-newest-bundle-id"
+    database = Database(trend_documents=[older, newer])
+
+    with pytest.raises(TrendSnapshotIntegrityError):
+        read_verified_trend_snapshot(
+            database.trends,
+            source_namespace=NAMESPACE,
+            as_of_event_time=BASE_TIME,
+        )
+
+    with TestClient(_app(database)) as client:
+        response = client.get(
+            "/api/v1/trends",
+            params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+        )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "invalid_source_document"
 
 
 def test_health_is_liveness_only_and_does_not_touch_mongo():
@@ -163,7 +188,13 @@ def test_trend_route_preserves_c5_metadata_and_scores():
     assert body["content_sha256"]
     assert body["row_count"] == 1
     assert body["items"] == [{"product_id": 991, "trend_score": 0.875, "trend_rank": 1}]
-    assert database.trends.find_calls[0][0].keys() == {"_id"}
+    assert database.trends.find_calls[0][0] == {
+        "source_namespace": NAMESPACE,
+        "window_end": {"$lte": BASE_TIME},
+    }
+    assert database.trends.cursors[0].sort_keys == [("window_end", -1)]
+    assert database.trends.cursors[0].limit_value == 1
+    assert database.trends.cursors[0].hint_value == readers.TREND_SELECTION_INDEX_NAME
 
 
 def test_missing_trend_is_a_successful_explicit_unavailable_result():
@@ -242,6 +273,59 @@ def test_trend_database_failure_is_503():
             params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
         )
     assert response.status_code == 503
+
+
+def test_missing_trend_selection_index_fails_before_query_without_disclosing_details():
+    database = Database(trend_documents=[_trend_document()])
+    database.trends.indexes = {"_id_": {"key": [("_id", 1)]}}
+    with TestClient(_app(database)) as client:
+        response = client.get(
+            "/api/v1/trends",
+            params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+        )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "trend_index_unavailable"
+    assert database.trends.find_calls == []
+    assert database.trends.write_calls == []
+    assert "_id_" not in response.text
+    assert "mongo" not in response.text.lower()
+
+
+def test_trend_index_metadata_failure_is_service_unavailable_and_sanitized():
+    database = Database()
+    database.trends.fail_index_information = True
+    with TestClient(_app(database)) as client:
+        response = client.get(
+            "/api/v1/trends",
+            params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+        )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_unavailable"
+    for secret in ("private-user", "private-host", "secret", "mongodb://"):
+        assert secret not in response.text
+    assert database.trends.find_calls == []
+
+
+def test_unexpected_trend_validation_exception_is_not_http_200_or_leaked(monkeypatch):
+    def unexpected(*_args, **_kwargs):
+        raise RuntimeError("mongodb://private-user:private-password@private-host")
+
+    monkeypatch.setattr(readers, "read_verified_trend_snapshot", unexpected)
+    with TestClient(_app(Database())) as client:
+        response = client.get(
+            "/api/v1/trends",
+            params={"source_namespace": NAMESPACE, "as_of_event_time": BASE_TIME.isoformat()},
+        )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_unavailable"
+    for secret in ("private-user", "private-password", "private-host", "mongodb://"):
+        assert secret not in response.text
+
+
+def test_openapi_exposes_trend_index_unavailable_response():
+    schema = create_app(_config(), database=Database()).openapi()
+    responses = schema["paths"]["/api/v1/trends"]["get"]["responses"]
+    assert "503" in responses
 
 
 def test_openapi_is_get_only_for_d1a_and_has_no_wildcard_cors():
