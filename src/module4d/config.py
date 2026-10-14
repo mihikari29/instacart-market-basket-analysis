@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import os
+from pathlib import Path
 import re
 
 from pymongo.uri_parser import parse_uri
@@ -24,6 +25,7 @@ class ApiConfig:
     connect_timeout_ms: int = 3_000
     socket_timeout_ms: int = 5_000
     max_time_ms: int = 5_000
+    application_root: Path = field(default_factory=lambda: Path(__file__).resolve().parents[2], repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.mongodb_uri, str) or not self.mongodb_uri.strip():
@@ -62,6 +64,9 @@ class ApiConfig:
             value = getattr(self, name)
             if type(value) is not int or not 1 <= value <= 60_000:
                 raise ValueError(f"{name} must be an integer between 1 and 60000")
+        if not isinstance(self.application_root, (str, Path)) or not str(self.application_root).strip():
+            raise ValueError("MODULE4D_APP_ROOT must be a configured application root")
+        object.__setattr__(self, "application_root", Path(self.application_root).expanduser().resolve())
 
     @classmethod
     def from_environment(cls) -> ApiConfig:
@@ -76,4 +81,5 @@ class ApiConfig:
         namespaces = tuple(value.strip() for value in namespaces_raw.split(",") if value.strip())
         if not namespaces:
             raise ValueError("MODULE4D_TREND_SOURCE_NAMESPACES is required")
-        return cls(uri, database, namespaces)
+        root = Path(os.environ.get("MODULE4D_APP_ROOT", Path(__file__).resolve().parents[2]))
+        return cls(uri, database, namespaces, application_root=root)

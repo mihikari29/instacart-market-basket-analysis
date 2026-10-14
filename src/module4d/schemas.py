@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, StrictBool, StrictInt, StrictStr
 
@@ -99,4 +99,134 @@ class TrendResponse(StrictResponse):
     content_sha256: StrictStr | None
     row_count: StrictInt = Field(ge=0, le=20)
     items: list[TrendItem] = Field(max_length=20)
+    observed_at: datetime
+
+
+class BatchProductItem(StrictResponse):
+    product_id: StrictInt = Field(gt=0)
+    purchase_count: StrictInt = Field(gt=0)
+    unique_users: StrictInt = Field(gt=0)
+    reorder_count: StrictInt = Field(ge=0)
+    reorder_rate: FiniteFloat = Field(ge=0, le=1)
+    run_id: StrictStr
+    last_batch_time: datetime
+
+
+class BatchDepartmentItem(StrictResponse):
+    department_id: StrictInt = Field(ge=1, le=21)
+    purchase_count: StrictInt = Field(gt=0)
+    unique_users: StrictInt = Field(gt=0)
+    reorder_rate: FiniteFloat = Field(ge=0, le=1)
+    run_id: StrictStr
+    last_batch_time: datetime
+
+
+class BatchSource(StrictResponse):
+    collection: StrictStr
+    scope: Literal["prior-only item purchases"]
+    run_id: StrictStr | None
+    last_batch_time: datetime | None
+    atomic_with_other_collections: Literal[False]
+
+
+class BatchProductsResponse(StrictResponse):
+    order: Literal["purchase_count", "reorder_rate"]
+    items: list[BatchProductItem] = Field(max_length=50)
+    source: BatchSource
+    metric_definition: dict[str, StrictStr]
+    observed_at: datetime
+
+
+class BatchDepartmentsResponse(StrictResponse):
+    items: list[BatchDepartmentItem] = Field(max_length=21)
+    source: BatchSource
+    metric_definition: dict[str, StrictStr]
+    observed_at: datetime
+
+
+class EvidenceRegistryItem(StrictResponse):
+    evidence_id: StrictStr
+    title: StrictStr
+    kind: StrictStr
+    classification: StrictStr
+    source_label: StrictStr
+    available: StrictBool
+    status: Literal["available", "missing", "invalid"]
+    sha256: StrictStr | None
+
+
+class EvidenceRegistryResponse(StrictResponse):
+    items: list[EvidenceRegistryItem] = Field(max_length=20)
+    observed_at: datetime
+
+
+class EvidenceProvenance(StrictResponse):
+    artifact_key: StrictStr
+    source_label: StrictStr
+    classification: StrictStr
+    archived: StrictBool
+    sha256: StrictStr
+
+
+class EvidenceResponse(StrictResponse):
+    evidence_id: StrictStr
+    title: StrictStr
+    kind: StrictStr
+    provenance: EvidenceProvenance
+    data: dict[str, Any]
+    observed_at: datetime
+
+
+class OrderDayBin(StrictResponse):
+    order_dow: StrictInt = Field(ge=0, le=6)
+    order_count: StrictInt = Field(ge=0)
+
+
+class OrderHourBin(StrictResponse):
+    order_hour_of_day: StrictInt = Field(ge=0, le=23)
+    order_count: StrictInt = Field(ge=0)
+
+
+class OrdersDistributionResponse(StrictResponse):
+    scope: Literal["all orders"]
+    measure: Literal["order count, not item-level prior purchases"]
+    total_orders: StrictInt = Field(gt=0)
+    orders_by_day_of_week: list[OrderDayBin] = Field(min_length=7, max_length=7)
+    orders_by_hour: list[OrderHourBin] = Field(min_length=24, max_length=24)
+    provenance: EvidenceProvenance
+    observed_at: datetime
+
+
+class EvaluationMetric(StrictResponse):
+    k: StrictInt = Field(ge=1, le=100)
+    status: Literal["evaluated"]
+    precision_at_k: FiniteFloat = Field(ge=0, le=1)
+    recall_at_k: FiniteFloat = Field(ge=0, le=1)
+    map_at_k: FiniteFloat = Field(ge=0, le=1)
+    ndcg_at_k: FiniteFloat = Field(ge=0, le=1)
+    evaluated_users: StrictInt = Field(gt=0)
+    user_coverage: FiniteFloat | None
+    catalog_coverage_rate: FiniteFloat | None
+    catalog_coverage: StrictInt | None = None
+    users_with_no_recommendations: StrictInt | None = None
+
+
+class EvaluationCohort(StrictResponse):
+    definition: StrictStr | None
+    users: StrictInt = Field(gt=0)
+    metrics: dict[str, dict[str, EvaluationMetric]]
+
+
+class AlsEvaluationResponse(StrictResponse):
+    evidence_id: StrictStr
+    title: StrictStr
+    provenance: EvidenceProvenance
+    algorithm_scope: Literal["ALS and recorded baselines"]
+    evaluation_method: dict[str, StrictStr]
+    ks: list[StrictInt] = Field(min_length=3, max_length=3)
+    cohorts: dict[str, EvaluationCohort]
+    history_subgroups: dict[str, EvaluationCohort]
+    als_vs_baseline_deltas: dict[str, dict[str, dict[str, dict[str, FiniteFloat]]]]
+    official_test_truth_available: StrictBool
+    truth_summary: dict[str, StrictInt]
     observed_at: datetime
