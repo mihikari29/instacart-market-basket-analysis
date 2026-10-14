@@ -10,13 +10,17 @@ contracts are in [module4d-data-contracts.md](module4d-data-contracts.md).
 ## Implementation status update
 
 The D0 design has since been implemented through D1A (verified read-only
-recommendation and trend API) and D1B (batch analytics and curated evidence
-API). The backend now lives in `src/module4/dashboard/` and its Hybrid reader
-uses `src/module4/hybrid/`. D2 Streamlit and D3 full dashboard integration are
-still pending; this design document does not claim the visualization is done.
-The D1A/D1B dependencies are pinned in
-[`requirements-module4d-api.txt`](../requirements-module4d-api.txt); Streamlit
-remains deferred until D2.
+recommendation and trend API), D1B (batch analytics and curated evidence API),
+and D2A (the three-page Streamlit MVP documented in
+[`module4d-streamlit.md`](module4d-streamlit.md)). The backend and UI now live
+under `src/module4/dashboard/`; the Hybrid reader uses `src/module4/hybrid/`.
+D2B's full Evaluation & Performance page and D3 release integration remain
+pending. D0 route proposals below are historical design context; the
+implemented D1A/D1B routes documented in [`module4d-api.md`](module4d-api.md)
+take precedence. The D1A/D1B dependencies are pinned in
+[`requirements-module4d-api.txt`](../requirements-module4d-api.txt), and UI
+dependencies are pinned separately in
+[`requirements-module4d-ui.txt`](../requirements-module4d-ui.txt).
 
 The design follows [Proposal §30](Proposal.md),
 correcting its collection summaries where current code differs. In particular,
