@@ -43,3 +43,18 @@ repeatable join, pruning and cache measurements.
 
 Fixture timings demonstrate correctness and instrumentation on a tiny synthetic
 dataset; they are not full-scale performance claims.
+
+## Module 4 acceptance and release evidence
+
+Module 4A–4B full-data acceptance records, failed/interrupted attempts, and
+same-version replay receipts remain under [module4/](module4/). Module 4C's
+sanitized C8A/C8B receipts and C9A-FIX3 cleanup validation are in
+[module4c/](module4c/); original experiment reports and logs remain in their
+recorded local `results/` paths and are not rewritten here. The retired
+standalone Module 4C/4D technical and release documents are preserved in
+[module4c/](module4c/) and [module4d/](module4d/).
+
+The canonical current plan is [module4-plan.md](../module4-plan.md); progress
+and current claim boundaries are in [progress.md](../progress.md); operating
+commands are in [docker.md](../docker.md). Historical release evidence remains
+attributed to the revision and environment recorded in each archive document.

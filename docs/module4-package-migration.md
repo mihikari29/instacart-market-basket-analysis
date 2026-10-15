@@ -92,8 +92,8 @@ serving requests:
 MongoDB's ordinary `_id_` indexes must also remain available. Module 2's
 publication replaces its product collection and indexes, so administrators
 must recreate both D1B product indexes after every publication. The API never
-creates or repairs indexes. See [the full API contract](module4d-api.md) for
-index compatibility and failure behavior.
+creates or repairs indexes. See [Module 4 plan §20](module4-plan.md#module4d-spec)
+for the canonical route, index, and failure contracts.
 
 Create a database-scoped MongoDB user with only the built-in `read` role on the
 API database. Configure the server-side environment with:
@@ -149,7 +149,8 @@ docker build --build-arg MODULE4D_UI_DEV=1 -f Dockerfile --target ui \
 ```
 
 The D3 browser and publisher checks use the pinned `deploy/module4/compose.demo.yaml`
-fixture and Playwright image; see the [Streamlit runbook](module4d-streamlit.md).
+fixture and Playwright image; see the [Docker guide](docker.md) for the runbook
+and the [Module 4D archive](evidence/module4d/README.md) for dated browser evidence.
 
 Repository Ruff and Compose checks:
 
@@ -167,5 +168,6 @@ Module 4D D0 architecture, D1A read-only Hybrid/trend API, the D1A-FIX C5
 selection parity correction, D1B batch/evidence API, and D2 four-page Streamlit
 dashboard are implemented. D3 packages and validates a synthetic isolated
 MongoDB demonstration. The API and browser evidence are distinct from offline
-ALS quality, unevaluated Hybrid quality, and production scalability; see the
-[release review](module4d-release-review.md).
+ALS quality, unevaluated Hybrid quality, and production scalability; see
+[progress §8](progress.md#progress-module4d)
+and the [Module 4D evidence archive](evidence/module4d/README.md).

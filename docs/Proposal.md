@@ -537,6 +537,39 @@ Synthetic day/month partitioning supports partition pruning and historical filte
 - Storage: HDFS
 - Consumer: Module 4
 
+## 11.4. `product_dimension`
+
+- Format: Parquet
+- Storage: HDFS
+- Consumer: Module 2, Module 4
+
+## 11.5. `curated_interactions`
+
+Primary schema:
+
+```text
+order_id
+user_id
+product_id
+add_to_cart_order
+reordered
+aisle_id
+department_id
+order_number
+event_time
+synthetic_date
+```
+
+- Format: Parquet
+- Storage: HDFS
+- Consumer: Module 2, Module 4
+
+## 11.6. `purchase_event`
+
+- Format: JSON
+- Topic: Kafka `instacart-purchase-events`
+- Consumer: Module 3
+
 ---
 
 # 12. MODULE 2 — Batch Layer
@@ -1806,38 +1839,5 @@ The proposal's most important element is the **Data Contract** between modules. 
 7. Kubernetes Documentation.
 8. Instacart Market Basket Analysis Dataset, Kaggle.
 9. IT4931 course materials — Big Data Storage and Processing.
-
-## 11.4. `product_dimension`
-
-- Format: Parquet
-- Storage: HDFS
-- Consumer: Module 2, Module 4
-
-## 11.5. `curated_interactions`
-
-Primary schema:
-
-```text
-order_id
-user_id
-product_id
-add_to_cart_order
-reordered
-aisle_id
-department_id
-order_number
-event_time
-synthetic_date
-```
-
-- Format: Parquet
-- Storage: HDFS
-- Consumer: Module 2, Module 4
-
-## 11.6. `purchase_event`
-
-- Format: JSON
-- Topic: Kafka `instacart-purchase-events`
-- Consumer: Module 3
 
 ---

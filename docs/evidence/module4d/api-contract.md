@@ -44,7 +44,7 @@ routes `GET /api/v1/batch/products`, `GET /api/v1/batch/departments`,
 The health route is process liveness and does not ping MongoDB. The application
 OpenAPI schema describes all D1A and D1B routes.
 For the consolidated package paths and Docker commands, see the
-[Module 4 package migration guide](module4-package-migration.md).
+[Module 4 package migration guide](../../module4-package-migration.md).
 
 Recommendation reads return `404` when no per-user pointer is published,
 `503` when the pointer is not ready or MongoDB is unavailable, `409` when the
@@ -220,7 +220,7 @@ requests do not create a Spark session, launch Spark jobs, or start Kafka or
 HDFS. This keeps the accepted C5 implementation unchanged.
 
 The shared context allowlist and separate runtime targets are documented in
-[the Docker runbook](docker.md). Compose continues to configure the API with a
+[the Docker runbook](../../docker.md). Compose continues to configure the API with a
 database-scoped read identity; administrators provision its indexes separately.
 
 ## Reproducible validation

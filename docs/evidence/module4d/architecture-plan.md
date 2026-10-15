@@ -5,28 +5,28 @@
 This document defines the D0 design for a read-only dashboard over the data that
 Modules 2, 3, 4A–4B, and 4C actually persist. It does not add an API, dashboard,
 dependency, or production-code change. The data inventory and field-level
-contracts are in [module4d-data-contracts.md](module4d-data-contracts.md).
+contracts are in [module4d-data-contracts.md](data-contracts.md).
 
 ## Implementation status update
 
 The D0 design has since been implemented through D1A (verified read-only
 recommendation and trend API), D1B (batch analytics and curated evidence API),
 and D2A (the first three Streamlit pages documented in
-[`module4d-streamlit.md`](module4d-streamlit.md)). The backend and UI now live
+[`module4d-streamlit.md`](streamlit-implementation.md)). The backend and UI now live
 under `src/module4/dashboard/`; the Hybrid reader uses `src/module4/hybrid/`.
 D2B implemented and validated the fourth Evaluation & Performance page using
 the accepted archived evaluation and evidence API contracts. D3 packaged the
 loopback-only Compose demo and verified the synthetic publisher fixture,
 read-only FastAPI path, and browser flow. Observed evidence and limits are in
-[`module4d-release-review.md`](module4d-release-review.md).
+[`module4d-release-review.md`](release-review.md).
 D0 route proposals below are historical design context; the
-implemented D1A/D1B routes documented in [`module4d-api.md`](module4d-api.md)
+implemented D1A/D1B routes documented in [`module4d-api.md`](api-contract.md)
 take precedence. The D1A/D1B dependencies are pinned in
-[`deploy/module4/requirements/api.txt`](../deploy/module4/requirements/api.txt), and UI
+[`deploy/module4/requirements/api.txt`](../../../deploy/module4/requirements/api.txt), and UI
 dependencies are pinned separately in
-[`deploy/module4/requirements/ui.txt`](../deploy/module4/requirements/ui.txt).
+[`deploy/module4/requirements/ui.txt`](../../../deploy/module4/requirements/ui.txt).
 
-The design follows [Proposal §30](Proposal.md),
+The design follows [Proposal §30](../../Proposal.md),
 correcting its collection summaries where current code differs. In particular,
 department/hour/day reports are local Module 2 artifacts; the immutable trend
 bundle collection is separate from the legacy mutable trend collection; and
@@ -44,7 +44,7 @@ This fits the existing Python, PyMongo, pandas, and requests stack and is easy
 to demonstrate locally. FastAPI provides typed request validation, explicit
 response schemas, OpenAPI documentation, and a testable boundary around the
 database. Streamlit supports tables and interactive charts with little UI
-boilerplate. At D0, the current [requirements.txt](../requirements.txt) did not
+boilerplate. At D0, the current [requirements.txt](../../../requirements.txt) did not
 include FastAPI, Uvicorn, Streamlit, or a chart library. D1A/D1B added pinned
 FastAPI and Uvicorn dependencies in the API-specific requirements file;
 Streamlit remains deferred. Streamlit's built-in charts and pandas tables
@@ -188,7 +188,7 @@ the Module 4C publication CLI or service.
   product lists at most 20; departments at most 21; per-user result at most 20
   rows per algorithm; local report request at most one registered run and a
   bounded date range.
-- Use the exact indexes listed in [module4d-data-contracts.md](module4d-data-contracts.md).
+- Use the exact indexes listed in [module4d-data-contracts.md](data-contracts.md).
   Add and verify a compound product index before promising deterministic sorted
   top-purchased output. Do not query the current snapshot by an unindexed
   `run_id` predicate.
@@ -211,7 +211,7 @@ or network-accessible deployment requires authentication and authorization,
 TLS, and rate limits. Do not expose the API or UI on `0.0.0.0` at the host.
 
 Use a dedicated MongoDB account with read access only to the required database
-and collections. The current [compose.yaml](../compose.yaml) has an unauthenticated
+and collections. The current [compose.yaml](../../../compose.yaml) has an unauthenticated
 MongoDB service for local development; D1 must either add a read-only dashboard
 account without changing the existing module writers, or document that the
 demo is isolated to localhost. Pass the URI through backend environment or a

@@ -488,14 +488,17 @@ docker run --rm -v "$PWD:/workspace" -w /workspace --entrypoint python3 \
 
 ## 7. Module 4C — Hybrid serving and streaming integration
 
+<a id="progress-module4c"></a>
+
 Module 4C combines the accepted Module 4A–4B readiness generation with verified
 Module 3 finalized-window bundles. Its serving path captures bounded ALS and
 graph/catalog inputs, ranks them deterministically with explicit ALS-only,
 trend-only, and hybrid modes, then publishes immutable per-user recommendation
-versions and promotes a non-regressing active pointer. The CLI requires an
-explicit event-time cutoff and source namespace. C1–C8B implementation and
-acceptance evidence are summarized in the [Module 4C release review](module4c-release-review.md)
-and [evidence receipts](evidence/module4c/README.md).
+versions and promotes a non-regressing per-user pointer. The CLI requires an
+explicit event-time cutoff and source namespace. The canonical ranking,
+publication, and evaluation contracts are in the [Module 4 plan](module4-plan.md);
+dated release records and sanitized receipts are in the [Module 4C evidence
+archive](evidence/module4c/README.md).
 
 Local validation includes the focused C4A/C4B/Module 4C suite (204 passed), the
 Module 3 integration suite (17 passed), isolated MongoDB 7.0.16 concurrency
@@ -506,11 +509,22 @@ hashes and observations are preserved in the evidence receipts.
 
 No official-train recommendation-quality result is available. Module 1's
 ordinary event artifacts merge prior and train inputs without retaining
-eval_set provenance, so a leakage-safe temporal cutoff cannot be inferred from
-those artifacts alone. A defensible chronology or reprocessed source is needed
-before comparing Hybrid with ALS-only, personal frequency, or global
-popularity. The synthetic C8A fixture also showed no Top-1 or rank-order change
-at the default lambda 0.7, despite a controlled trend-score shift.
+`eval_set` provenance, so a leakage-safe temporal cutoff cannot be inferred
+from those artifacts alone. A defensible chronology or reprocessed source is
+needed before comparing Hybrid with ALS-only, personal frequency, or global
+popularity. C8A varied lambda across 0.0, 0.5, 0.7, 0.9, and 1.0 on a fixed
+synthetic fixture. The controlled trend shift changed Top-1 at 0.0 and 0.5; at
+the default 0.7 it changed neither Top-1 nor rank order. This is responsiveness
+evidence, not accuracy evidence.
+
+C8B planned, acknowledged, and consumed 48 controlled events with zero invalid
+records and observed 36 finalized bundle documents. The two selected windows
+produced separate bundle-visible observations and advanced the per-user serving
+pointer while preserving prior version rows. The run was bounded and synthetic;
+it did not exercise checkpoint restart. Its original report's cleanup field
+predates the later anonymous-volume correction, so that field is not evidence
+that Kafka image-declared volumes were removed. The cleanup audit and receipts
+remain preserved in the evidence archive.
 
 The release evidence does not establish multi-node capacity, sustained
 production load, or checkpoint restart recovery. The active A/B readiness
@@ -522,6 +536,8 @@ and the historical Docker cleanup correction.
 
 ## 8. Module 4D — Read-only API and Streamlit dashboard
 
+<a id="progress-module4d"></a>
+
 The completed D0 design is implemented in D1A and D1B. The read-only FastAPI
 application exposes verified Hybrid recommendations and finalized trends,
 bounded Module 2 batch analytics, and five registered historical evidence
@@ -532,10 +548,12 @@ or create indexes.
 The package move consolidates the implementation under
 `src/module4/dashboard/` while retaining the separate 4D responsibility. The
 four-page Streamlit frontend reads the API over HTTP; it has no MongoDB driver
-or MongoDB network path. See the [architecture plan](module4d-plan.md),
-[API contract](module4d-api.md), [Streamlit runbook](module4d-streamlit.md),
-[release review](module4d-release-review.md), [data contracts](module4d-data-contracts.md),
-and [package migration guide](module4-package-migration.md).
+or MongoDB network path. The canonical route, data, and UI specification is in
+the [Module 4 plan](module4-plan.md); startup, index provisioning, demo, and
+cleanup instructions are in the [Docker guide](docker.md). Original API,
+architecture, data-contract, and UI documents are preserved in the
+[Module 4D evidence archive](evidence/module4d/README.md). Package paths and
+imports remain in the [migration guide](module4-package-migration.md).
 
 ### D3 local integration and release validation
 
@@ -551,17 +569,22 @@ and publishes synthetic batch metrics, two distinct finalized trend bundles,
 Module 4A/4B source readiness, and warm, fallback, and ready-empty Hybrid
 snapshots through accepted publishers. The fixture administrator provisions
 indexes and creates a database-scoped read role; the API and live API validator
-use only that role. See the release review for recorded response values,
-evidence hashes, browser results, and claim boundaries.
+use only that role. Recorded response values, evidence hashes, browser results,
+and claim boundaries remain in the evidence archive.
 
 The local release run passed the repository Spark suite (690 passed, 69
 service-backed tests skipped, five Spark warnings), the D2A/D2B UI suite (64
 passed), the D1A/D1B API harness (497 unit and 26 live Mongo tests passed), and
-93 Module 3/4/4C live Mongo tests. Ruff, Compose, OpenAPI/Uvicorn startup,
-container dependency checks, compileability, the source-backed route validator,
-and pinned Chromium browser E2E passed. The browser exercised all four pages
-through the host loopback URL. These results validate API behavior, isolated
-integration, browser rendering, archived evidence, and offline ALS metrics as
-separate claims; they do not establish Hybrid recommendation quality or
-production scalability. GitHub CI/review/merge state is recorded separately in
-the release review.
+93 Module 3/4/4C live Mongo tests. The isolated fixture and read-only API route
+validator passed all 21 HTTP cases. Pinned Chromium exercised all four pages,
+source-derived content, refresh, fallback, and error recovery without page
+exceptions. Ruff, Compose configuration, OpenAPI/Uvicorn startup, dependency
+checks, compileability, and shell checks passed. These results validate the
+recorded API, isolated integration, browser, archived-evidence, and offline ALS
+scopes separately; they do not establish Hybrid recommendation quality or
+production scalability.
+
+GitHub reported success for the required `fixtures` and dependent browser job,
+Module 3 streaming, and Module 4A/4B PR and branch workflows on implementation
+head `172f2f748a28bb9b23b98063173f8dfe7136d7f8` (PR #7). Those are historical
+checks for that recorded head, not fresh checks for this documentation branch.

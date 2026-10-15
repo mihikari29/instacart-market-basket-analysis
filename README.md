@@ -22,12 +22,11 @@ The speed layer processes event time with validation, deduplication, watermarkin
 and finalized-window trend ranking. Module 4C verifies those immutable trend
 bundles, combines them with accepted Module 4A–4B snapshots, and publishes
 versioned per-user recommendations in MongoDB without changing the validated
-Modules 1–3 contracts. See the [Module 4C release review](docs/module4c-release-review.md)
-and [evaluation plan](docs/module4c-evaluation-plan.md) for evidence and limits.
-Module 4A–4D keep separate responsibilities inside one Python package rooted at
-`src/module4/`. The Module 4D read API (D1A and D1B) is implemented; its
-four-page Streamlit UI and isolated integration demo are documented in the
-[Module 4D release review](docs/module4d-release-review.md).
+Modules 1–3 contracts. Modules 4A–4D retain separate responsibilities inside
+`src/module4/`. The canonical technical specification, including current
+Module 4C/4D contracts and evaluation limits, is the [Module 4 plan](docs/module4-plan.md).
+Current project status is in [progress](docs/progress.md), and original C8/D3
+release records are preserved in the [Module 4 evidence archive](docs/evidence/README.md).
 
 ## Repo layout
 
@@ -400,9 +399,9 @@ evidence. C8A and C8B use synthetic fixtures; they do not establish production
 capacity or recommendation accuracy. Official-train quality evaluation still
 requires a defensible leakage-safe chronology and cutoff.
 
-See the [Module 4C release review](docs/module4c-release-review.md),
-[release evidence receipts](docs/evidence/module4c/README.md), and
-[evaluation plan](docs/module4c-evaluation-plan.md).
+See the [Module 4 plan](docs/module4-plan.md) for ranking and evaluation
+contracts and the [Module 4C evidence archive](docs/evidence/module4c/README.md)
+for dated release reviews, receipts, and detailed experiment records.
 
 For canonical package imports, the Hybrid CLI, API startup and validation
 commands, see the [Module 4 package migration guide](docs/module4-package-migration.md).
@@ -411,10 +410,11 @@ commands, see the [Module 4 package migration guide](docs/module4-package-migrat
 
 The four-page Streamlit dashboard reads the live Module 4D FastAPI application
 for Hybrid recommendations, finalized trends, prior-only Module 2 statistics,
-and registered archived evidence. The UI has no MongoDB connection. For the
-reproducible Docker demonstration, required indexes, read-only account, browser
-checks, and evidence limits, see the [Module 4D release review](docs/module4d-release-review.md)
-and [Streamlit runbook](docs/module4d-streamlit.md).
+and registered archived evidence. The UI has no MongoDB connection. The
+[Module 4 plan](docs/module4-plan.md) documents the API and dashboard contracts;
+the [Docker guide](docs/docker.md) covers startup, required indexes, demo and
+cleanup. Historical release evidence and the retired standalone documents are
+preserved in the [Module 4D evidence archive](docs/evidence/module4d/README.md).
 
 The opt-in demo uses a unique MongoDB database on disposable tmpfs, binds only
 the API and UI ports to host loopback, and seeds clearly identified synthetic
