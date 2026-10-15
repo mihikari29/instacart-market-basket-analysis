@@ -8,15 +8,14 @@ window. Min/max normalization and row-number ranking run only on the static
 DataFrame supplied by ``foreachBatch``.
 """
 
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
-from pyspark.sql import Window
 
 from .config import Config
 
 
 def _window_agg(df: DataFrame, window_dur: str, slide: str, count_alias: str) -> DataFrame:
-    """Group by product within a tumbling-sliding window of event_time."""
+    """Count events per product in event-time windows with the given slide."""
     return (
         df.groupBy(F.window("event_time", window_dur, slide).alias("w"), "product_id")
         .agg(F.count(F.lit(1)).alias(count_alias))
@@ -31,15 +30,18 @@ def _window_agg(df: DataFrame, window_dur: str, slide: str, count_alias: str) ->
 
 def _normalize(df: DataFrame, count_col: str) -> DataFrame:
     """Min-max normalize per (window_end) so trend scores lie in [0, 1]."""
-    w = Window.partitionBy("window_end")
-    norm_col = "norm_" + count_col
+    normalization_window = Window.partitionBy("window_end")
+    normalized_column = "norm_" + count_col
+    # Equal counts receive zero rather than dividing by a zero range.
     return (
-        df.withColumn("_max", F.max(count_col).over(w))
-        .withColumn("_min", F.min(count_col).over(w))
+        df.withColumn("_max", F.max(count_col).over(normalization_window))
+        .withColumn("_min", F.min(count_col).over(normalization_window))
         .withColumn(
-            norm_col,
-            F.when(F.col("_max") > F.col("_min"), (F.col(count_col) - F.col("_min")) / (F.col("_max") - F.col("_min")))
-            .otherwise(F.lit(0.0)),
+            normalized_column,
+            F.when(
+                F.col("_max") > F.col("_min"),
+                (F.col(count_col) - F.col("_min")) / (F.col("_max") - F.col("_min")),
+            ).otherwise(F.lit(0.0)),
         )
         .drop("_max", "_min")
     )
@@ -71,7 +73,9 @@ def build_window_counts(events_df: DataFrame, config: Config) -> DataFrame:
                     >= F.col("_window.end") - F.expr(f"INTERVAL {config.window_short}"),
                     F.lit(1),
                 ).otherwise(F.lit(0))
-            ).cast("long").alias("purchase_count_30m"),
+            )
+            .cast("long")
+            .alias("purchase_count_30m"),
             F.count(F.lit(1)).cast("long").alias("purchase_count_120m"),
         )
         .select(
@@ -98,6 +102,7 @@ def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
         + F.col("norm_purchase_count_120m") * F.lit(config.weight_long),
     )
 
+    # Ascending product_id makes equal-score ordering deterministic across partitions.
     rank_window = Window.partitionBy("window_end").orderBy(F.desc("trend_score"), "product_id")
     ranked = trend.withColumn("trend_rank", F.row_number().over(rank_window))
 

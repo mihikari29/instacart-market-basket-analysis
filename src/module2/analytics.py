@@ -1,14 +1,20 @@
+"""Prior-only batch metrics, report views, and MongoDB snapshot publication."""
+
 from datetime import datetime, timezone
-from pyspark.sql import functions as F, Window
+
+from pyspark.sql import Column, DataFrame, SparkSession, Window
+from pyspark.sql import functions as F
 
 
-def rows(df, *sort):
+def rows(df: DataFrame, *sort: str | Column) -> list[dict]:
+    """Collect a report DataFrame as dictionaries, optionally sorting it first."""
     if sort:
         df = df.orderBy(*sort)
     return [r.asDict(recursive=True) for r in df.collect()]
 
 
-def history(tables):
+def history(tables: dict[str, DataFrame]) -> DataFrame:
+    """Enrich prior purchases with order fields and broadcast product dimensions."""
     return (
         tables["prior"]
         .join(tables["orders"].select("order_id", "user_id", "order_dow", "order_hour_of_day"), "order_id")
@@ -16,8 +22,11 @@ def history(tables):
     )
 
 
-def metrics(tables):
-    """Feature outputs use prior only: train remains Module 4 evaluation truth."""
+def metrics(tables: dict[str, DataFrame]) -> tuple[DataFrame, DataFrame, DataFrame, DataFrame]:
+    """Return enriched history plus product, department, and user aggregates.
+
+    Feature outputs use prior only: train remains Module 4 evaluation truth.
+    """
     enriched = history(tables)
     product = enriched.groupBy("product_id").agg(
         F.count("*").alias("purchase_count"),
@@ -40,7 +49,7 @@ def metrics(tables):
     return enriched, product, department, users
 
 
-def department_hour_pivot_unpivot(enriched):
+def department_hour_pivot_unpivot(enriched: DataFrame) -> tuple[DataFrame, DataFrame]:
     """Produce a wide teaching/report view and its normalized analytical form."""
     hour_columns = [str(hour) for hour in range(24)]
     pivoted = (
@@ -62,7 +71,17 @@ def department_hour_pivot_unpivot(enriched):
     return pivoted, unpivoted
 
 
-def analyze(spark, tables, counts, min_support=100):
+def analyze(
+    spark: SparkSession,
+    tables: dict[str, DataFrame],
+    counts: dict[str, int],
+    min_support: int = 100,
+) -> tuple[dict, dict[str, DataFrame]]:
+    """Return the report and output DataFrames, checking pivot/unpivot totals.
+
+    Purchase metrics use prior facts; order distributions include all orders.
+    The caller's validated table counts are included unchanged in the report.
+    """
     enriched, product, department, users = metrics(tables)
     department_hour_pivot, department_hour_unpivot = department_hour_pivot_unpivot(enriched)
     pivot_total = sum(
@@ -88,7 +107,8 @@ def analyze(spark, tables, counts, min_support=100):
     )
     basket = (
         spark.sql(
-            "SELECT avg(n) AS average_basket_size FROM (SELECT order_id, count(*) n FROM prior_facts GROUP BY order_id)"
+            "SELECT avg(n) AS average_basket_size FROM "
+            "(SELECT order_id, count(*) n FROM prior_facts GROUP BY order_id)"
         )
         .first()
         .asDict()
@@ -149,7 +169,7 @@ def analyze(spark, tables, counts, min_support=100):
     }
 
 
-def publish_mongo(outputs, uri, run_id):
+def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
     """Stream compact aggregates in bounded batches; replace each snapshot atomically.
 
     Cross-collection publication is not a transaction. Consumers can check run_id.
