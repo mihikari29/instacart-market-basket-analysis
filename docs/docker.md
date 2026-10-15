@@ -76,6 +76,18 @@ docker compose build spark-master spark-worker
 docker compose up -d --wait namenode datanode kafka spark-master spark-worker mongodb
 ```
 
+Compose health checks do not establish that HDFS is writable: the NameNode
+HTTP check only confirms that its web endpoint responds, and it can still be in
+Safe Mode. After the NameNode is running and before staging, replacing, or
+writing HDFS data, wait for HDFS to leave Safe Mode:
+
+```bash
+docker compose exec -T namenode hdfs dfsadmin -safemode wait
+```
+
+This command blocks until Safe Mode ends. If it hangs, diagnose NameNode and
+DataNode readiness and logs; do not bypass the wait or attempt the write.
+
 The isolated synthetic dashboard below is a separate demo: it uses a unique
 database on disposable tmpfs, loopback-only ports, and does not join or mount
 this pipeline project. Use it for a first UI demonstration. Routine cleanup of
@@ -134,8 +146,9 @@ the supported presets:
 13-week outputs correspond to the named historical `scatter_1w`, `scatter_1m`
 and `scatter_3m` presets.
 
-After inspecting the existing target, stage the selected feed to the default
-HDFS `/instacart` tree through WebHDFS at `http://localhost:9870`:
+After inspecting the existing target and completing the shared HDFS Safe Mode
+readiness gate above, stage the selected feed to the default HDFS `/instacart`
+tree through WebHDFS at `http://localhost:9870`:
 
 ```bash
 python3 -m src.module1.stage_hdfs --feed data/synthesized/scatter_3m
@@ -296,12 +309,18 @@ are stateful. Only run them after inspecting that project's topic, collection,
 checkpoint, and volume ownership:
 
 ```bash
-python3 scripts/module3_smoke.py --events 50000 --duration-seconds 120
+test -s data/synthesized/scatter_3m/events.parquet
+test -s data/synthesized/scatter_3m/manifest.json
+python3 scripts/module3_smoke.py --feed data/synthesized/scatter_3m \
+  --events 50000 --duration-seconds 120
 python3 scripts/module3_recovery.py --duration-seconds 25
 ```
 
-The smoke helper resets `instacart-module3-live-smoke` and archives a previous
-`results/module3/smoke/checkpoint/live-smoke`; recovery resets
+The smoke command depends on the selected generated feed already existing; the
+Module 1 generation procedure above writes both checked files into that feed
+directory. The smoke helper resets `instacart-module3-live-smoke`, archives a
+previous `results/module3/smoke/checkpoint/live-smoke`, starts Compose services,
+and writes to MongoDB; recovery resets
 `instacart-module3-recovery-smoke` and archives a previous
 `results/module3/recovery/checkpoint/recovery-smoke`. Both start services in
 the default Compose project and write to its `realtime_trending` collection.
@@ -403,6 +422,7 @@ python3 scripts/fetch_instacart.py
 python3 -m src.module1.clean --validate
 docker compose build spark-master spark-worker
 docker compose up -d --wait namenode datanode mongodb spark-master spark-worker
+docker compose exec -T namenode hdfs dfsadmin -safemode wait
 
 # Stage the verified curated tables used by A/B, without replacing the
 # interactions feed. This matches the staging boundary in the manual workflow.
