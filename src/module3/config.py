@@ -17,6 +17,7 @@ _STABLE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*\Z")
 
 
 def _validate_stable_label(value: str | None, field: str, maximum: int) -> None:
+    """Reject labels that cannot serve as stable trend-source identifiers."""
     if (
         not isinstance(value, str)
         or len(value) > maximum
@@ -44,6 +45,8 @@ def parse_bool(value: str | bool) -> bool:
 
 @dataclass(frozen=True)
 class Config:
+    """Immutable source, event-time, and serving settings for one stream run."""
+
     # Storage / Spark runtime
     root: str = "hdfs://namenode:8020/instacart"
     master: str = "local[2]"
@@ -83,7 +86,7 @@ class Config:
     trend_source_namespace: str | None = None
     trend_source_scope: str = "unknown_or_mixed"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.shuffle_partitions < 1 or self.repetitions < 3 or self.warmups < 1:
             raise ValueError("Require positive partitions, >=3 measured runs and >=1 warm-up")
         if not self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
@@ -122,7 +125,8 @@ class Config:
                 )
 
     @classmethod
-    def environment(cls, **overrides):
+    def environment(cls, **overrides) -> "Config":
+        """Parse environment defaults, apply explicit overrides, then validate."""
         values = {
             "root": os.environ.get("MODULE3_ROOT", cls.root),
             "master": os.environ.get("SPARK_MASTER", cls.master),

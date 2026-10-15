@@ -20,6 +20,7 @@ class DeltaSampler:
     - exponential: Poisson arrivals -> Exp(mean) clipped to [lo, hi].
     - uniform:     flat gaps in [lo, hi].
     """
+
     kind: str
     mean_s: float | None = None
     lo_s: float = 5.0
@@ -34,12 +35,14 @@ class DeltaSampler:
         return cls("uniform", None, lo_s, hi_s)
 
     def sample(self, rng: "np.random.Generator", size: int) -> "np.ndarray":
+        """Draw gaps using the caller's random generator and configured bounds."""
         if self.kind == "uniform":
             return rng.uniform(self.lo_s, self.hi_s, size=size)
         gap = -self.mean_s * np.log1p(-rng.random(size))
         return np.clip(gap, self.lo_s, self.hi_s)
 
     def validate(self) -> None:
+        """Reject unsupported distributions or invalid distribution parameters."""
         if self.kind == "exponential":
             if not (5.0 <= self.mean_s <= 300.0):
                 raise ValueError(f"exponential mean out of range: {self.mean_s}")
@@ -50,11 +53,14 @@ class DeltaSampler:
             raise ValueError(f"unknown delta kind: {self.kind!r}")
 
     def to_dict(self) -> dict:
+        """Return the distribution parameters recorded in feed manifests."""
         return {"kind": self.kind, "mean_s": self.mean_s, "lo_s": self.lo_s, "hi_s": self.hi_s}
 
 
 @dataclass(frozen=True)
 class SyntheticConfig:
+    """Immutable seed, timing, and user-limit settings for one generated feed."""
+
     seed: int = 42
     scatter_window_weeks: int = 13
     time_mode: str = "uniform"
@@ -71,6 +77,7 @@ class SyntheticConfig:
         time_mode: str | None = None,
         limit_users: int | None = None,
     ) -> "SyntheticConfig":
+        """Build a validated preset, replacing only options supplied as non-None."""
         if scenario not in SCENARIOS:
             raise ValueError(f"unknown scenario {scenario!r}; choose from {sorted(SCENARIOS)}")
         kwargs = dict(SCENARIOS[scenario])
@@ -82,11 +89,12 @@ class SyntheticConfig:
             kwargs["time_mode"] = time_mode
         if limit_users is not None:
             kwargs["limit_users"] = limit_users
-        conf = cls(**kwargs)
-        conf.validate()
-        return conf
+        config = cls(**kwargs)
+        config.validate()
+        return config
 
     def validate(self) -> None:
+        """Validate feed settings and the nested item-gap distribution."""
         if self.scatter_window_weeks not in SCATTER_WINDOW_WEEKS:
             raise ValueError(
                 f"scatter_window_weeks must be one of {SCATTER_WINDOW_WEEKS}, "
@@ -99,7 +107,8 @@ class SyntheticConfig:
         self.delta.validate()
 
     def to_dict(self) -> dict:
-        data = {f.name: getattr(self, f.name) for f in fields(self)}
+        """Return manifest settings with the nested sampler serialized as a dict."""
+        data = {field.name: getattr(self, field.name) for field in fields(self)}
         data["delta"] = self.delta.to_dict()
         return data
 
@@ -129,12 +138,13 @@ SCENARIOS: dict[str, dict] = {
 
 
 def preset_summary() -> str:
+    """Describe presets in their declared order for the generator CLI."""
     lines = []
-    for name, cfg in SCENARIOS.items():
-        d = cfg["delta"]
-        if d.kind == "exponential":
-            params = f"Exp(mean={d.mean_s}s, clip=[{d.lo_s}, {d.hi_s}]s)"
+    for name, scenario in SCENARIOS.items():
+        delta = scenario["delta"]
+        if delta.kind == "exponential":
+            params = f"Exp(mean={delta.mean_s}s, clip=[{delta.lo_s}, {delta.hi_s}]s)"
         else:
-            params = f"U([{d.lo_s}, {d.hi_s}]s)"
-        lines.append(f"  {name:<16s} {d.kind:<12s} {params:<42s} time={cfg['time_mode']}")
+            params = f"U([{delta.lo_s}, {delta.hi_s}]s)"
+        lines.append(f"  {name:<16s} {delta.kind:<12s} {params:<42s} time={scenario['time_mode']}")
     return "\n".join(lines)
