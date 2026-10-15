@@ -515,10 +515,16 @@ URI's database, when present, must match `MODULE4D_MONGO_DATABASE`.
 export MODULE4D_MONGODB_URI='mongodb://<read-user>:<password>@<host>:27017/<database>?authSource=<auth-database>'
 export MODULE4D_MONGO_DATABASE='<database>'
 export MODULE4D_TREND_SOURCE_NAMESPACES='<exact-namespace-allowlist>'
-python3 -m pip install -r deploy/module4/requirements/api.txt
+python3 -m pip install -r requirements-dev.txt \
+  -r deploy/module4/requirements/api.txt
 python3 -m uvicorn src.module4.dashboard.api:app \
   --host 127.0.0.1 --port 8000
 ```
+
+This is a host development-environment recipe using existing manifests; it
+adds no dependency manifest. The API import graph includes PyMongo and imports
+the Module 3 Spark-backed trend reader, so the API-only manifest is not enough
+for this host command. Importing PySpark does not start a Spark session.
 
 The API process may also set `MODULE4D_APP_ROOT` to the application or
 repository root containing `docs/evidence/`; the default is the packaged source
@@ -576,6 +582,45 @@ The route schemas, bounds, provenance and error contracts live in
 [Module 4 plan §20](module4-plan.md#module4d-spec).
 The retired API and Streamlit documents remain in the
 [Module 4D archive](evidence/module4d/README.md).
+
+### Standalone API container
+
+Build the existing API target as described in [Build each image](#build-each-image).
+Keep the protected environment file outside the repository and restrict its
+permissions. It supplies all API settings, including the packaged evidence
+root:
+
+```text
+MODULE4D_MONGODB_URI=<URI for a database-scoped read-only account>
+MODULE4D_MONGO_DATABASE=<explicit database name>
+MODULE4D_TREND_SOURCE_NAMESPACES=<comma-separated exact namespace allowlist>
+MODULE4D_APP_ROOT=/workspace
+```
+
+Provision the [required dashboard indexes](#required-dashboard-indexes)
+administratively before starting the API.
+
+Run the container with a loopback-only host port and the existing image:
+
+```bash
+docker run --rm --env-file /secure/path/module4d.env \
+  -p 127.0.0.1:8000:8000 \
+  instacart-module4d-api:local \
+  python3 -m uvicorn src.module4.dashboard.api:app \
+    --host 0.0.0.0 --port 8000
+```
+
+Use a database-scoped read account. The MongoDB endpoint in the environment
+file must be reachable from the container; `localhost` inside the container
+refers to that container, not the host or another Compose service. Choose and
+attach an intentional Docker network when MongoDB is another container, and
+use a hostname reachable on that network; add Docker's `--network
+<intentional-network>` option when needed. This example does not publish a
+MongoDB port; do not expose MongoDB publicly. The API's internal `0.0.0.0`
+listener is needed for Docker port forwarding; the published host port remains
+bound to loopback. Keep credentials in the protected environment file; do not
+place them in command-line arguments, source files, UI configuration, or
+documentation examples.
 
 ## Module 3 streaming and Module 3 to Module 4C enablement
 
@@ -644,6 +689,34 @@ scope it to the exact source namespace and obtain the database owner's approval.
 Do not remove the shared MongoDB database, Kafka topic, HDFS data, or Compose
 volumes as routine cleanup.
 
+### Hybrid CLI
+
+The supported publisher command requires exactly these five options:
+`--user-id`, `--source-namespace`, `--as-of-event-time`, `--mongodb-uri`, and
+`--mongo-database`. For example, the timestamp and namespace below are
+illustrative values, not universal defaults:
+
+```bash
+python3 -m src.module4.hybrid.cli serve-user \
+  --user-id 123 \
+  --source-namespace instacart-replay-v1 \
+  --as-of-event-time 2024-01-01T00:00:00Z \
+  --mongodb-uri "$MONGODB_URI" \
+  --mongo-database "$MONGO_DATABASE"
+```
+
+The cutoff must include a timezone. Optional `--lambda-weight` defaults to
+`0.7`; `--max-event-age-seconds` is also optional and has no default limit.
+Set the URI and database variables through a protected publisher environment.
+The service checks A/B readiness internally. It captures the source context
+and ranks candidates, publishes immutable recommendation rows, and may promote
+the per-user readiness pointer. This is a write operation, not a read-only
+query, so it needs separate publisher permissions. Never use the dashboard's
+read-only MongoDB credentials. An event-time cutoff alone does not establish
+prior-only source provenance or make a quality evaluation leakage-safe; the
+ordinary event feed can include both prior and train events. See the
+[Module 4C contract](module4-plan.md#module4c-spec).
+
 ## Module 4C controlled streaming demo
 
 The archived [C8B procedure](evidence/module4c/c8b-streaming-demo.md) is a
@@ -681,8 +754,19 @@ timestamps, HTTP schemas, and browser expectations retain their accepted code.
 
 ## Validation commands
 
-Repository tests run in Spark; the API and UI files excluded here are owned by
-and exercised in their respective runtimes below:
+The commands below have distinct validation ownership. The repository Spark
+pytest command excludes the two live API MongoDB test files and the three UI
+test files; the rest of the collected repository suite runs there. The API
+harness runs its declared unit-test set for package layout, API/readers,
+evidence, and selected Module 4C components, the two D1A/D1B live MongoDB test
+files, and Uvicorn/OpenAPI smoke checks. It does not run every Module 4C live
+MongoDB suite. The
+supplementary service-backed command below owns the listed Module 3, Module 4,
+and Module 4C live MongoDB suites. The UI tests use the UI development image;
+the browser check uses the existing isolated demo fixture.
+
+These commands do not run the full-data workflow. Full-data acceptance remains
+a separate manual workflow with its own source-data prerequisites and evidence.
 
 ```bash
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
@@ -758,9 +842,9 @@ docker run --rm --network host --ipc=host \
 The required `fixtures` CI job retains repository tests, lint, OpenAPI/startup,
 API, and isolated live Mongo tests. Its dependent job runs UI tests, publishers,
 the route validator, and Chromium. Module 3 and Module 4 runtime workflows add
-streaming, live Mongo, staged-flow, and publication-replay checks. Full-data
-workflows retain separate UI test ownership. Every browser expectation and
-curated evidence artifact remains unchanged.
+streaming, live Mongo, staged-flow, and publication-replay checks. Separate
+manual full-data workflows have their own validation and UI test ownership.
+Every browser expectation and curated evidence artifact remains unchanged.
 
 ## Consolidation validation — 2026-10-14
 
