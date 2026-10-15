@@ -1,8 +1,11 @@
 # Validation Evidence
 
-This directory contains measured technical evidence for the ingestion, batch and
-streaming layers. Each report records the data, runtime configuration, observed
-results and limitations of its experiment.
+This directory indexes dated technical evidence for ingestion, batch, streaming,
+and Module 4. Reports retain their recorded source revisions, data, runtime
+configuration, observations, and limitations. Updating this index does not turn
+a historical result into validation of the current commit; see [current
+progress](../progress.md) for present status and [Module 3 contracts](../module3-contracts.md)
+for current streaming behavior.
 
 ## Full-data validation
 
@@ -19,8 +22,9 @@ with detailed plans and metrics in [full/summary.json](full/summary.json).
 
 ## Module 3 streaming validation
 
-Streaming validation exercised the real Kafka → Spark Structured Streaming →
-MongoDB path. It covered schema and domain validation, poison records,
+The 3 October 2026 streaming validation exercised the real Kafka → Spark
+Structured Streaming → MongoDB path at its recorded revision. It covered schema
+and domain validation, poison records,
 `event_id` deduplication, watermark behavior, finalized-window C30/C120
 aggregation, full-population ranking before Top-K, snapshot idempotency, TTL,
 two-process checkpoint recovery and bounded throughput measurements.

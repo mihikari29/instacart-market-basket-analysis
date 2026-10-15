@@ -46,6 +46,434 @@ The API validation script builds `api` in a narrow temporary context from the
 same Dockerfile. It supplies the Spark dependency manifests itself and does
 not require a pre-existing `instacart-spark` image.
 
+## Run the persistent pipeline stack
+
+The root `compose.yaml` is the persistent development project. Its pipeline
+services are `namenode` and `datanode` (HDFS), `kafka`, `spark-master` and
+`spark-worker`, and `mongodb`. Module 2, 3, and 4 are opt-in tools-profile
+containers. The default project uses the named volumes `namenode_data`,
+`datanode_data`, and `mongodb_data`, and binds the repository into tool
+containers. Treat HDFS tables, Kafka topics, MongoDB collections, local
+`data/`, `results/`, and checkpoints as real data.
+
+Host commands use Kafka `localhost:9092`, WebHDFS `http://localhost:9870`, HDFS
+IPC `hdfs://localhost:8020`, and Spark UI `http://127.0.0.1:8080`. The root
+Compose file does not publish a MongoDB host port; tool containers use service
+names such as `kafka:29092`, `namenode:8020`, `spark-master:7077`, and
+`mongodb:27017` on the project network.
+
+Before starting it, inspect `docker compose ps -a`, `docker volume ls`, the
+current project name, the local inputs, and the HDFS/MongoDB targets that the
+planned command may replace or publish. Confirm that the expected ports are
+free and that writing to the selected project and database is intended. Starting
+services creates or reuses containers and persistent volumes; it does not
+provide a disposable test environment. From the repository root, start only
+the services required for the task and wait for their health checks. Build the
+Spark targets first if the pinned image is not already available:
+
+```bash
+docker compose build spark-master spark-worker
+docker compose up -d --wait namenode datanode kafka spark-master spark-worker mongodb
+```
+
+Compose health checks do not establish that HDFS is writable: the NameNode
+HTTP check only confirms that its web endpoint responds, and it can still be in
+Safe Mode. After the NameNode is running and before staging, replacing, or
+writing HDFS data, wait for HDFS to leave Safe Mode:
+
+```bash
+docker compose exec -T namenode hdfs dfsadmin -safemode wait
+```
+
+This command blocks until Safe Mode ends. If it hangs, diagnose NameNode and
+DataNode readiness and logs; do not bypass the wait or attempt the write.
+
+The isolated synthetic dashboard below is a separate demo: it uses a unique
+database on disposable tmpfs, loopback-only ports, and does not join or mount
+this pipeline project. Use it for a first UI demonstration. Routine cleanup of
+the persistent project must never use `docker compose down -v`, `docker volume
+prune`, or global container/image cleanup. Keep its HDFS and MongoDB volumes,
+Kafka topics, and Module 3 checkpoints unless an owner has reviewed a precise
+backup and deletion plan.
+
+## Module 1 ingestion, generation, staging, and Kafka replay
+
+Run from the repository root with the project dependencies installed. The six
+source files must be present under `data/raw/`: `orders.csv`,
+`order_products__prior.csv`, `order_products__train.csv`, `products.csv`,
+`aisles.csv`, and `departments.csv`. `python3 scripts/fetch_instacart.py`
+downloads the recorded public mirror, checks the expected row counts, writes
+those files, and creates `data/raw/source-receipt.json`; it refuses to overwrite
+existing source CSVs. Keep and inspect any existing files before fetching.
+
+Clean first, then generate one feed at a time. The cleaning command writes or
+overwrites Parquet files under `data/clean/`. Its `--validate` option prints
+audit statistics after writing; it does not fail closed on every missing file
+or raw-domain problem. Check that all six inputs exist and review the output
+before staging. The cleaner's missing-input and pre-coercion validation gap is
+recorded in [current progress](progress.md#module-1--ingestion--storage).
+Generation reuses its selected output directory and replaces the feed file and
+manifest there; retain any existing feed before selecting the same path.
+
+```bash
+python3 -m src.module1.clean --validate
+
+# Historical feed presets: 1 week, 1 month (4 weeks), or 3 months (13 weeks).
+python3 -m src.module1.generate --scenario default --scatter-weeks 1 \
+  --out-dir data/synthesized/scatter_1w
+python3 -m src.module1.generate --scenario default --scatter-weeks 4 \
+  --out-dir data/synthesized/scatter_1m
+python3 -m src.module1.generate --scenario default --scatter-weeks 13 \
+  --out-dir data/synthesized/scatter_3m
+```
+
+Generation reads `data/clean/`, defaults to seed 42 and 20,000 users per
+processing batch, and writes `events.parquet` and `manifest.json` in each
+selected output directory. The manifest records the seed/configuration, span,
+daily counts, and monotonicity result. Generation is deterministic for the
+same source and seed regardless of `--batch-users`. `--list-scenarios` prints
+the supported presets:
+
+| Preset | Per-item gap model | Order clock |
+|---|---|---|
+| `default` | Exponential, mean 30 s, clipped to 5–120 s | `uniform` |
+| `mobile-fast` | Exponential, mean 20 s, clipped to 3–90 s | `uniform` |
+| `desktop-browse` | Exponential, mean 40 s, clipped to 10–240 s | `uniform` |
+| `uniform` | Uniform 15–50 s | `uniform` |
+| `deterministic` | Exponential, mean 30 s, clipped to 5–120 s | `hash` |
+
+`--scatter-weeks` accepts 1, 4, 13, 26, or 52. The 1-week, 4-week and
+13-week outputs correspond to the named historical `scatter_1w`, `scatter_1m`
+and `scatter_3m` presets.
+
+After inspecting the existing target and completing the shared HDFS Safe Mode
+readiness gate above, stage the selected feed to the default HDFS `/instacart`
+tree through WebHDFS at `http://localhost:9870`:
+
+```bash
+python3 -m src.module1.stage_hdfs --feed data/synthesized/scatter_3m
+# Read-only listing of the existing HDFS layout:
+python3 -m src.module1.stage_hdfs --tree-only
+```
+
+Full staging uploads local raw CSVs, cleaned curated tables, and the selected
+partitioned event feed. It replaces raw/curated files and their `_sources.json`
+receipt; the interactions handoff is written through a staging/backup/rename
+sequence with `_handoff.json`. Use `--interactions-only` only when intentionally
+replacing just the interactions handoff. Staging writes into persistent HDFS;
+`--tree-only` only reads it. Do not stage into an active handoff without checking
+its receipt and downstream use. Before a batch consumer reads it, use the
+[Module 2 HDFS contract validator](#module-2-batch-processing-and-benchmarks);
+it checks the recorded receipt and data contract but does not hash every staged
+table against the raw source.
+
+Optional producer replay reads the chosen feed's `events.parquet`, publishes to
+Kafka (default topic `instacart-purchase-events`, host broker
+`localhost:9092`), and adds send-time ingestion timestamps. It performs a
+disk-backed chronological merge when the file is not declared sorted. Bound
+the number of records and set a pacing mode for controlled tests. `--replay-speed`
+controls synthetic-time playback (0 means unpaced); alternatively,
+`--target-events-per-second` sets a fixed rate. `--receipt` writes attempted,
+acknowledged, failed, and replay metadata to a local JSON file. Replay appends
+to the selected topic; it does not reset existing Kafka records.
+
+```bash
+python3 -m src.module1.producer --feed data/synthesized/scatter_3m \
+  --limit-events 50000 --replay-speed 0 \
+  --receipt results/module1/scatter_3m-50k-receipt.json
+
+# Alternative fixed-rate test:
+python3 -m src.module1.producer --feed data/synthesized/scatter_3m \
+  --limit-events 20000 --replay-speed 0 --target-events-per-second 500 \
+  --receipt results/module1/scatter_3m-20k-500s-receipt.json
+
+# Fault injection belongs only on a controlled test topic/feed:
+python3 -m src.module1.producer --feed data/synthesized/scatter_3m \
+  --topic instacart-module1-fault-test --limit-events 20000 --replay-speed 0 \
+  --inject "late:0.05,dup:0.02,burst:2,poison:1" \
+  --receipt results/module1/fault-test-receipt.json
+```
+
+`late` and `dup` values are probabilities; `burst` is the number of extra sends
+at each 500-record interval; `poison` is a count of malformed initial records.
+Duplicate sends retain an event ID, while injected late records get distinct
+IDs and older synthetic event times. Replay writes to the selected Kafka topic;
+the optional receipt is local. Do not inject faults into a shared production or
+acceptance topic. `scripts/module1.py all` also exists, but its staging step
+starts HDFS with `--remove-orphans`; the direct commands above make each write
+boundary explicit.
+
+## Module 2 batch processing and benchmarks
+
+Module 2 requires the curated HDFS tables and receipts under `/instacart/curated`
+and reachable Spark and MongoDB services. Check the handoff and selected Compose
+project first. The direct tool-service form below does not start dependencies;
+start the required services using the stack section above. Keep `--use-aliases`
+so Spark workers can resolve the driver's advertised `module2` hostname.
+
+```bash
+# HDFS receipt, counts, nulls, keys, relationships, domains and multiset checks:
+docker compose --profile tools run --rm --use-aliases --no-deps module2 validate
+
+# Analytics, user features, HDFS run artifacts and MongoDB batch publication:
+docker compose --profile tools run --rm --use-aliases --no-deps module2 stats
+
+# Each benchmark validates inputs and records its own measurements:
+docker compose --profile tools run --rm --use-aliases --no-deps module2 benchmark-joins
+docker compose --profile tools run --rm --use-aliases --no-deps module2 benchmark-partitions
+docker compose --profile tools run --rm --use-aliases --no-deps module2 benchmark-cache
+
+# Analytics/publication and all three benchmarks:
+docker compose --profile tools run --rm --use-aliases --no-deps module2 all
+```
+
+Every command writes a unique `results/module2/<run-id>/summary.json` and Spark
+event log. `stats` and `all` also write `analytics.json` and per-run Parquet
+outputs, and overwrite HDFS `/instacart/features/user_features`; unless `--skip-serving` is
+passed, they also publish to MongoDB `batch_product_metrics` and
+`department_metrics` using the configured `MONGODB_URI`. The three benchmark
+commands write plans, checksums, trials, and Spark event-log metrics under their
+run directory and do not publish analytics to MongoDB. Defaults are one warm-up
+and three measured repetitions; benchmark outputs are workload-specific
+measurements. Module 2 validates receipt structure, counts, nulls, keys,
+relationships, domains, and relevant multisets. It does not independently hash
+every staged table; `--source-events <local-file>` adds only the documented
+local-source comparison. The `scripts/module2.py` wrapper starts services with
+`up --remove-orphans` before forwarding arguments, so its arguments and startup
+effects are not equivalent to a harmless help/query command.
+
+## Module 3 streaming operations
+
+The current Module 3 event-time, ranking, sink, and checkpoint contracts are in
+the [Module 3 specification](module3-contracts.md). The commands here use the
+`module3` tools service directly and assume the selected persistent Compose
+project already has healthy Kafka, Spark master/worker, and MongoDB services.
+The one-off Spark service command includes `--use-aliases` because Compose
+advertises the driver hostname as `module3`.
+
+```bash
+# Kafka and MongoDB connectivity; creates a local run summary, no stream:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 validate
+
+# Bounded stream, then an unbounded foreground run (Ctrl+C to stop):
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  run --duration-seconds 60
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  run --duration-seconds 0
+
+# Set an explicit one-day retention instead of the seven-day default:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  run --duration-seconds 60 --ttl-seconds 86400
+
+# Offset loss fails by default; allow skipping only as an explicit decision:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  run --duration-seconds 60 --allow-data-loss
+
+# Deterministic late-data/watermark demo; uses and resets its dedicated topic:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  late-demo --duration-seconds 60
+
+# Bounded benchmarks against a generated feed; choose the actual feed path:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  benchmark-throughput --feed data/synthesized/scatter_3m \
+  --duration-seconds 15 --benchmark-events 100
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  benchmark-partitions --feed data/synthesized/scatter_3m \
+  --duration-seconds 15 --benchmark-events 100
+
+# Run both benchmark groups using their default 100/s, 500/s, and bulk arms:
+docker compose --profile tools run --rm --use-aliases --no-deps module3 \
+  all --feed data/synthesized/scatter_3m --duration-seconds 60 \
+  --benchmark-events 100
+```
+
+All CLI commands create a unique `results/module3/<run-id>/` with a summary;
+streaming runs also write checkpoint/state and progress/event-log files and
+publish finalized rows into the configured MongoDB collection. The default
+checkpoint identity is the run ID and checkpoint data lives under
+`results/module3/checkpoint/<checkpoint-id>`. Before running, inspect the
+selected topic and offset range: default `startingOffsets=earliest` can replay
+existing topic records when no checkpoint is present. The late-data demo
+resets `<configured-topic>-late-demo` and writes to that collection. Keep
+the default seven-day `--ttl-seconds 604800` unless a deliberate alternative is
+approved; `--ttl-seconds 0` disables expiry. Kafka offset loss is strict by
+default (`failOnDataLoss=true`). Relaxed behavior requires explicit
+`--allow-data-loss` or `MODULE3_FAIL_ON_DATA_LOSS=false`.
+Advanced CLI overrides include `--window-short`, `--window-long`, `--slide`,
+`--watermark`, `--weight-short`, `--weight-long`, `--trigger-interval`, and
+`--mongo-top-k-per-window`; their defaults and meanings are in the
+[Module 3 specification](module3-contracts.md).
+
+The repository smoke/recovery helpers exercise the default Compose project and
+are stateful. Only run them after inspecting that project's topic, collection,
+checkpoint, and volume ownership:
+
+```bash
+test -s data/synthesized/scatter_3m/events.parquet
+test -s data/synthesized/scatter_3m/manifest.json
+python3 scripts/module3_smoke.py --feed data/synthesized/scatter_3m \
+  --events 50000 --duration-seconds 120
+python3 scripts/module3_recovery.py --duration-seconds 25
+```
+
+The smoke command depends on the selected generated feed already existing; the
+Module 1 generation procedure above writes both checked files into that feed
+directory. The smoke helper resets `instacart-module3-live-smoke`, archives a
+previous `results/module3/smoke/checkpoint/live-smoke`, starts Compose services,
+and writes to MongoDB; recovery resets
+`instacart-module3-recovery-smoke` and archives a previous
+`results/module3/recovery/checkpoint/recovery-smoke`. Both start services in
+the default Compose project and write to its `realtime_trending` collection.
+They are bounded integration checks, not production-capacity tests. The
+benchmarks create/reset trial topics and write bounded output to the configured
+Mongo collection; retain their run artifacts when comparing results.
+
+## Module 4A/4B operation and full-data acceptance
+
+Module 4A/4B reads the curated HDFS handoff, fits prior-only ALS, evaluates
+against the official train truth, builds the prior-basket graph, and can publish
+versioned recommendations and graph snapshots. Commands create
+`results/module4/<run-id>/`; publication changes the selected MongoDB versions
+and active readiness pointer. Confirm the selected project, source receipt,
+HDFS handoff, Mongo database, and version names before running. The wrapper
+starts HDFS and Spark services (and MongoDB unless serving is skipped) and uses
+the driver network alias. Choose unique run/model/graph version IDs in the
+selected database; `--skip-serving` omits snapshot publication.
+
+The CLI commands are `validate`, `als`, `graph`, and `all`. `all` performs both
+model/graph work and, by default, versioned publication; separate `als` and
+`graph` runs are useful for diagnosis. A run with `--skip-serving` is compute-only
+and does not pass the full A/B publication gate.
+
+Use `validate` to check the selected HDFS handoff. The following diagnostic
+commands compute ALS or graph outputs without publishing a one-sided snapshot;
+each run still writes artifacts and checkpoints under `/instacart` and
+`results/module4/`:
+
+```bash
+run_tag="diagnostic-$(date -u +%Y%m%dT%H%M%SZ)"
+python3 scripts/module4.py validate --scope staged_curated
+python3 scripts/module4.py als --scope staged_curated \
+  --run-id "$run_tag-als" --skip-serving
+python3 scripts/module4.py graph --scope staged_curated \
+  --run-id "$run_tag-graph" --skip-serving
+```
+
+For normal paired recommendation and graph publication, use `all` with unique
+IDs in the selected MongoDB database:
+
+```bash
+publish_tag="pair-$(date -u +%Y%m%dT%H%M%SZ)"
+python3 scripts/module4.py all --scope staged_curated \
+  --run-id "$publish_tag" --model-version "als-$publish_tag" \
+  --graph-version "graph-$publish_tag"
+```
+
+For a bounded fixture flow, use the repository helper. It creates a unique
+HDFS fixture root and MongoDB database, runs first publication and same-version
+replay, reads the snapshots back, and removes only those run-scoped resources.
+It still needs healthy services and the pinned Spark image. The CLI's
+`staged_fixture` label alone does not bound data; point it only at the fixture
+handoff. `staged_curated` reads the configured curated dataset and may be a
+full-data workload. The `full_data` scope requires
+`data/raw/source-receipt.json` plus the complete verified HDFS input.
+
+```bash
+docker compose --profile tools run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+  scripts/module4_flow_smoke.py
+```
+
+For a new Linux full-data rehearsal, first verify the source receipt and
+`data/clean/` tables. Use an explicitly named Compose project so its persistent
+HDFS and MongoDB volumes are distinct from the normal development project. Check
+that required host ports are free; do not start another project against the same
+ports. Keep the same project name through the first run and replay. The portable
+resource override below is the one used by the manual
+[Module 4 full-data workflow](../.github/workflows/module4-full.yml); it is not
+the machine-specific WSL image/storage mount used by the October 10 acceptance.
+The workflow downloads and verifies source data, stages the curated handoff,
+runs repository and live-integration checks, and performs same-version
+publication replay. It is a manual, resource-intensive workflow.
+Its local override provides a 2 GB worker executor, four worker/total cores,
+and a 1 GB driver. The accepted historical host had about 16 GiB RAM; that
+measurement is environment context, not a guaranteed minimum. Plan disk space
+for the source, cleaned Parquet, Spark temporary data, models, and run artifacts.
+
+The following local sequence is provided for an operator who has deliberately
+chosen that resource-intensive run. Starting the project creates or reuses its
+named volumes; staging and `all` write HDFS tables/models, local run artifacts,
+and the project MongoDB database. Retain the Compose project and volumes between
+first run and replay:
+
+```bash
+# Use a fresh suffix and keep these exports for the entire procedure.
+run_suffix="$(date -u +%Y%m%dT%H%M%SZ)"
+export COMPOSE_FILE=compose.yaml:.github/module4-full.override.yml
+export COMPOSE_PROJECT_NAME="instacart-module4-full-$run_suffix"
+
+# In a fresh checkout, create the Python environment used by the host-side
+# fetcher and WebHDFS staging helper:
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+
+# Fetch only when data/raw/ has no source CSVs; the fetcher refuses overwrite.
+python3 scripts/fetch_instacart.py
+python3 -m src.module1.clean --validate
+docker compose build spark-master spark-worker
+docker compose up -d --wait namenode datanode mongodb spark-master spark-worker
+docker compose exec -T namenode hdfs dfsadmin -safemode wait
+
+# Stage the verified curated tables used by A/B, without replacing the
+# interactions feed. This matches the staging boundary in the manual workflow.
+python3 - <<'PY'
+from hdfs import InsecureClient
+from src.module1.stage_hdfs import stage_curated, stage_places
+
+client = InsecureClient("http://localhost:9870", user="root")
+stage_curated(client, "http://localhost:9870", "root")
+stage_places(client)
+PY
+
+python3 scripts/module4.py validate --scope full_data \
+  --source-receipt data/raw/source-receipt.json --shuffle-partitions 32
+
+# New run IDs and unused model/graph versions in the selected Mongo database.
+first_run_id="full-first-$run_suffix"
+replay_run_id="full-replay-$run_suffix"
+model_version="als-full-$run_suffix"
+graph_version="graph-full-$run_suffix"
+
+python3 scripts/module4.py all --scope full_data \
+  --source-receipt data/raw/source-receipt.json --run-id "$first_run_id" \
+  --model-version "$model_version" --graph-version "$graph_version" \
+  --shuffle-partitions 32 --executor-memory 2g --executor-cores 4 --total-cores 4 \
+  --als-blocks 8 --pilot-users 5000 --max-trials 1 --graph-min-edge-weight 10
+docker compose --profile tools run --rm --use-aliases --no-deps --entrypoint python3 module4 \
+  scripts/check_module4_run.py --run-dir "results/module4/$first_run_id" \
+  --output "results/module4/$first_run_id/snapshot-check.json"
+
+# Same source, input, config, and model/graph versions; use a new run ID.
+python3 scripts/module4.py all --scope full_data \
+  --source-receipt data/raw/source-receipt.json --run-id "$replay_run_id" \
+  --model-version "$model_version" --graph-version "$graph_version" \
+  --shuffle-partitions 32 --executor-memory 2g --executor-cores 4 --total-cores 4 \
+  --als-blocks 8 --pilot-users 5000 --max-trials 1 --graph-min-edge-weight 10
+docker compose --profile tools run --rm --no-deps --entrypoint python3 module4 \
+  scripts/check_module4_run.py --run-dir "results/module4/$replay_run_id" \
+  --compare-to "results/module4/$first_run_id/snapshot-check.json" \
+  --output "results/module4/$replay_run_id/snapshot-check.json"
+```
+
+The checker requires a passed full-data A/B publication and verifies the active
+readiness pointer, counts, versions, indexes, and logical snapshot digests;
+replay also checks the same source/config/version and rounds floating values to
+six decimal places. See the [dated October 10 acceptance record](evidence/module4/acceptance-20261010/README.md)
+and its [exact environment-specific commands](evidence/module4/acceptance-20261010/run-acceptance.sh)
+for the historical WSL storage mount and accepted measurements. That record is
+not a portable Linux recipe. Never use `docker compose down -v` or remove these
+volumes as routine cleanup.
+
 ## Start and stop the synthetic dashboard
 
 The isolated `deploy/module4/compose.demo.yaml` selects `api` and `ui`. Its
@@ -148,6 +576,73 @@ The route schemas, bounds, provenance and error contracts live in
 [Module 4 plan §20](module4-plan.md#module4d-spec).
 The retired API and Streamlit documents remain in the
 [Module 4D archive](evidence/module4d/README.md).
+
+## Module 3 streaming and Module 3 to Module 4C enablement
+
+This is an example for an operator who intends to publish into the existing
+default `instacart` Compose project's Kafka and MongoDB. It was checked against
+the CLI parser and Compose service definition; it was not run as part of this
+documentation change. The `instacart-spark:3.5.5` image must be available
+locally. The project must already have healthy Kafka, Spark master/worker, and
+MongoDB services on its network, and the topic must contain
+the intended replay or have an active producer. Module 4C also needs a ready
+Module 4A/4B snapshot and compatible catalog in that MongoDB database. The
+command below does not start dependencies, but it writes local output and
+checkpoint files under `results/module3/` and writes to the project's MongoDB.
+Do not use it unless those writes are intended. The default project has
+persistent services and named volumes; do not use `down -v` or global cleanup.
+
+Run the module entry point directly. Do not use `scripts/module3.py`, which
+starts Compose before forwarding arguments. The options follow the `run`
+subcommand in the parser:
+
+```bash
+docker compose --profile tools run --rm --use-aliases --no-deps \
+  --entrypoint python3 module3 \
+  -m src.module3.cli run \
+  --duration-seconds 0 \
+  --publish-trend-bundles \
+  --trend-source-namespace instacart-replay-v1 \
+  --trend-source-scope mixed-prior-train-synthetic \
+  --checkpoint-id instacart-replay-v1
+```
+
+`--duration-seconds 0` runs until interrupted. A new checkpoint starts at
+`--starting-offsets` (default `earliest`); on restart, Spark restores offsets
+and state from `results/module3/checkpoint/<checkpoint-id>`. Keep the same
+checkpoint identity and compatible topic/query settings to resume. Use a new
+checkpoint identity for a genuinely new stream. Keep the namespace stable for
+the same logical source and replay, but choose a new namespace for changed
+source/window content because bundles are immutable per namespace and window.
+Never use a process run ID as the source namespace. `source_scope` is descriptive
+metadata; `mixed-prior-train-synthetic` does not establish train exclusion.
+The ordinary generated Kafka feed includes prior and train orders, so a stable
+cutoff alone does not make it safe for official-train quality evaluation.
+
+Module 4C selects the same namespace explicitly and requires a timezone-aware,
+BSON-millisecond-aligned event-time cutoff. For example, its `serve-user`
+interface takes `--source-namespace instacart-replay-v1` and an explicit
+`--as-of-event-time <UTC timestamp>`; it selects the newest valid finalized
+window ending at or before that cutoff. Module 4C also requires ready A/B inputs.
+For Module 4D, configure the API's exact allowlist to include the same namespace
+in `MODULE4D_TREND_SOURCE_NAMESPACES`; the UI's choices and API's backend check
+must match. These are three related settings: Module 3 publication namespace,
+Module 4C request namespace, and Module 4D API allowlist entry.
+
+The legacy writer provisions its own indexes, and the bundle writer creates its
+`expires_at` TTL index when publishing bundles. The Module 4D API selection
+index on `(source_namespace, window_end descending)` is different: an
+administrator provisions it before starting the API. See [Required dashboard
+indexes](#required-dashboard-indexes). TTL removes documents by processing-time
+expiry; it does not implement the event-time cutoff or Module 4C's optional
+maximum-event-age policy.
+
+On shutdown, retain the checkpoint if recovery may be needed. Remove only the
+exact local run-output directory after preserving any required evidence. Bundle
+documents expire by their configured TTL; if manual deletion is necessary,
+scope it to the exact source namespace and obtain the database owner's approval.
+Do not remove the shared MongoDB database, Kafka topic, HDFS data, or Compose
+volumes as routine cleanup.
 
 ## Module 4C controlled streaming demo
 

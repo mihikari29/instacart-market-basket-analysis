@@ -1,9 +1,10 @@
 # Module 4D Documentation Archive
 
-This directory preserves the eight retired top-level Module 4C/4D documents.
-Their detailed design notes, historical observations, and original release
-records remain available here; the current sources of truth are consolidated in
-the canonical guides below.
+This index links to eight retired top-level Module 4C/4D documents archived
+across the sibling `module4c/` and `module4d/` evidence directories. Their
+detailed design notes, historical observations, and original release records
+remain available there; the current sources of truth are consolidated in the
+canonical guides below.
 
 | Retired document | Current canonical location | Preserved archive |
 |---|---|---|
