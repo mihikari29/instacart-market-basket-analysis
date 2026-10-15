@@ -37,7 +37,7 @@ UI has no direct MongoDB connection.
 | Module 4D | Read-only API and four-page dashboard are implemented; an independently verified per-user ALS view is missing. |
 | Kubernetes | Required by the Proposal; no deployment assets or evidence are present. |
 
-See [project progress](docs/progress.md) for evidence dates, current CI, Proposal
+See [project progress](docs/progress.md) for evidence dates, recorded CI, Proposal
 gaps, and next work. The [Module 3 guide](docs/module3-contracts.md) owns its
 technical contract; the [Module 4 plan](docs/module4-plan.md) owns Module 4
 algorithms and API contracts.
@@ -107,8 +107,8 @@ and the full-data evidence for the recorded scope.
 
 ## Scenario feeds (historical runs)
 
-Older `scatter_1w`, `scatter_1m`, and `scatter_3m` measurements remain in the
-[evidence archive](docs/evidence/README.md) with their original run context.
+Historical `scatter_1w`, `scatter_1m`, and `scatter_3m` measurements and their
+scope caveat are recorded in [progress §2.3](docs/progress.md#23-synthetic-feed-configurations).
 
 ## Event schema (one row = one product event)
 
@@ -168,13 +168,14 @@ and [historical streaming evidence](docs/evidence/module3/README.md).
 
 ## Validation strategy
 
-Historical full-data results, bounded streaming evidence, and current CI have
-different scopes. Current CI success does not establish full-data equivalence,
+Historical full-data results, bounded streaming evidence, and CI runs have
+different scopes. A passing CI run does not establish full-data equivalence,
 recommendation accuracy, Kubernetes deployment, or production scalability. Full-
 data Module 2, 3, and 4 workflows have **not** been rerun after the coding-style
 refactor; the overall comparison remains **NOT FULLY VERIFIED**.
 
-Current main checks passed: [Fast validation 38742236253](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38742236253)
+Checks recorded for the 15 October 2026 audit baseline (`main` at
+`75c4f8854d9e23df4311bf2c53f0c8133a4bb5be`) passed: [Fast validation 38742236253](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38742236253)
 and [Module 4A–4B runtime 38742235872](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38742235872).
 [Module 3 validation 38727634271](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38727634271)
 passed on the parent code commit; PR #11 changed documentation only.

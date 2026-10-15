@@ -1170,7 +1170,7 @@ suite mới ngày 10/10 được lưu trong evidence, không cộng các suite l
 
 Full-data run và same-version replay đã passed ngày 10/10. Mục này giữ quy
 trình tái lập với run IDs mới, runtime đã pin và curated dataset đã stage.
-Recipe đầy đủ có tại [progress §5.5](progress.md#55-run-module-4a4b);
+Recipe đầy đủ có tại [Module 4A/4B runbook](docker.md#module-4a4b-operation-and-full-data-acceptance);
 [exact acceptance commands](evidence/module4/acceptance-20261010/run-acceptance.sh)
 ghi đúng engine/storage override của máy nghiệm thu. Dùng portable override
 `.github/module4-full.override.yml` cho stack Linux mới; engine WSL hiện tại
@@ -1210,7 +1210,7 @@ gate.
 # Handoff Module 2; services đã khởi động ở mục 16.1
 docker compose run --rm --use-aliases module2 validate
 
-# Cấu hình tài nguyên/COMPOSE_FILE theo progress §5.5 hoặc exact commands.
+# Cấu hình tài nguyên/COMPOSE_FILE theo [Module 4A/4B runbook](docker.md#module-4a4b-operation-and-full-data-acceptance) hoặc exact commands.
 python scripts/module4.py validate --scope full_data \
   --source-receipt data/raw/source-receipt.json --shuffle-partitions 32
 python scripts/module4.py all --scope full_data \
