@@ -1323,6 +1323,8 @@ archived in [Module 4C evidence](evidence/module4c/README.md).
 Module 4C consumes the accepted Module 4A–4B snapshot and Module 3 immutable
 finalized trend bundles. It does not train ALS, rebuild the graph, or treat the
 legacy mutable `realtime_trending` rows as a consistent trend snapshot.
+Kafka provenance, bundle identity, finalization, and retry boundaries are
+specified in the [Module 3 contract guide](module3-contracts.md).
 
 - The source context must establish that both ALS and graph/catalog data are
   available before classifying a user as warm or cold. Capture the accepted

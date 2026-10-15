@@ -149,6 +149,73 @@ The route schemas, bounds, provenance and error contracts live in
 The retired API and Streamlit documents remain in the
 [Module 4D archive](evidence/module4d/README.md).
 
+## Module 3 streaming and Module 3 to Module 4C enablement
+
+This is an example for an operator who intends to publish into the existing
+default `instacart` Compose project's Kafka and MongoDB. It was checked against
+the CLI parser and Compose service definition; it was not run as part of this
+documentation change. The `instacart-spark:3.5.5` image must be available
+locally. The project must already have healthy Kafka, Spark master/worker, and
+MongoDB services on its network, and the topic must contain
+the intended replay or have an active producer. Module 4C also needs a ready
+Module 4A/4B snapshot and compatible catalog in that MongoDB database. The
+command below does not start dependencies, but it writes local output and
+checkpoint files under `results/module3/` and writes to the project's MongoDB.
+Do not use it unless those writes are intended. The default project has
+persistent services and named volumes; do not use `down -v` or global cleanup.
+
+Run the module entry point directly. Do not use `scripts/module3.py`, which
+starts Compose before forwarding arguments. The options follow the `run`
+subcommand in the parser:
+
+```bash
+docker compose --profile tools run --rm --no-deps \
+  --entrypoint python3 module3 \
+  -m src.module3.cli run \
+  --duration-seconds 0 \
+  --publish-trend-bundles \
+  --trend-source-namespace instacart-replay-v1 \
+  --trend-source-scope mixed-prior-train-synthetic \
+  --checkpoint-id instacart-replay-v1
+```
+
+`--duration-seconds 0` runs until interrupted. A new checkpoint starts at
+`--starting-offsets` (default `earliest`); on restart, Spark restores offsets
+and state from `results/module3/checkpoint/<checkpoint-id>`. Keep the same
+checkpoint identity and compatible topic/query settings to resume. Use a new
+checkpoint identity for a genuinely new stream. Keep the namespace stable for
+the same logical source and replay, but choose a new namespace for changed
+source/window content because bundles are immutable per namespace and window.
+Never use a process run ID as the source namespace. `source_scope` is descriptive
+metadata; `mixed-prior-train-synthetic` does not establish train exclusion.
+The ordinary generated Kafka feed includes prior and train orders, so a stable
+cutoff alone does not make it safe for official-train quality evaluation.
+
+Module 4C selects the same namespace explicitly and requires a timezone-aware,
+BSON-millisecond-aligned event-time cutoff. For example, its `serve-user`
+interface takes `--source-namespace instacart-replay-v1` and an explicit
+`--as-of-event-time <UTC timestamp>`; it selects the newest valid finalized
+window ending at or before that cutoff. Module 4C also requires ready A/B inputs.
+For Module 4D, configure the API's exact allowlist to include the same namespace
+in `MODULE4D_TREND_SOURCE_NAMESPACES`; the UI's choices and API's backend check
+must match. These are three related settings: Module 3 publication namespace,
+Module 4C request namespace, and Module 4D API allowlist entry.
+
+The legacy writer provisions its own indexes, and the bundle writer creates its
+`expires_at` TTL index when publishing bundles. The Module 4D API selection
+index on `(source_namespace, window_end descending)` is different: an
+administrator provisions it before starting the API. See [Required dashboard
+indexes](#required-dashboard-indexes). TTL removes documents by processing-time
+expiry; it does not implement the event-time cutoff or Module 4C's optional
+maximum-event-age policy.
+
+On shutdown, retain the checkpoint if recovery may be needed. Remove only the
+exact local run-output directory after preserving any required evidence. Bundle
+documents expire by their configured TTL; if manual deletion is necessary,
+scope it to the exact source namespace and obtain the database owner's approval.
+Do not remove the shared MongoDB database, Kafka topic, HDFS data, or Compose
+volumes as routine cleanup.
+
 ## Module 4C controlled streaming demo
 
 The archived [C8B procedure](evidence/module4c/c8b-streaming-demo.md) is a
