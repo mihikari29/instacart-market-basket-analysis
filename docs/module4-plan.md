@@ -1,6 +1,6 @@
-# Kế hoạch triển khai và đánh giá Module 4A–4B
+# Kế hoạch kỹ thuật và nghiệm thu Module 4A–4D
 
-Ngày cập nhật: **10/10/2026** (Asia/Bangkok).
+Mốc nghiệm thu Module 4A–4B: **10/10/2026** (Asia/Bangkok). Bản hợp nhất Module 4A–4D cập nhật **15/10/2026**.
 
 **Trạng thái 10/10/2026: hoàn thành và nghiệm thu 21/21 gate (100%).**
 Audit đầu lượt này ghi nhận 20/21 gate (95,2%); phần còn lại là full-data A/B
@@ -26,17 +26,54 @@ Trong tài liệu này, “chạy hoàn chỉnh” nghĩa là chạy đúng cont
 nghiệm thu trên nguồn dữ liệu đầy đủ. Đây không phải cam kết không còn lỗi trong
 mọi môi trường hoặc đã đáp ứng năng lực production.
 
+Current implementation status and limitations are maintained in
+[progress.md](progress.md); operational procedures are in [docker.md](docker.md).
+Detailed C8 and D3 records and the retired standalone documents are preserved
+under [docs/evidence](evidence/README.md).
+
+## Mục lục
+
+- [1. Phạm vi](#1-phạm-vi)
+- [2. Mục tiêu nghiệm thu](#2-mục-tiêu-nghiệm-thu)
+- [3. Hợp đồng dữ liệu](#3-hợp-đồng-dữ-liệu)
+- [4. Cấu trúc mã đề xuất](#4-cấu-trúc-mã-đề-xuất)
+- [5. Module 4A — ALS Recommendation](#5-module-4a--als-recommendation)
+- [6. Module 4B — Product Co-purchase Graph](#6-module-4b--product-co-purchase-graph)
+- [7. Chiến lược kiểm thử](#7-chiến-lược-kiểm-thử)
+- [8. Ma trận đánh giá/nghiệm thu](#8-ma-trận-đánh-giánghiệm-thu)
+- [9. Evidence bắt buộc](#9-evidence-bắt-buộc)
+- [10. Kế hoạch thực hiện](#10-kế-hoạch-thực-hiện)
+- [11. Thứ tự ưu tiên khi thiếu thời gian](#11-thứ-tự-ưu-tiên-khi-thiếu-thời-gian)
+- [12. Kết quả kiểm tra hiện tại](#12-kết-quả-kiểm-tra-hiện-tại)
+- [13. Backlog thực hiện](#13-backlog-thực-hiện-và-thứ-tự-phụ-thuộc)
+- [14. Chi tiết công việc](#14-chi-tiết-công-việc-theo-thành-phần)
+- [15. Ma trận test](#15-ma-trận-test-bắt-buộc-để-đóng-backlog)
+- [16. Chạy nghiệm thu](#16-quy-trình-chạy-nghiệm-thu-sau-khi-sửa-code)
+- [17. Checklist Module 4A–4B](#17-checklist-đóng-module-4a4b)
+- [18. Quy tắc cập nhật tiến độ](#18-quy-tắc-cập-nhật-tiến-độ-và-bàn-giao)
+- [19. Module 4C — Hybrid recommendation and serving](#module4c-spec)
+- [20. Module 4D — Read API and dashboard specification](#module4d-spec)
+
 ## 1. Phạm vi
 
-Tài liệu này chỉ bao gồm hai phần:
+Phần A/B của tài liệu giữ nguyên phạm vi và tiêu chí ban đầu:
 
 - **Module 4A — ALS Recommendation:** chuẩn bị implicit interactions, huấn luyện
   Spark MLlib ALS, tuning, đánh giá và xuất `user_recommendations`.
 - **Module 4B — Product Graph:** dựng đồ thị đồng mua, tính neighbor count,
   weighted degree, PageRank và xuất `product_graph_metrics`.
 
-Serving Layer kết hợp ALS–Trend, FastAPI, dashboard và Kubernetes không thuộc
-phạm vi kế hoạch này.
+Mục 19–20 mở rộng tài liệu canonical này để mô tả các hợp đồng đã triển khai
+cho:
+
+- **Module 4C — Hybrid recommendation and serving:** kết hợp snapshot A/B đã
+  sẵn sàng với trend bundle Module 3 đã finalized, deterministic ranking và
+  versioned per-user publication.
+- **Module 4D — API and dashboard:** bounded read-only FastAPI endpoints,
+  allowlisted archived evidence, và Streamlit UI đọc qua HTTP.
+
+Đây là technical plan của Module 4A–4D, không thay đổi yêu cầu, scope đã duyệt
+hay các acceptance record trong [Proposal.md](Proposal.md) và evidence.
 
 ## 2. Mục tiêu nghiệm thu
 
@@ -1271,3 +1308,301 @@ thuộc checklist bắt buộc A/B này; các giới hạn đã đo được cô
 - [Docker Compose run: --use-aliases](https://docs.docker.com/reference/cli/docker/compose/run/)
 - [GraphFrames installation](https://graphframes.io/02-quick-start/01-installation.html)
 - [GraphFrames centrality metrics](https://graphframes.io/04-user-guide/03-centralities.html)
+
+<a id="module4c-spec"></a>
+
+## 19. Module 4C — Hybrid recommendation and serving
+
+This section specifies the implemented Module 4C boundary. It complements the
+approved architecture in [Proposal §§28–32](Proposal.md) without changing its
+scope. Detailed dated C8/C9 records and the original evaluation methodology are
+archived in [Module 4C evidence](evidence/module4c/README.md).
+
+### 19.1. Inputs and source consistency
+
+Module 4C consumes the accepted Module 4A–4B snapshot and Module 3 immutable
+finalized trend bundles. It does not train ALS, rebuild the graph, or treat the
+legacy mutable `realtime_trending` rows as a consistent trend snapshot.
+
+- The source context must establish that both ALS and graph/catalog data are
+  available before classifying a user as warm or cold. Capture the accepted
+  A/B readiness generation and its model/graph/run identities; verify readiness
+  again after bounded reads under the publication lock.
+- A request supplies an explicit UTC, BSON-millisecond-aligned
+  `as_of_event_time` and an exact `source_namespace`. There is no implicit
+  freshness threshold. C5 selects the newest eligible finalized bundle at or
+  before the cutoff and verifies identity, schema, source metadata, timestamp
+  precision, content hash, and expiry. Preserve the bundle's original
+  `source_scope` verbatim.
+- ALS products must resolve in the verified catalog. Trend-only products absent
+  from that catalog are excluded from candidates. Candidate source rows and
+  ranks are validated before ranking.
+
+### 19.2. Candidate generation and ranking
+
+The configured defaults are `als_top_n=20`, `trend_top_m=20`,
+`output_top_k=20`, `lambda_weight=0.7`, and `epsilon=1e-12`. Each size is a
+positive integer no greater than 20; lambda is finite in `[0,1]`.
+
+For ALS scores, min-max normalization is
+`(score - min_score) / (max_score - min_score + epsilon)`; a constant ALS score
+set maps to zero. Trend scores are divided by `max_trend_score + epsilon`; an
+all-zero trend set maps to zero. For each candidate, the final score is
+
+```text
+final_score = lambda_effective * normalized_als_score
+            + (1 - lambda_effective) * normalized_trend_score
+```
+
+The candidate set is the union of the selected ALS and trend rows in hybrid
+mode. Lambda 1 selects ALS candidates only; lambda 0 selects trend candidates
+only. The final sort uses full-precision scores descending and `product_id`
+ascending as a deterministic tie-break, then applies Top-K. Persisted raw
+scores, normalized scores, inclusion flags, requested/effective lambda, mode,
+reason, and rank make the result explainable.
+
+If trends are unavailable while ALS rows exist, the service uses an ALS-only
+fallback and records its reason. If ALS rows are absent and the trend snapshot
+is unavailable, the service publishes a valid empty result with mode
+`no_candidates` and a reason. When no ALS rows exist but a trend snapshot is
+available, the mode remains `cold_user_trend_only`, even if the snapshot has no
+eligible candidates; an empty snapshot produces an empty result with reason
+`trend_snapshot_empty`. Other empty candidate sets retain the selected mode and
+record the specific reason. Missing or unverified A/B graph/catalog context is
+an error; it is not silently interpreted as a cold user.
+
+### 19.3. MongoDB publication and CLI contract
+
+`final_recommendations` contains immutable rows keyed by a content-derived
+`serving_version` and user. The accepted row contract carries user/product
+identity and name, raw and normalized ALS/trend scores, final score, contiguous
+rank, source-inclusion flags, lambda values, mode/reason, A/B source identities,
+trend namespace/scope/window/hash, explicit event-time cutoff, input digest,
+generation time, and ranking configuration identity. Unique indexes protect
+`(serving_version, user_id, product_id)` and
+`(serving_version, user_id, rank)`.
+
+The per-user readiness document uses `_id="hybrid:<user_id>"` and points to one
+complete immutable serving version. The publisher validates prepared input,
+writes rows insert-only, reads back and validates the full publication, then
+promotes the pointer only if the source generation is still acceptable. A
+repeated identical publication is idempotent; conflicting content, incomplete
+read-back, or a stale/incomparable source generation cannot replace the active
+pointer. The pointer is not a multi-document MongoDB transaction and does not
+persist an intermediate `publishing` state.
+
+The supported serving entry point is
+`python3 -m src.module4.hybrid.cli serve-user`. It requires a positive user ID,
+explicit `--as-of-event-time`, `--source-namespace`, MongoDB URI, and database;
+ranking limits and lambda are validated against the same bounded contract.
+See the [Hybrid CLI operating instructions](module4-package-migration.md#hybrid-cli)
+for command syntax and [docker.md](docker.md) for environment and container
+operations.
+
+### 19.4. Evaluation design and claim boundary
+
+C8A measures responsiveness to controlled synthetic trend changes, not
+relevance or recommendation accuracy. Its fixed warm-user fixture contains 20
+ALS rows and stable A/B, graph, and catalog inputs. The independent score oracle
+compares full-precision scores. For the recorded shift, lambda `0.0` and `0.5`
+changed Top-1 from P1 to P2; lambda `0.7`, `0.9`, and `1.0` retained P1 and the
+rank order. The default `0.7` result therefore showed no Top-1 or rank-order
+change in this fixture. CLI process timing includes startup and Mongo serving,
+not fixture setup, and is not Kafka-to-serving latency.
+
+C8B is a bounded synthetic Kafka → Spark → finalized Module 3 bundle → Module
+4C CLI integration. Its event acknowledgement, watermark, bundle publication,
+and serving observations have separate recorded boundaries. It did not exercise
+checkpoint restart and does not establish production throughput or
+recommendation quality. See the immutable [C8 receipts](evidence/module4c/README.md)
+and archived [C8B procedure and observations](evidence/module4c/c8b-streaming-demo.md).
+
+A future quality evaluation must first establish leakage-safe chronology and a
+cutoff from source order sequence and timestamp reconstruction. The ordinary
+Module 1 event feed combines prior and train events without retaining
+`eval_set`; it cannot by itself establish prior-only trend provenance. Freeze
+the cutoff-specific model, graph, catalog, trend windows, cohort, and candidate
+eligibility; ensure no official-train truth contributes to any of them. Compare
+ALS-only, Trend-only, preregistered Hybrid lambda values, PersonalFrequency,
+and GlobalPopularity at K=5/10/20 using the existing `evaluation.py` metric
+definitions. Report warm and all-nonempty-truth cohorts plus cold-start
+coverage. If a valid cutoff cannot be proven, report evaluation as infeasible.
+
+<a id="module4d-spec"></a>
+
+## 20. Module 4D — Read API and dashboard specification
+
+Module 4D is a bounded, read-only presentation layer over existing MongoDB
+snapshots and fixed archived reports. The implementation is under
+`src/module4/dashboard/`; the frontend uses HTTP and never connects directly to
+MongoDB. The approved high-level visualization requirements remain in
+[Proposal §30](Proposal.md). The field-level historical inventory and release
+records are retained in the [Module 4D evidence archive](evidence/module4d/README.md).
+
+### 20.1. Backend configuration and trust boundary
+
+The API process requires these explicit settings; it has no project-database
+fallback:
+
+```text
+MODULE4D_MONGODB_URI=<MongoDB URI for a database-scoped read-only account>
+MODULE4D_MONGO_DATABASE=<explicit database name>
+MODULE4D_TREND_SOURCE_NAMESPACES=<comma-separated exact namespace allowlist>
+MODULE4D_APP_ROOT=<application/repository root containing docs/evidence; optional default>
+```
+
+The UI process receives only:
+
+```text
+MODULE4D_API_BASE_URL=http://127.0.0.1:8000
+MODULE4D_TREND_SOURCE_NAMESPACES=<same exact namespace allowlist>
+```
+
+The UI URL validator permits loopback/local API addresses or the explicit
+`module4d-api` service host in the isolated demo; it rejects credentials,
+arbitrary external hosts, paths, queries, and fragments.
+
+The API reads only the fixed collections
+`module4_snapshot_readiness`, `final_recommendations`,
+`realtime_trending_windows`, `batch_product_metrics`, and
+`department_metrics`. The account needs read and index-metadata inspection
+privileges only. It cannot publish, write, create indexes, rename, or drop.
+The Streamlit UI accepts only `MODULE4D_API_BASE_URL` and the matching exact
+trend namespace allowlist. For local use the API and UI ports bind to
+`127.0.0.1`; credentials remain on the API side.
+
+The API validates scalar IDs, UTC timestamps, namespace allowlists, enum values,
+and opaque report IDs. It constructs fixed Mongo filters and projections, uses
+documented indexes, explicit result limits and `maxTimeMS`, closes cursors, and
+returns sanitized errors. It does not accept caller-supplied Mongo operators,
+collection names, sort keys, paths, or report filenames. It does not start
+Spark, Kafka, HDFS, or a Module 4C publisher.
+
+### 20.2. Implemented HTTP routes and response contracts
+
+All data routes return bounded JSON with source/provenance metadata. The
+implemented paths below supersede the earlier D0 route proposals preserved in
+the archive.
+
+| Route | Contract and bounds | Failure behavior |
+|---|---|---|
+| `GET /health` | API process liveness only; does not ping MongoDB. | Process-level health response only; never implies source availability. |
+| `GET /api/v1/recommendations/{user_id}` | Positive integer ID; per-user Hybrid pointer, exact serving-version rows, rank order, at most 20 rows. Returns persisted raw/normalized/final scores, mode/reason, and source identities. | `404` no published snapshot; `503` not ready or service unavailable; `409` pointer changed during read; `502` invalid stored snapshot. |
+| `GET /api/v1/trends` | Exact allowlisted namespace plus explicit UTC cutoff/optional max event age; returns one newest eligible finalized bundle through the C5 verifier, including window, scope, publication/expiry, digest, and ranked items. | Missing, expired, and stale states remain distinct; malformed or corrupt newest bundle fails closed; missing required index is `503 trend_index_unavailable`. |
+| `GET /api/v1/batch/products` | `order=purchase_count` or `reorder_rate`; default limit 20, hard limit 50; metric descending and product ID ascending. Product names are not in this Mongo source. | Invalid inputs `422`; unavailable required ranking index `503 batch_index_unavailable`; malformed source `502`. |
+| `GET /api/v1/batch/departments` | Reads at most 22 records to validate the fixed 1–21 department domain; returns at most 21 rows ordered by purchase count descending then ID ascending. | More than 21 or malformed documents fail with `502`; collection-specific run/time is preserved. |
+| `GET /api/v1/evidence` and `GET /api/v1/evidence/{evidence_id}` | Fixed five-ID registry and curated projections only: Module 2 analytics, Module 2 hardening benchmark, Module 4A evaluation, C8A receipt, and C8B receipt. Files are schema-validated and capped at 256 KiB. | Unknown ID `404`; registered missing file `503`; malformed/oversized/invalid content `502`. No arbitrary file paths or raw result passthrough. |
+| `GET /api/v1/analytics/orders-distribution` | Archived all-order counts by source `order_dow` bins 0–6 and hour bins 0–23; counts reconcile to the recorded order total. | Invalid evidence returns sanitized `502`; this is not a prior-only product-event distribution. |
+| `GET /api/v1/evaluation/als` | Archived official-train cohorts and recorded ALS/global-popularity/personal-frequency metrics at available K values; scores are not recalculated. | Invalid evidence returns sanitized `502`; no Hybrid score or quality claim is produced. |
+
+The response schemas are strict: unknown fields and non-finite numbers are
+rejected. Every error uses
+`{"error":{"code":"…","message":"…","request_id":"…"}}`; internal
+credentials, connection details, and filesystem paths are not returned.
+
+| Response | Required payload fields and bounds |
+|---|---|
+| Recommendation | `user_id`, `serving_version`, `status="ready"`, `recommendation_count` (0–20), `mode`, nullable `reason`, `source`, `ranking_config`, nullable `generated_at`, `recommendations` (0–20), and `observed_at`. Each item has product ID/name, rank 1–20, ALS/trend inclusion flags, nullable raw scores, normalized components in [0,1], and `final_score` in [0,1]. `source` carries run/model/graph IDs, trend namespace/scope/window/hash, cutoff, input hash, and pointer update time. |
+| Trend | `available`, status (`available`, `missing`, `expired`, or `stale`), nullable reason/scope/window/publication/expiry/schema/config/content identities, namespace, `row_count` (0–20), items (product ID, trend score [0,1], rank 1–20), and `observed_at`. |
+| Batch products/departments | `items`, `source`, `metric_definition`, `observed_at`. Product rows contain product ID, positive purchase/user counts, reorder count/rate, run ID, and batch time; department rows contain department ID 1–21, positive purchase/user counts, reorder rate, run ID, and batch time. `source` states prior-only item purchases and `atomic_with_other_collections=false`. |
+| Evidence registry/detail | Registry items contain evidence ID, title, kind, classification, safe source label, availability/status, and nullable SHA-256. Detail contains ID/title/kind, provenance (`artifact_key`, safe label, classification, archived flag, SHA-256), curated `data`, and `observed_at`. The only IDs are `module2-full-analytics`, `module2-full-hardening-benchmarks`, `module4a-full-als-evaluation`, `module4c-c8a-responsiveness`, and `module4c-c8b-streaming-demo`. |
+| Orders distribution | `scope="all orders"`, `measure="order count, not item-level prior purchases"`, total orders, exactly seven day bins (0–6), exactly 24 hour bins (0–23), provenance, and observation time. Each bin carries its source dimension and nonnegative `order_count`. |
+| ALS evaluation | Evidence ID/title/provenance, `algorithm_scope="ALS and recorded baselines"`, recorded method description, the three recorded K values, cohort and history-subgroup metric maps, baseline deltas, official-test-truth availability, truth summary, and observation time. Metrics include Precision/Recall/MAP/NDCG, evaluated users, and coverage where present; the API does not recompute them. |
+
+The Hybrid read consistency protocol reads the exact
+`module4_snapshot_readiness` `_id="hybrid:<user_id>"`, validates ready state,
+serving version and expected row count, reads exact user/version rows with a
+21-row limit, checks unique products and contiguous ranks, then rereads and
+compares pointer identity. A ready empty snapshot is valid. A missing pointer
+means “no published snapshot found”; it does not prove that a user is absent
+from the dataset. The API never substitutes the A/B `_id="active"` pointer.
+
+The trend route delegates candidate selection and bundle integrity to C5. It
+uses an administrator-provisioned index compatible with
+`(source_namespace ASC, window_end DESC)` and never falls back to a collection
+scan or an older bundle when the newest eligible document is corrupt. Batch
+product ranking requires both named compound indexes:
+
+```text
+realtime_trending_windows:
+  idx_source_namespace_window_end_desc
+  (source_namespace ASC, window_end DESC)
+batch_product_metrics:
+  idx_batch_product_purchase_count_desc_product_id_asc
+  (purchase_count DESC, product_id ASC)
+  idx_batch_product_reorder_rate_desc_product_id_asc
+  (reorder_rate DESC, product_id ASC)
+final_recommendations:
+  uq_serving_user_rank (serving_version, user_id, rank), unique
+  uq_serving_user_product (serving_version, user_id, product_id), unique
+```
+
+The default Mongo `_id_` indexes and the accepted A/B indexes must also remain
+available. Module 2 replaces the product collection and its indexes on
+publication, so administrators recreate the two D1B product indexes afterward.
+The API itself never provisions or repairs indexes.
+
+### 20.3. Dashboard views and interaction rules
+
+The four Streamlit views are:
+
+1. **Overview:** API liveness, independent source availability, each source's
+   own run/version/window and timestamp, and fixed evidence registry state.
+2. **Realtime & Batch Analytics:** one selected finalized trend window,
+   prior-only product/department metrics, and archived all-order day/hour
+   counts. Product/department names are not inferred from IDs.
+3. **Hybrid Recommendations:** the verified per-user persisted ranking,
+   component and final scores, inclusion flags, mode/reason, and source
+   provenance. The implemented endpoint does not provide an ALS side-by-side
+   comparison.
+4. **Evaluation & Performance:** archived ALS/baseline evaluation, Module 2
+   benchmark observations, and C8A/C8B receipts, each labeled by run, scope,
+   environment, and method.
+
+Requests are user-triggered; there is no continuous polling. Successful
+responses are cached only in the current Streamlit session and explicit refresh
+clears that cache. Errors are shown separately from empty results; a changing
+pointer offers a manual retry. The UI has no Mongo driver, database URI, report
+file reader, or publication path.
+
+### 20.4. Data availability, provenance, and metric limits
+
+| Source | Contract and reader rule | Availability boundary |
+|---|---|---|
+| Module 4A `user_recommendations` | Read exact `(model_version, user_id)`, rank sort and bounded limit; bracket with A/B `_id="active"` readiness reads where ALS is exposed. | Current snapshot only; old model versions are not guaranteed to remain stored. |
+| Module 4B `product_graph_metrics` | Versioned product rows include neighbor count, weighted degree, PageRank, run, threshold, and computation time. | Available for bounded diagnostics; not an MVP dashboard route. |
+| Module 4A–4B readiness | `module4_snapshot_readiness`, `_id="active"`, establishes the paired model/graph generation. | Never use as the Module 4C per-user serving pointer. |
+| Module 4C `final_recommendations` | Immutable versioned rows include raw/normalized components, final score/rank, mode/reason, source flags, event cutoff, source identities and hashes. | Exact user/version lookup only after the Hybrid pointer protocol. |
+| Module 4C readiness | `module4_snapshot_readiness`, `_id="hybrid:<user_id>"`, identifies one complete per-user serving version and expected row count. | Pointer/rows/pointer validation is required; an absent pointer is not proof of an unknown user. |
+| Module 3 trend bundles | Immutable `realtime_trending_windows` documents contain namespace/scope, finalized bounds, ranked items, content/config hashes, publish time and optional expiry. | Enabled only when configured; preserve scope and distinguish event-time age from processing-time expiry. |
+| Module 2 batch collections | `batch_product_metrics` and `department_metrics` carry prior-only counts and each collection's own `run_id` and `last_batch_time`. | Their publications are not one cross-collection transaction; report mismatched run IDs. |
+| Archived reports | Fixed registry only; reports carry historical run/environment/scope and source digests. | Not live Mongo freshness or request-time computation. `results/` is not scanned. |
+
+Keep event time, Spark processing time, bundle publication time, recommendation
+generation time, and API observation time distinct. `source_namespace` and
+`source_scope` are preserved verbatim. The UI may show registered historical
+progress and the specifically named C8B acknowledgement-to-bundle interval, but
+must not call these Kafka lag or generic event-to-dashboard latency.
+
+The inspected sources do not provide Kafka consumer lag, generic
+event-to-dashboard latency, product-level hour/day distributions, or
+leakage-safe Hybrid recommendation accuracy. Show these as unavailable. Module
+2 `orders_by_hour` and `orders_by_dow` count all orders; product and department
+purchase metrics use prior item facts. Module 4A offline metrics do not imply
+Hybrid quality. Historical synthetic dates do not alone establish a stale or
+expired source.
+
+### 20.5. Acceptance boundary and implementation history
+
+The implementation tests must exercise scalar validation, fixed query shapes,
+index requirements, explicit limits, no-write behavior, error redaction,
+pointer races, empty/missing/corrupt snapshots, curated report projections,
+and UI loading/empty/error/retry states. Isolated Mongo tests must use
+disposable databases; browser and Compose acceptance must keep host bindings
+loopback, database storage disposable, and UI isolated from MongoDB.
+
+The release evidence records D1A/D1B API, four-page UI, and D3 isolated fixture
+validation. These local and CI results demonstrate the recorded integration
+scope only; they do not establish production scalability. Exact dated test
+results, browser observations, report hashes, and historical failure/retry
+records remain in [the evidence archive](evidence/module4d/README.md).

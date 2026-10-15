@@ -37,16 +37,16 @@ integration and release packaging belong to D3.
 ## Dependencies and environment
 
 Runtime direct dependencies are pinned in
-[`deploy/module4/requirements/ui.txt`](../deploy/module4/requirements/ui.txt):
+[`deploy/module4/requirements/ui.txt`](../../../deploy/module4/requirements/ui.txt):
 
 - Streamlit `1.65.0`
 - Requests `2.34.2`
 
 The test environment is defined by
-[`deploy/module4/requirements/ui-dev.txt`](../deploy/module4/requirements/ui-dev.txt),
+[`deploy/module4/requirements/ui-dev.txt`](../../../deploy/module4/requirements/ui-dev.txt),
 which also pins pytest `8.4.2`. Streamlit's built-in tables and bar charts are
 used; no chart library is added directly.
-The [repository layout guide](repository-layout.md) describes the surrounding
+The [repository layout guide](../../repository-layout.md) describes the surrounding
 deployment and script directories.
 
 Create an isolated environment and install the UI runtime:
@@ -75,7 +75,7 @@ The API container must join the same task-scoped network with the DNS name
 context uses the root `.dockerignore` allowlist; the `ui` target copies only its
 pinned requirement manifests and UI package. Datasets, `results/`, `.git/`,
 private environment files, and caches are excluded. It builds independently of
-the Spark stage. See [the Docker runbook](docker.md) for the target boundaries.
+the Spark stage. See [the Docker runbook](../../docker.md) for the target boundaries.
 
 The UI requires these environment settings:
 
@@ -93,7 +93,7 @@ URI. Keep backend MongoDB settings in the FastAPI process only.
 
 Start the existing API with its separately configured backend environment. The
 API requirements and database/index setup are documented in
-[`module4d-api.md`](module4d-api.md). Keep API and UI host bindings on
+[`module4d-api.md`](api-contract.md). Keep API and UI host bindings on
 `127.0.0.1` for a local academic demo.
 
 Then run the UI from the repository root:
@@ -154,7 +154,7 @@ can be retried. The command never prunes shared Docker resources.
 The fixture uses a single small local Spark session to derive synthetic Module
 2 metrics. The persistent demo starts no Spark cluster, Kafka, or HDFS and runs
 no full-data pipeline; opening or refreshing dashboard pages does not start
-Spark. See the [release review](module4d-release-review.md) for actual browser,
+Spark. See the [release review](release-review.md) for actual browser,
 route, regression, provenance, and limitation evidence.
 
 ## API routes used
@@ -296,4 +296,4 @@ checks navigation, source-derived table/chart content, refresh, unknown-user
 error and recovery, fallback metadata, and the absence of JavaScript page
 exceptions. Exact run details and the separate API, archived-evidence, offline
 ALS, Hybrid-quality, and scalability claims are in the
-[release review](module4d-release-review.md).
+[release review](release-review.md).

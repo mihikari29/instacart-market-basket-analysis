@@ -7,7 +7,7 @@
 
 Current Docker commands use the root `Dockerfile` with named `spark`, `api`,
 `ui`, and `browser` targets and one shared `.dockerignore`. The accepted D3
-measurements below are historical release evidence. See [the Docker runbook](docker.md)
+measurements below are historical release evidence. See [the Docker runbook](../../docker.md)
 for the consolidated build, runtime boundaries, and subsequent validation.
 
 ## Scope and release boundary

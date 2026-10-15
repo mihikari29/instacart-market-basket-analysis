@@ -72,11 +72,102 @@ Streamlit isolated from MongoDB.
 
 Shutdown removes only that named demo project, its private environment file,
 and its tagged API/UI images. Startup failure invokes the same scoped cleanup;
-failed shutdown retains the private file for retry. See the
-[API contract](module4d-api.md) for exact indexes and the
-[Streamlit runbook](module4d-streamlit.md) for existing-data mode. Module 2
-publication still requires administrators to recreate dashboard ranking
-indexes after replacing the product collection.
+failed shutdown retains the private file for retry. The demo is synthetic and
+uses disposable tmpfs; it does not use the default project Compose services or
+their persistent volumes.
+
+## Run the API and dashboard against existing data
+
+The API requires explicit backend configuration and a database-scoped MongoDB
+read account. Provision required indexes with an administrator before starting
+it; do not grant index-management or write privileges to the API account. The
+URI's database, when present, must match `MODULE4D_MONGO_DATABASE`.
+
+```bash
+export MODULE4D_MONGODB_URI='mongodb://<read-user>:<password>@<host>:27017/<database>?authSource=<auth-database>'
+export MODULE4D_MONGO_DATABASE='<database>'
+export MODULE4D_TREND_SOURCE_NAMESPACES='<exact-namespace-allowlist>'
+python3 -m pip install -r deploy/module4/requirements/api.txt
+python3 -m uvicorn src.module4.dashboard.api:app \
+  --host 127.0.0.1 --port 8000
+```
+
+The API process may also set `MODULE4D_APP_ROOT` to the application or
+repository root containing `docs/evidence/`; the default is the packaged source
+root and is normally `/workspace` in the API image. Do not set it to the
+`docs/evidence/` directory itself. `/health` is process liveness only and does
+not establish that MongoDB or any source collection is available. Never put
+the MongoDB URI in the UI process, browser configuration, request URL, or
+source control.
+
+For an existing-data dashboard, install the separately pinned UI runtime and
+point it only at the loopback API:
+
+```bash
+python3 -m pip install -r deploy/module4/requirements/ui.txt
+export MODULE4D_API_BASE_URL=http://127.0.0.1:8000
+export MODULE4D_TREND_SOURCE_NAMESPACES='<same-exact-namespace-allowlist>'
+streamlit run src/module4/dashboard/ui/app.py \
+  --server.address 127.0.0.1 --server.port 8501
+```
+
+For a local academic demonstration, keep both host bindings on `127.0.0.1`.
+Network-accessible deployment requires authentication/authorization, TLS, and
+rate limiting; those controls are outside this project configuration.
+
+### Required dashboard indexes
+
+The API checks and hints these administrator-provisioned indexes. It does not
+create or repair them:
+
+```javascript
+db.realtime_trending_windows.createIndex(
+  { source_namespace: 1, window_end: -1 },
+  { name: "idx_source_namespace_window_end_desc" }
+)
+db.batch_product_metrics.createIndex(
+  { purchase_count: -1, product_id: 1 },
+  { name: "idx_batch_product_purchase_count_desc_product_id_asc" }
+)
+db.batch_product_metrics.createIndex(
+  { reorder_rate: -1, product_id: 1 },
+  { name: "idx_batch_product_reorder_rate_desc_product_id_asc" }
+)
+```
+
+Keep the accepted `final_recommendations` indexes
+`uq_serving_user_rank` (unique `(serving_version, user_id, rank)`) and
+`uq_serving_user_product` (unique `(serving_version, user_id, product_id)`).
+The API also requires the ordinary MongoDB `_id_` indexes and permission to
+inspect index metadata. Module 2 replaces `batch_product_metrics` and its
+indexes during publication; recreate both D1B product indexes afterward.
+Missing or incompatible indexes fail closed with an explicit API error rather
+than triggering an unbounded collection scan.
+
+The route schemas, bounds, provenance and error contracts live in
+[Module 4 plan §20](module4-plan.md#module4d-spec).
+The retired API and Streamlit documents remain in the
+[Module 4D archive](evidence/module4d/README.md).
+
+## Module 4C controlled streaming demo
+
+The archived [C8B procedure](evidence/module4c/c8b-streaming-demo.md) is a
+bounded synthetic experiment, not a production or full-data workflow. It
+requires the pinned Kafka 3.7.0, MongoDB 7.0.16, and `instacart-spark:3.5.5`
+images to be present locally and refuses to pull or build them. It creates an
+internal task-labeled network, a temporary KRaft broker, tmpfs-only MongoDB,
+and a unique database; it publishes no ports, mounts no project volumes, and
+does not connect to the default Compose project. The repository bind mount is
+read-only; only that run's unique `results/module4c-streaming-demo/<run-id>/`
+directory is writable.
+
+The cleanup verifier inspects exact task/run labels, container mounts, network,
+and the Kafka image's anonymous volumes before removing run-owned resources.
+If cleanup fails, inspect the run's `docker-cleanup.json` and listed IDs; do
+not use a global prune or remove shared/named volumes. The historical C8B
+report predates the anonymous-volume correction, so its cleanup flag is not
+proof that those volumes were removed. Current test commands and all historical
+observations are in the archived procedure and [Module 4C evidence index](evidence/module4c/README.md).
 
 ## Build context and image safety
 

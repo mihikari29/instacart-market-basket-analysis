@@ -24,7 +24,7 @@ scripts/
   module4/                         Module 4C experiments and Module 4D tools
 src/module1/ ... src/module4/      application and processing packages
 tests/                             stable acceptance and regression tests
-docs/                              runbooks, design records, and evidence
+docs/                              requirements, canonical plans/runbooks, and evidence archive
 .github/workflows/                 CI and full-data validation workflows
 ```
 
@@ -32,6 +32,22 @@ Shared dependencies remain in the two root manifests. Module 4 API, UI,
 development UI, and browser dependencies have separate pinned manifests under
 `deploy/module4/requirements/`. The UI development manifest includes `ui.txt`
 by relative path so runtime pins stay consistent.
+
+## Documentation map
+
+| Document | Responsibility |
+|---|---|
+| [Proposal](Proposal.md) | Approved project requirements and architecture baseline. |
+| [Module 4 plan](module4-plan.md) | Canonical technical specification for Modules 4A–4D, including data, ranking, evaluation, API, and dashboard contracts. |
+| [Progress](progress.md) | Current milestones, validation evidence, status distinctions, remaining issues, and limitations. |
+| [Docker guide](docker.md) | Docker targets, setup, API/dashboard and demo operations, validation commands, and scoped cleanup. |
+| [Evidence archive](evidence/README.md) | Dated acceptance receipts, reports, historical observations, and retired standalone Module 4 design/release documents. |
+
+Module 4C/4D standalone documents were consolidated by responsibility and
+preserved as appendices under `docs/evidence/module4c/` and
+`docs/evidence/module4d/`. Use the canonical documents in this table for current
+contracts and procedures; the archived release records retain their original
+run, revision, measurement, and limitation context.
 
 ## Pipeline and dashboard demo
 
