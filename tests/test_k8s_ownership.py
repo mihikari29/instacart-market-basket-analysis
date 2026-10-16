@@ -250,6 +250,40 @@ class OwnershipTests(unittest.TestCase):
             with self.subTest(case=label), self.assertRaises(OwnershipError):
                 validate_version_lock(candidate)
 
+    def test_version_lock_rejects_placeholder_markers_across_common_separators(self) -> None:
+        cases = (
+            ("host_capacity", "measured_at", "unknown_measurement"),
+            ("toolchain", "kubectl_version", "unresolved_version"),
+            ("toolchain", "docker_engine_version", "TBD_version"),
+            ("storage", "default_storage_class", "unknown_storage_class"),
+            ("storage", "provisioner", "placeholder_provisioner"),
+            ("toolchain", "docker_engine_version", "pending-version"),
+            ("toolchain", "docker_engine_version", "incomplete version"),
+            ("toolchain", "docker_engine_version", "example.identity"),
+            ("toolchain", "docker_engine_version", "unspecified/path"),
+            ("toolchain", "docker_engine_version", "dummy"),
+            ("toolchain", "docker_engine_version", "changeme"),
+            ("toolchain", "docker_engine_version", "TODO_value"),
+            ("toolchain", "docker_engine_version", "not-set"),
+            ("toolchain", "docker_engine_version", "not set"),
+            ("toolchain", "docker_engine_version", "N/A"),
+            ("toolchain", "docker_engine_version", "replace-me"),
+        )
+        for section, field, value in cases:
+            with self.subTest(field=f"{section}.{field}"):
+                candidate = deepcopy(_complete_lock())
+                candidate[section][field] = value
+                with self.assertRaises(OwnershipError):
+                    validate_version_lock(candidate)
+
+    def test_version_lock_accepts_concrete_identities_containing_underscores(self) -> None:
+        candidate = deepcopy(_complete_lock())
+        candidate["storage"]["default_storage_class"] = "fast_ssd"
+        candidate["images"]["api_application_image"]["reference"] = (
+            "registry.local/my_service/api_image:b1"
+        )
+        validate_version_lock(candidate)
+
 
 if __name__ == "__main__":
     unittest.main()

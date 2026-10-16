@@ -62,7 +62,7 @@ def _valid_index_metadata() -> dict[str, list[dict]]:
         "realtime_trending_windows": [
             {
                 "name": "alternate_supported_trend_index",
-                "key": {"source_namespace": 1, "window_end": -1, "product_id": 1},
+                "key": {"source_namespace": 1, "window_end": -1, "content_sha256": "hashed"},
                 "sparse": True,
                 "collation": {"locale": "simple"},
             }
@@ -129,9 +129,9 @@ class _FakeClient:
         return self.database
 
 
-def _auth_status(username: str = "reader", database: str = "module4d_demo") -> dict:
+def _auth_status(username: str = "reader", database: str = "module4d_demo", ok: int | float = 1) -> dict:
     return {
-        "ok": 1,
+        "ok": ok,
         "authInfo": {
             "authenticatedUsers": [{"user": username, "db": database}],
             "authenticatedUserRoles": [{"role": "read", "db": database}],
@@ -336,6 +336,12 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertEqual(client.admin.commands, ["ping"])
         self.assertTrue(all(collection.list_indexes_calls == 1 for collection in database.collections.values()))
 
+        # MongoDB encodes command success as a BSON double; verify the decoded
+        # float through the same full readiness path as the integer fixture.
+        float_client = _FakeClient(_FakeDatabase(valid, _auth_status(ok=1.0)))
+        with patch.object(api_readiness, "_index_specs", return_value=expected):
+            api_readiness._verify(float_client, "module4d_demo", "reader")
+
         invalid_cases = (
             ("product hidden", "batch_product_metrics", 0, {"hidden": True}),
             ("product sparse", "batch_product_metrics", 0, {"sparse": True}),
@@ -348,6 +354,7 @@ class StaticFoundationTests(unittest.TestCase):
             ("trend non-simple collation", "realtime_trending_windows", 0, {"collation": {"locale": "en"}}),
             ("trend wrong prefix", "realtime_trending_windows", 0, {"key": {"window_end": -1, "source_namespace": 1}}),
             ("trend non-integer direction", "realtime_trending_windows", 0, {"key": {"source_namespace": True, "window_end": -1}}),
+            ("trend invalid direction", "realtime_trending_windows", 0, {"key": {"source_namespace": 0, "window_end": -1}}),
             ("serving not unique", "final_recommendations", 0, {"unique": False}),
             ("serving wrong name", "final_recommendations", 0, {"name": "different_unique_index"}),
         )
@@ -361,10 +368,52 @@ class StaticFoundationTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "index is missing or incompatible"):
                         api_readiness._verify(fake_client, "module4d_demo", "reader")
 
-        bad_auth = _FakeClient(_FakeDatabase(valid, {"ok": 1}))
-        with patch.object(api_readiness, "_index_specs", return_value=expected):
-            with self.assertRaisesRegex(RuntimeError, "authentication metadata"):
-                api_readiness._verify(bad_auth, "module4d_demo", "reader")
+        invalid_statuses = (
+            None,
+            [],
+            object(),
+            {"ok": True, "authInfo": _auth_status()["authInfo"]},
+            {"ok": False, "authInfo": _auth_status()["authInfo"]},
+            {"ok": None, "authInfo": _auth_status()["authInfo"]},
+            {"ok": "1", "authInfo": _auth_status()["authInfo"]},
+            {"ok": 0, "authInfo": _auth_status()["authInfo"]},
+            {"ok": 2, "authInfo": _auth_status()["authInfo"]},
+            {"ok": float("nan"), "authInfo": _auth_status()["authInfo"]},
+            {"ok": float("inf"), "authInfo": _auth_status()["authInfo"]},
+            {"ok": float("-inf"), "authInfo": _auth_status()["authInfo"]},
+        )
+        for status in invalid_statuses:
+            bad_auth = _FakeClient(_FakeDatabase(valid, status))
+            with self.subTest(ok=status), patch.object(api_readiness, "_index_specs", return_value=expected):
+                with self.assertRaisesRegex(RuntimeError, "authentication metadata"):
+                    api_readiness._verify(bad_auth, "module4d_demo", "reader")
+
+    def test_trend_index_accepts_all_supported_prefix_directions_and_hashed_suffix(self) -> None:
+        requirement = IndexRequirement(
+            (("source_namespace", 1), ("window_end", -1)),
+            allow_trend_prefix=True,
+            allow_name_fallback=True,
+            reject_sparse=False,
+        )
+        expected = {"realtime_trending_windows": {"idx_source_namespace_window_end_desc": requirement}}
+        for namespace_direction in (-1, 1):
+            for window_direction in (-1, 1):
+                with self.subTest(namespace=namespace_direction, window=window_direction):
+                    index = {
+                        "name": "alternate_supported_trend_index",
+                        "key": {
+                            "source_namespace": namespace_direction,
+                            "window_end": window_direction,
+                            "content_sha256": "hashed",
+                        },
+                        "sparse": True,
+                        "collation": {"locale": "simple"},
+                    }
+                    client = _FakeClient(
+                        _FakeDatabase({"realtime_trending_windows": [index]}, _auth_status())
+                    )
+                    with patch.object(api_readiness, "_index_specs", return_value=expected):
+                        api_readiness._verify(client, "module4d_demo", "reader")
 
     def test_mongodb_uri_and_connection_metadata_require_authenticated_database_reader(self) -> None:
         self.assertEqual(
@@ -414,6 +463,28 @@ class StaticFoundationTests(unittest.TestCase):
         for metadata in bad_metadata:
             with self.subTest(metadata=metadata), self.assertRaises(RuntimeError):
                 api_readiness._verify_authenticated_identity(metadata, "reader", "module4d_demo")
+
+    def test_encoded_mongodb_usernames_match_authenticated_identity(self) -> None:
+        cases = (
+            ("reader%2Bplus", "reader+plus"),
+            ("reader+space", "reader space"),
+        )
+        uri_template = "mongodb://{username}:pw@mongo/module4d_demo?authSource=module4d_demo"
+        for encoded, decoded in cases:
+            with self.subTest(encoded_username=encoded):
+                username = api_readiness._authenticated_username(uri_template.format(username=encoded), "module4d_demo")
+                self.assertEqual(username, decoded)
+                client = _FakeClient(_FakeDatabase({}, _auth_status(username=username)))
+                with patch.object(api_readiness, "_index_specs", return_value={}):
+                    api_readiness._verify(client, "module4d_demo", username)
+                self.assertEqual(client.database.commands, [{"connectionStatus": 1}])
+                self.assertEqual(client.admin.commands, ["ping"])
+
+        plus_user = api_readiness._authenticated_username(uri_template.format(username="reader%2Bplus"), "module4d_demo")
+        wrong_identity = _FakeClient(_FakeDatabase({}, _auth_status(username="reader plus")))
+        with patch.object(api_readiness, "_index_specs", return_value={}):
+            with self.assertRaisesRegex(RuntimeError, "did not authenticate"):
+                api_readiness._verify(wrong_identity, "module4d_demo", plus_user)
 
     def test_dockerfile_sha_fragment_rejects_missing_wrong_length_uppercase_and_nonhex(self) -> None:
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")

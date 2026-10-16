@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 import sys
 from typing import Any
-from urllib.parse import parse_qsl, unquote, urlsplit
+from urllib.parse import parse_qsl, unquote, unquote_plus, urlsplit
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,25 +74,21 @@ def _compatible_index(index: Any, requirement: IndexRequirement) -> bool:
     key = index.get("key")
     if not isinstance(key, Mapping):
         return False
-    if requirement.allow_trend_prefix and any(
-        type(direction) is not int or direction not in (-1, 1) for direction in key.values()
-    ):
-        return False
-    try:
-        actual_keys = tuple((field, int(direction)) for field, direction in key.items())
-    except (OverflowError, TypeError, ValueError):
-        return False
-
     if requirement.allow_trend_prefix:
-        prefix = actual_keys[: len(requirement.keys)]
+        prefix = tuple(key.items())[: len(requirement.keys)]
         if len(prefix) != len(requirement.keys):
             return False
         if tuple(field for field, _ in prefix) != tuple(field for field, _ in requirement.keys):
             return False
-        if any(direction not in (-1, 1) for _, direction in prefix):
+        if any(type(direction) is not int or direction not in (-1, 1) for _, direction in prefix):
             return False
-    elif actual_keys != requirement.keys:
-        return False
+    else:
+        try:
+            actual_keys = tuple((field, int(direction)) for field, direction in key.items())
+        except (OverflowError, TypeError, ValueError):
+            return False
+        if actual_keys != requirement.keys:
+            return False
 
     return not requirement.unique or index.get("unique") is True
 
@@ -101,7 +97,7 @@ def _authenticated_username(uri: str, database_name: str) -> str:
     """Require credentials and an explicit target database/authSource in the URI."""
     try:
         parsed = urlsplit(uri)
-        username = unquote(parsed.username or "")
+        username = unquote_plus(parsed.username or "")
         password = unquote(parsed.password or "")
         hostname = parsed.hostname
         database = unquote(parsed.path.removeprefix("/"))
@@ -124,7 +120,10 @@ def _authenticated_username(uri: str, database_name: str) -> str:
 
 
 def _verify_authenticated_identity(status: Any, username: str, database_name: str) -> None:
-    if not isinstance(status, Mapping) or type(status.get("ok")) is not int or status.get("ok") != 1:
+    if not isinstance(status, Mapping):
+        raise RuntimeError("MongoDB authentication metadata is invalid")
+    ok = status.get("ok")
+    if not isinstance(ok, (int, float)) or isinstance(ok, bool) or ok != 1:
         raise RuntimeError("MongoDB authentication metadata is invalid")
     auth_info = status.get("authInfo")
     if not isinstance(auth_info, Mapping):

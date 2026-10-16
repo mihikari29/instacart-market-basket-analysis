@@ -27,8 +27,8 @@ KUBERNETES_VERSION_PATTERN = re.compile(r"v\d+\.\d+\.\d+\Z")
 ARCHITECTURE_PATTERN = re.compile(r"linux/(?:amd64|arm64|ppc64le|s390x)\Z")
 PYTHON_VERSION_PATTERN = re.compile(r"\d+\.\d+\.\d+\Z")
 PLACEHOLDER_PATTERN = re.compile(
-    r"(?:\b(?:unresolved|placeholder|unknown|pending|incomplete|example|unspecified|dummy|changeme)\b|"
-    r"\btbd\b|\btodo\b|\bnot[-_ ]?set\b|\bn/?a\b|\breplace[-_ ]?me\b)",
+    r"(?<![A-Za-z0-9])(?:unresolved|placeholder|unknown|pending|incomplete|example|unspecified|dummy|changeme|"
+    r"tbd|todo|not[-_ ]?set|n/?a|replace[-_ ]?me)(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 REQUIRED_IMAGE_ROLES = frozenset(
