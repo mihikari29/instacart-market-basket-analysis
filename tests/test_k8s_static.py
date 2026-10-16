@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import yaml
 
-from scripts.k8s import api_readiness
+from scripts.k8s import api_readiness, render as k8s_render
 from scripts.k8s.api_readiness import IndexRequirement
 from scripts.k8s.render import MANAGED_MARKER, _validate_output_path, render_overlay
 
@@ -24,6 +24,16 @@ RENDER_LABELS = {
     RUN_LABEL: "0123456789ab",
     MANAGER_LABEL: "it4931-k8s-demo",
 }
+
+
+def _render_with_test_roots(run_id: str, output: Path, fixture_root: Path) -> Path:
+    worktree = fixture_root / "synthetic-protected-worktree"
+    git_metadata = fixture_root / "synthetic-git-metadata"
+    worktree.mkdir(exist_ok=True)
+    git_metadata.mkdir(exist_ok=True)
+    protected_roots = {ROOT.resolve(), BASE.resolve(), worktree.resolve(), git_metadata.resolve()}
+    with patch("scripts.k8s.render._protected_roots", return_value=protected_roots):
+        return render_overlay(run_id, output)
 
 
 def _rendered_objects(run_dir: Path) -> list[dict]:
@@ -143,7 +153,7 @@ class StaticFoundationTests(unittest.TestCase):
     def test_offline_kustomize_preserves_dns_selectors_and_owned_labels(self) -> None:
         with tempfile.TemporaryDirectory(prefix="it4931-k8s-render-test-") as temp:
             output = Path(temp) / "first-render"
-            run_dir = render_overlay("0123456789ab", output)
+            run_dir = _render_with_test_roots("0123456789ab", output, Path(temp))
             overlay = json.loads((run_dir / "kustomization.yaml").read_text(encoding="utf-8"))
             namespace = json.loads((run_dir / "namespace.json").read_text(encoding="utf-8"))
             api_patch = json.loads((run_dir / "api-config-patch.json").read_text(encoding="utf-8"))
@@ -227,21 +237,27 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertFalse(Path("/__it4931_render_forbidden__").exists())
         with tempfile.TemporaryDirectory(prefix="it4931-k8s-render-safety-") as temp:
             root = Path(temp)
+            protected_worktree = root / "synthetic-protected-worktree"
+            git_metadata = root / "synthetic-git-metadata"
+            protected_worktree.mkdir()
+            git_metadata.mkdir()
             unsafe_outputs = (
                 ROOT / "would-be-render-output",
                 BASE / "would-be-render-output",
+                protected_worktree / "would-be-render-output",
+                git_metadata / "would-be-render-output",
                 Path("/"),
             )
             for destination in unsafe_outputs:
                 with self.subTest(destination=destination), self.assertRaises((ValueError, FileExistsError)):
-                    render_overlay("0123456789ab", destination)
+                    _render_with_test_roots("0123456789ab", destination, root)
                 self.assertFalse(destination.name == "would-be-render-output" and destination.exists())
 
             symlink_parent = root / "source-link"
             symlink_parent.symlink_to(BASE, target_is_directory=True)
             symlink_destination = symlink_parent / "would-be-output"
             with self.assertRaisesRegex(ValueError, "symlink"):
-                render_overlay("0123456789ab", symlink_destination)
+                _render_with_test_roots("0123456789ab", symlink_destination, root)
             self.assertFalse((BASE / "would-be-output").exists())
 
             collision = root / "existing-output"
@@ -249,22 +265,40 @@ class StaticFoundationTests(unittest.TestCase):
             sentinel = collision / "keep.txt"
             sentinel.write_text("preserve", encoding="utf-8")
             with self.assertRaises(FileExistsError):
-                render_overlay("0123456789ab", collision)
+                _render_with_test_roots("0123456789ab", collision, root)
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
 
             managed = root / "managed-output"
-            render_overlay("0123456789ab", managed)
+            _render_with_test_roots("0123456789ab", managed, root)
             nested = managed / "nested-output"
             with self.assertRaisesRegex(ValueError, "managed render"):
-                render_overlay("abcdef012345", nested)
+                _render_with_test_roots("abcdef012345", nested, root)
             self.assertFalse(nested.exists())
+
+    def test_git_discovery_failure_fails_closed_without_creating_output(self) -> None:
+        with patch(
+            "scripts.k8s.render.subprocess.check_output",
+            side_effect=FileNotFoundError("git unavailable"),
+        ):
+            with self.assertRaisesRegex(ValueError, "cannot verify protected Git worktrees"):
+                k8s_render._protected_roots()
+
+        with tempfile.TemporaryDirectory(prefix="it4931-k8s-render-no-git-") as temp:
+            output = Path(temp) / "rejected-output"
+            with patch(
+                "scripts.k8s.render.subprocess.check_output",
+                side_effect=FileNotFoundError("git unavailable"),
+            ):
+                with self.assertRaisesRegex(ValueError, "cannot verify protected Git worktrees"):
+                    render_overlay("0123456789ab", output)
+            self.assertFalse(output.exists())
 
     def test_render_preserves_partial_claim_if_copy_fails(self) -> None:
         with tempfile.TemporaryDirectory(prefix="it4931-k8s-render-partial-") as temp:
             output = Path(temp) / "partial-output"
             with patch("scripts.k8s.render.shutil.copytree", side_effect=OSError("synthetic copy failure")):
                 with self.assertRaisesRegex(OSError, "synthetic copy failure"):
-                    render_overlay("0123456789ab", output)
+                    _render_with_test_roots("0123456789ab", output, Path(temp))
             self.assertTrue(output.is_dir())
             self.assertTrue((output / MANAGED_MARKER).is_file())
 
