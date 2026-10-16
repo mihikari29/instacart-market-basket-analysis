@@ -51,7 +51,11 @@ dataset; they are not full-scale performance claims.
 ## Module 4 acceptance and release evidence
 
 Module 4A–4B full-data acceptance records, failed/interrupted attempts, and
-same-version replay receipts remain under [module4/](module4/). Module 4C's
+same-version replay receipts remain under [module4/](module4/). The
+[Module 4A/4B implementation history](module4/ab-implementation-history.md)
+preserves the R01–R12 audit, W01–W13 backlog, partial/failed/interrupted
+checkpoints, 10 October acceptance and checked gates, and historical reproduction
+commands. Module 4C's
 sanitized C8A/C8B receipts and C9A-FIX3 cleanup validation are in
 [module4c/](module4c/); original experiment reports and logs remain in their
 recorded local `results/` paths and are not rewritten here. The retired
