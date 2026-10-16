@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-api-config
+  labels:
+    app.kubernetes.io/name: module4d-api
+    app.kubernetes.io/component: api
+data:
+  MODULE4D_MONGO_DATABASE: module4d_demo_000000000000
+  MODULE4D_TREND_SOURCE_NAMESPACES: module4d-demo-000000000000
+  MODULE4D_APP_ROOT: /workspace
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-ui-config
+  labels:
+    app.kubernetes.io/name: module4d-ui
+    app.kubernetes.io/component: dashboard
+data:
+  MODULE4D_API_BASE_URL: http://module4d-api:8000
+  MODULE4D_TREND_SOURCE_NAMESPACES: module4d-demo-000000000000
+  STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+  STREAMLIT_SERVER_HEADLESS: "true"

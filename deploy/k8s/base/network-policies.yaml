@@ -1,0 +1,106 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: allow-api-to-mongo
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: module4d-mongo
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: module4d-api
+      ports:
+        - protocol: TCP
+          port: 27017
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: allow-ui-to-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: module4d-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: module4d-ui
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: allow-api-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: module4d-api
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: module4d-mongo
+      ports:
+        - protocol: TCP
+          port: 27017
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: allow-ui-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: module4d-ui
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: module4d-api
+      ports:
+        - protocol: TCP
+          port: 8000

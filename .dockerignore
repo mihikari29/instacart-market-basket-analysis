@@ -4,12 +4,16 @@
 !pyproject.toml
 !requirements.txt
 !requirements-dev.txt
+# The Module 4 source digest explicitly hashes this Compose contract.
+!compose.yaml
 !deploy/module4/requirements/api.txt
 !deploy/module4/requirements/ui.txt
 !deploy/module4/requirements/ui-dev.txt
 !deploy/module4/requirements/browser.txt
 !src/**/*.py
 !tests/**/*.py
+tests/test_k8s_ownership.py
+tests/test_k8s_static.py
 !scripts/module4/__init__.py
 !scripts/module4/module4d_api_validation.py
 !scripts/module4/module4d_demo_fixture.py
@@ -17,6 +21,13 @@
 !scripts/module4/module4d_browser_e2e.py
 !scripts/module4/module4c_responsiveness.py
 !scripts/module4/module4c_streaming_demo.py
+# These four exact files are inputs to src.module4.cli.source_digest().
+!scripts/module4.py
+!scripts/module4_runtime_smoke.py
+!scripts/module4_flow_smoke.py
+!scripts/module4_cross_module_smoke.py
+# The API readiness command is packaged in the new k8s-runner target.
+!scripts/k8s/api_readiness.py
 !docs/evidence/full/analytics.json
 !docs/evidence/full/current-hardening-2026-10-03.json
 !docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json

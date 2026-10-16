@@ -93,3 +93,59 @@ RUN python -m pip install --no-cache-dir --disable-pip-version-check -r browser-
 COPY scripts/module4/module4d_browser_e2e.py ./module4d_browser_e2e.py
 USER pwuser
 ENTRYPOINT ["python", "module4d_browser_e2e.py"]
+
+# Bounded Kubernetes API runner. Keep the existing spark/api/ui/browser
+# targets and their defaults unchanged. This target carries only Module 4
+# runtime sources, the Module 3 bundle contract imported by Module 4, the exact
+# files hashed by src.module4.cli.source_digest(), and the API readiness probe.
+FROM spark AS k8s-runner
+
+ARG MODULE4_COMMIT
+RUN set -eu; \
+    case "$MODULE4_COMMIT" in \
+      ''|*[!0-9a-f]*) echo 'MODULE4_COMMIT must be a full lowercase Git SHA' >&2; exit 1 ;; \
+    esac; \
+    if [ "${#MODULE4_COMMIT}" -ne 40 ]; then \
+      echo 'MODULE4_COMMIT must be exactly 40 characters' >&2; exit 1; \
+    fi; \
+    groupadd --gid 10001 k8srunner; \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin k8srunner
+LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \
+      org.opencontainers.image.revision=${MODULE4_COMMIT}
+
+WORKDIR /workspace
+ENV PYTHONPATH=/workspace \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    MODULE4D_APP_ROOT=/workspace \
+    MODULE4_COMMIT=${MODULE4_COMMIT}
+
+COPY src/__init__.py /workspace/src/__init__.py
+COPY src/module3/__init__.py /workspace/src/module3/__init__.py
+COPY src/module3/config.py /workspace/src/module3/config.py
+COPY src/module3/trend_bundle.py /workspace/src/module3/trend_bundle.py
+COPY src/module4/ /workspace/src/module4/
+
+# These files are part of the established Module 4 provenance digest. Keep
+# their paths and bytes intact even though the API does not execute the CLIs.
+COPY scripts/module4.py /workspace/scripts/module4.py
+COPY scripts/module4_runtime_smoke.py /workspace/scripts/module4_runtime_smoke.py
+COPY scripts/module4_flow_smoke.py /workspace/scripts/module4_flow_smoke.py
+COPY scripts/module4_cross_module_smoke.py /workspace/scripts/module4_cross_module_smoke.py
+COPY Dockerfile /workspace/Dockerfile
+COPY compose.yaml /workspace/compose.yaml
+COPY requirements.txt /workspace/requirements.txt
+COPY requirements-dev.txt /workspace/requirements-dev.txt
+
+# Module 4D's registered historical evidence route reads exactly these files.
+COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
+COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
+COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
+COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
+COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
+COPY scripts/k8s/api_readiness.py /workspace/scripts/k8s/api_readiness.py
+
+USER 10001:10001
+EXPOSE 8000
+CMD ["python3", "-c", "print('Kubernetes runner image; specify an explicit workload command')"]

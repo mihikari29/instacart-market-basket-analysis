@@ -1,0 +1,84 @@
+schema_version: 1
+status: incomplete
+lock_policy: A runtime preflight must reject this lock until every required identity is concrete and unresolved is empty.
+cluster:
+  kubernetes_version: v1.37.1
+  minikube_version: v1.39.0
+  driver: docker
+  container_runtime: containerd
+  cni: calico
+  cni_version: v3.33.0
+  node_count: 1
+  architecture: unresolved-host-architecture
+  minikube_release_source: https://github.com/kubernetes/minikube/releases/tag/v1.39.0
+  kubernetes_release_source: https://kubernetes.io/releases/1.37/
+  cni_compatibility_source: https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements
+images:
+  mongo:
+    reference: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
+    source: compose.demo.yaml at the locked repository baseline
+  spark_base:
+    reference: apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece564389258934655ba6f463d6daff8753ff0c639ce
+    source: Dockerfile at the locked repository baseline
+  ui_base:
+    reference: python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
+    source: Dockerfile at the locked repository baseline
+  api_application_image:
+    reference: instacart-module4d-k8s-api:b1
+    immutable_digest: unresolved-until-built-and-inspected
+  ui_application_image:
+    reference: instacart-module4d-k8s-ui:b1
+    immutable_digest: unresolved-until-built-and-inspected
+python_dependencies:
+  api_manifest: deploy/module4/requirements/api.txt (exact declared package pins; transitive closure not confirmed)
+  ui_manifest: deploy/module4/requirements/ui.txt (exact declared package pins; transitive closure not confirmed)
+  api_python: unresolved (the existing Docker guide documents the 3.10 family; exact image runtime not inspected)
+  ui_python: unresolved (the existing Docker guide documents the 3.14 family; exact image runtime not inspected)
+  spark_parent_python: unresolved (exact resolved Spark-stage runtime not inspected)
+  resolved_environment_digests:
+    api: unresolved-until-built-and-inspected
+    ui: unresolved-until-built-and-inspected
+    spark_parent: unresolved-until-built-and-inspected
+  spark_parent: requirements.txt plus requirements-dev.txt via the existing spark stage
+  source_digest: src.module4.cli.source_digest, preserved by the k8s-runner target
+  runtime_reproducibility: incomplete; root requirement ranges and transitive Spark image packages are not a complete lock
+known_prerequisites:
+  required_driver: Docker
+  required_cni: Calico with NetworkPolicy enforcement
+  required_storage: a working default dynamic StorageClass with ReadWriteOnce PVC support
+  machine_capacity: see docs/kubernetes.md; actual host headroom must be measured before B2
+host_capacity:
+  cpu_cores: unresolved-until-measured
+  memory_gib: unresolved-until-measured
+  free_disk_gib: unresolved-until-measured
+  measured_at: unresolved-until-measured
+toolchain:
+  kubectl_version: unresolved-until-inspected
+  minikube_binary_sha256: unresolved-until-verified
+  docker_engine_version: unresolved-until-inspected
+  kubernetes_control_plane_images: unresolved-until-profile-created-and-inspected
+  calico_images:
+    cni: unresolved-until-profile-created-and-inspected
+    node: unresolved-until-profile-created-and-inspected
+    kube-controllers: unresolved-until-profile-created-and-inspected
+storage:
+  default_storage_class: unresolved-until-inspected
+  provisioner: unresolved-until-inspected
+  access_mode: ReadWriteOnce
+  capacity: 2Gi
+  profile_local: unresolved-until-verified
+  volume_binding_mode: unresolved-until-inspected
+unresolved:
+  - Minikube binary checksum and installed Docker Engine identity
+  - actual host architecture, free CPU, RAM, and disk capacity
+  - Calico component image digests for the selected profile
+  - exact Kubernetes control-plane image digests selected by Minikube
+  - API and UI application image digests from the actual build
+  - complete resolved Python environment for the Spark-derived API runner
+  - exact Python runtime versions from the API and UI image builds
+  - exact Python runtime version from the Spark-derived API parent
+  - resolved dependency environment digests for API, UI, and Spark parent
+  - measured host capacity and measurement time
+  - kubectl and Docker Engine versions
+  - Kubernetes control-plane and Calico image digests
+  - default StorageClass identity and persistent-volume behavior

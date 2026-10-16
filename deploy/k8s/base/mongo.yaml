@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-mongo-headless
+  labels:
+    app.kubernetes.io/name: module4d-mongo
+    app.kubernetes.io/component: database
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: module4d-mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: mongo
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-mongo
+  labels:
+    app.kubernetes.io/name: module4d-mongo
+    app.kubernetes.io/component: database
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: module4d-mongo
+  ports:
+    - name: mongo
+      port: 27017
+      targetPort: mongo
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-mongo
+  labels:
+    app.kubernetes.io/name: module4d-mongo
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: instacart-k8s-demo
+spec:
+  serviceName: module4d-mongo-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: module4d-mongo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: module4d-mongo
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: instacart-k8s-demo
+    spec:
+      serviceAccountName: module4d-mongo
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: validate-admin-credentials
+          image: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
+          imagePullPolicy: IfNotPresent
+          command: [sh, -ec]
+          args:
+            - >-
+              test -n "$MONGO_INITDB_ROOT_USERNAME" &&
+              test -n "$MONGO_INITDB_ROOT_PASSWORD" ||
+              { echo 'Mongo admin credentials must be non-empty' >&2; exit 1; }
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: password
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+      containers:
+        - name: mongodb
+          image: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
+          imagePullPolicy: IfNotPresent
+          args: [mongod, --auth, --bind_ip_all, --wiredTigerCacheSizeGB, "0.25"]
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: password
+          ports:
+            - name: mongo
+              containerPort: 27017
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 200m
+              memory: 384Mi
+              ephemeral-storage: 128Mi
+            limits:
+              cpu: 750m
+              memory: 768Mi
+              ephemeral-storage: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - >-
+                  mongosh --quiet --username "$MONGO_INITDB_ROOT_USERNAME"
+                  --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin
+                  --eval 'db.adminCommand("ping").ok' 2>/dev/null | grep -qx 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - >-
+                  mongosh --quiet --username "$MONGO_INITDB_ROOT_USERNAME"
+                  --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin
+                  --eval 'db.adminCommand("ping").ok' 2>/dev/null | grep -qx 1
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - >-
+                  mongosh --quiet --username "$MONGO_INITDB_ROOT_USERNAME"
+                  --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin
+                  --eval 'db.adminCommand("ping").ok' 2>/dev/null | grep -qx 1
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: configdb
+              mountPath: /data/configdb
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: configdb
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: module4d-mongo
+          app.kubernetes.io/component: database
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 2Gi
