@@ -1,5 +1,9 @@
 from dataclasses import replace
+from copy import deepcopy
+from pathlib import Path
 import unittest
+
+import yaml
 
 from scripts.k8s.ownership import (
     ALLOWED_RESOURCE_INVENTORY,
@@ -17,6 +21,82 @@ from scripts.k8s.ownership import (
     validate_target,
     validate_version_lock,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
+_DIGEST_A = "sha256:" + "a" * 64
+_DIGEST_B = "sha256:" + "b" * 64
+
+
+def _complete_lock() -> dict:
+    return {
+        "schema_version": 1,
+        "status": "complete",
+        "unresolved": [],
+        "cluster": {
+            "kubernetes_version": "v1.37.1",
+            "minikube_version": "v1.39.0",
+            "driver": "docker",
+            "container_runtime": "containerd",
+            "cni": "calico",
+            "cni_version": "v3.33.0",
+            "architecture": "linux/amd64",
+            "node_count": 1,
+        },
+        "host_capacity": {
+            "cpu_cores": 8,
+            "memory_gib": 16,
+            "free_disk_gib": 80,
+            "measured_at": "2026-10-16T10:00:00Z",
+        },
+        "images": {
+            "mongo": {"reference": f"mongo:7.0.16@{_DIGEST_A}"},
+            "spark_base": {"reference": f"apache/spark:3.5.5@{_DIGEST_A}"},
+            "ui_base": {"reference": f"python:3.14-slim@{_DIGEST_A}"},
+            "api_application_image": {"reference": "registry.local/api:b1", "immutable_digest": _DIGEST_A},
+            "ui_application_image": {"reference": "registry.local/ui:b1", "immutable_digest": _DIGEST_A},
+        },
+        "python_dependencies": {
+            "api_python": "3.10.16",
+            "ui_python": "3.14.0",
+            "spark_parent_python": "3.10.16",
+            "resolved_environment_digests": {
+                "api": _DIGEST_A,
+                "ui": _DIGEST_A,
+                "spark_parent": _DIGEST_A,
+            },
+        },
+        "toolchain": {
+            "kubectl_version": "v1.36.1",
+            "minikube_binary_sha256": "c" * 64,
+            "docker_engine_version": "27.5.1",
+            "kubernetes_control_plane_images": {
+                role: f"registry.k8s.io/{role}:v1.37.1@{_DIGEST_A}"
+                for role in (
+                    "kube-apiserver",
+                    "kube-controller-manager",
+                    "kube-scheduler",
+                    "kube-proxy",
+                    "etcd",
+                    "pause",
+                    "coredns",
+                )
+            },
+            "calico_images": {
+                "cni": f"docker.io/calico/cni:v3.33.0@{_DIGEST_A}",
+                "node": f"docker.io/calico/node:v3.33.0@{_DIGEST_A}",
+                "kube-controllers": f"docker.io/calico/kube-controllers:v3.33.0@{_DIGEST_A}",
+            },
+        },
+        "storage": {
+            "default_storage_class": "standard",
+            "provisioner": "k8s.io/minikube-hostpath",
+            "access_mode": "ReadWriteOnce",
+            "capacity": "2Gi",
+            "profile_local": True,
+            "volume_binding_mode": "WaitForFirstConsumer",
+        },
+    }
 
 
 def _receipt(identity: RunIdentity) -> OwnershipReceipt:
@@ -113,31 +193,62 @@ class OwnershipTests(unittest.TestCase):
         with self.assertRaisesRegex(OwnershipError, "storage receipt field"):
             validate_receipt(identity, replace(receipt, storage=(bad_storage,)))
 
-    def test_version_lock_contract_rejects_incomplete_and_accepts_pinned_lock(self) -> None:
+    def test_version_lock_requires_complete_coherent_deployment_identity(self) -> None:
+        validate_version_lock(_complete_lock())
         with self.assertRaisesRegex(OwnershipError, "incomplete"):
-            validate_version_lock({"status": "incomplete", "unresolved": ["host capacity"]})
+            validate_version_lock({"schema_version": 1, "status": "incomplete", "unresolved": ["host capacity"]})
 
-        complete = {
-            "status": "complete",
-            "unresolved": [],
-            "cluster": {
-                "kubernetes_version": "v1.37.1",
-                "minikube_version": "v1.39.0",
-                "driver": "docker",
-                "container_runtime": "containerd",
-                "cni": "calico",
-                "cni_version": "v3.33.0",
-                "architecture": "linux/amd64",
-                "node_count": 1,
-            },
-            "images": {
-                "api": {
-                    "reference": "example/api:b1",
-                    "immutable_digest": "sha256:" + "a" * 64,
-                }
-            },
-        }
-        validate_version_lock(complete)
+    def test_version_lock_rejects_placeholders_missing_roles_bad_digests_and_conflicts(self) -> None:
+        committed = yaml.safe_load((ROOT / "deploy/k8s/versions.lock.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(committed["status"], "incomplete")
+        with self.assertRaises(OwnershipError):
+            validate_version_lock(committed)
+
+        cases: list[tuple[str, dict]] = []
+        candidate = deepcopy(_complete_lock())
+        candidate["cluster"]["driver"] = "unknown"
+        cases.append(("placeholder driver", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["cluster"]["architecture"] = "unknown-host-architecture"
+        cases.append(("placeholder architecture", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        del candidate["images"]["ui_application_image"]
+        cases.append(("missing application image role", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["images"]["mongo"]["reference"] = "mongo:7.0.16@sha256:bad"
+        cases.append(("malformed base image digest", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["images"]["api_application_image"]["reference"] = f"registry.local/api:b1@{_DIGEST_A}"
+        candidate["images"]["api_application_image"]["immutable_digest"] = _DIGEST_B
+        cases.append(("contradictory image identity", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["python_dependencies"]["resolved_environment_digests"]["spark_parent"] = "unresolved"
+        cases.append(("unresolved dependency digest", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        del candidate["toolchain"]["calico_images"]["node"]
+        cases.append(("missing Calico image role", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        del candidate["toolchain"]["kubernetes_control_plane_images"]["etcd"]
+        cases.append(("missing control-plane image role", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        del candidate["storage"]["provisioner"]
+        cases.append(("missing storage declaration", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["host_capacity"]["memory_gib"] = float("nan")
+        cases.append(("non-finite host measurement", candidate))
+
+        for label, candidate in cases:
+            with self.subTest(case=label), self.assertRaises(OwnershipError):
+                validate_version_lock(candidate)
 
 
 if __name__ == "__main__":

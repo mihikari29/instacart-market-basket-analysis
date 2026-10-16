@@ -101,10 +101,13 @@ ENTRYPOINT ["python", "module4d_browser_e2e.py"]
 FROM spark AS k8s-runner
 
 ARG MODULE4_COMMIT
-RUN case "$MODULE4_COMMIT" in \
+RUN set -eu; \
+    case "$MODULE4_COMMIT" in \
       ''|*[!0-9a-f]*) echo 'MODULE4_COMMIT must be a full lowercase Git SHA' >&2; exit 1 ;; \
     esac; \
-    test "${#MODULE4_COMMIT}" -eq 40; \
+    if [ "${#MODULE4_COMMIT}" -ne 40 ]; then \
+      echo 'MODULE4_COMMIT must be exactly 40 characters' >&2; exit 1; \
+    fi; \
     groupadd --gid 10001 k8srunner; \
     useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin k8srunner
 LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \

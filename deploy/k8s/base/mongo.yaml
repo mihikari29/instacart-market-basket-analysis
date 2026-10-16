@@ -67,11 +67,40 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: validate-admin-credentials
+          image: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
+          imagePullPolicy: IfNotPresent
+          command: [sh, -ec]
+          args:
+            - >-
+              test -n "$MONGO_INITDB_ROOT_USERNAME" &&
+              test -n "$MONGO_INITDB_ROOT_PASSWORD" ||
+              { echo 'Mongo admin credentials must be non-empty' >&2; exit 1; }
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: username
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-admin
+                  key: password
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
       containers:
         - name: mongodb
           image: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a
           imagePullPolicy: IfNotPresent
-          args: [mongod, --bind_ip_all, --wiredTigerCacheSizeGB, "0.25"]
+          args: [mongod, --auth, --bind_ip_all, --wiredTigerCacheSizeGB, "0.25"]
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:

@@ -53,8 +53,11 @@ The deterministic profile and namespace are both
 `it4931-k8s-<run-id>`. Object names stay stable inside that unique namespace so
 the existing UI can continue to call `http://module4d-api:8000`. The owner,
 run-ID, and manager labels are attached by the private render overlay. The
-renderer refuses to overwrite an existing output directory and never creates
-credentials or contacts a Kubernetes context. B1 can validate the ID's shape,
+renderer requires a new output root beneath an existing, non-symlinked parent
+outside the repository and all registered Git worktrees. It atomically claims
+that root with mode `0700`, refuses nested managed outputs, and preserves partial
+output if rendering fails. It never creates credentials or contacts a
+Kubernetes context. B1 can validate the ID's shape,
 but only a live B2 preflight can establish that the profile and namespace are
 unused; it must reject collisions before creating anything.
 Raw base resources carry an invalid `__K8S_RENDER_REQUIRED__` namespace and
@@ -77,11 +80,14 @@ does not contact a cluster. The example ID is illustrative and must not be
 reused for an actual run.
 
 After a real namespace is created, a future execution receipt must record the
-exact Minikube profile and Kubernetes context, namespace UID, direct resource
-inventory and UIDs, owner labels, PVC identity and UID, bound PV identity, and
-the resources created by controllers. Names alone do not prove ownership.
-Future destructive operations must reject missing, incomplete, or mismatched
-receipts. B1 implements pure validation only; it has no `kubectl apply`,
+exact Minikube profile and Kubernetes context, actual cluster identity, observed
+namespace UID, direct resource inventory and UIDs, owner labels, controller
+owner references and child UIDs, PVC/PV binding metadata and provisioner, and
+the resources created by controllers. The B1 validator checks receipt structure;
+a nonempty recorded UID does not prove live ownership. Before any destructive
+operation, B2/B4 must compare every recorded identity with live observations and
+reject missing, incomplete, or mismatched receipts. B1 implements pure structural
+validation only; it has no `kubectl apply`,
 namespace deletion, profile deletion, or cleanup command.
 
 ## Serving boundary and credentials
@@ -93,7 +99,9 @@ MongoDB credential or database URI. No Ingress, NodePort, LoadBalancer,
 hostNetwork, hostPath, Docker socket, or existing Compose volume is used.
 
 The MongoDB StatefulSet requires the externally provisioned Secret
-`module4d-mongo-admin` with `username` and `password` keys. Its root credential
+`module4d-mongo-admin` with nonempty `username` and `password` keys. A non-root
+init-container check rejects empty values without printing either value, and
+`mongod` receives `--auth` explicitly. Its root credential
 is used only to initialize and administer this isolated MongoDB instance. The
 API requires `module4d-api-readonly` with a single `mongodb-uri` key for a
 database-scoped account granted MongoDB's `read` role. A future B3 publisher
@@ -109,9 +117,16 @@ publication operations and grant only the database-scoped privileges they
 require. Root credentials must not be reused by the publisher or API.
 
 The API expects a read account with collection reads and `listIndexes` access.
-At readiness it performs a read-only authenticated ping and checks the required
-trend, batch-ranking, and unique serving indexes. It does not create indexes.
-The exact names are `idx_source_namespace_window_end_desc`,
+At readiness it requires a URI with explicit credentials, a matching database
+and `authSource`, and a MongoDB `connectionStatus` response naming exactly that
+database-scoped read account. It then performs a read-only ping and checks the
+required trend, batch-ranking, and unique serving indexes. It does not create
+or repair indexes. Product and serving indexes require their declared names,
+ordered keys, compatible visibility/options, simple collation, and serving
+uniqueness. Trend selection accepts the canonical index or another index with
+the compatible prefix accepted by the application reader; sparse trend indexes
+remain allowed because the reader supports them. The canonical trend name is
+`idx_source_namespace_window_end_desc`,
 `idx_batch_product_purchase_count_desc_product_id_asc`,
 `idx_batch_product_reorder_rate_desc_product_id_asc`,
 `uq_serving_user_rank`, and `uq_serving_user_product`.
@@ -162,8 +177,9 @@ prints a message; Kubernetes overrides it with the explicit Uvicorn command.
 The existing API, UI, browser, and Spark stage defaults remain unchanged. The
 existing UI image remains the Streamlit target and receives only API settings.
 
-Builds must pass the full lowercase Git SHA through `MODULE4_COMMIT`; the
-runner target rejects a missing or malformed SHA. The API's existing source
+Builds must pass exactly 40 lowercase hexadecimal characters through
+`MODULE4_COMMIT`; the runner target rejects a missing, malformed, or wrong-length
+SHA before creating its user. The API's existing source
 digest meaning is preserved by placing every file it hashes at its original
 repository-relative path. The runner inherits current `requirements.txt` and
 `requirements-dev.txt` resolution through the Spark stage. The API and UI
@@ -171,9 +187,11 @@ manifests pin their declared packages, but the complete resolved
 Spark-derived Python runtime and UI transitive closure are not yet locked.
 MongoDB's pinned official 7.0.16 image uses UID 999, which is the StatefulSet's
 non-root account ([image metadata](https://hub.docker.com/layers/library/mongo/7.0.16-jammy/)).
-Later acceptance must capture the final OCI image digests and use those digests
-in the rendered workload configuration; the `:b1` tags are local staging
-names, not immutable acceptance identities.
+Later acceptance must compare each built OCI image identity with the image loaded
+into the dedicated profile, the digest rendered in the workload, and the actual
+running container image ID. It must use the verified digest in the rendered
+workload configuration; the `:b1` tags are local staging names, not immutable
+acceptance identities. A valid digest string alone is not evidence of provenance.
 Because `.git` is excluded from the image context, builds must come from a
 clean checkout and the supplied SHA must be recorded externally; inside the
 image the revision is available, while the dirty-state value remains unknown.
@@ -197,18 +215,21 @@ cluster run. An accepted deployment must render the actual image digests and
 verify the loaded image identities before scheduling Pods.
 
 `deploy/k8s/versions.lock.yaml` records Minikube v1.39.0, Kubernetes v1.37.1,
-and Calico v3.33.0 as verified compatible release versions. Calico 3.33
-documents testing on Kubernetes 1.35–1.37. The repository's Spark and Mongo
-base image digests are retained from the locked Dockerfile and Compose file.
-The lock remains **incomplete**, and the pure preflight contract rejects it
-until the host architecture/capacity, Minikube checksum and Docker Engine,
-Calico and Kubernetes image digests, app-image digests, dependency closure, and
-default StorageClass are recorded. No executable deployment preflight or
-cluster operation is included in B1.
+and Calico v3.33.0 as selected release versions. Calico 3.33 documents testing
+on Kubernetes 1.35–1.37; this release-level compatibility reference does not
+verify the installed CNI or policy enforcement. B2 must inspect and record the
+actual Kubernetes and Calico image digests used by the profile. The repository's
+Spark and Mongo base image digests are retained from the locked Dockerfile and
+Compose file. The lock remains **incomplete**, and the pure validator rejects it
+until measured host capacity, supported host architecture, Minikube checksum,
+kubectl and Docker Engine versions, control-plane and Calico image roles, app
+image identities, resolved Python environment digests/runtime versions, and the
+default StorageClass/provisioner/profile-local behavior are recorded. No
+executable deployment preflight or cluster operation is included in B1.
 
 Sources: [Minikube v1.39.0 release](https://github.com/kubernetes/minikube/releases/tag/v1.39.0),
 [Kubernetes 1.37 release status](https://kubernetes.io/releases/1.37/), and
-[Calico 3.33 system requirements](https://docs.tigera.io/calico/v3.33/getting-started/kubernetes/requirements).
+[Calico 3.33 system requirements](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements).
 The Streamlit probe path follows the [official Docker deployment guide](https://docs.streamlit.io/deploy/tutorials/docker#health-check).
 Profile-specific image loading follows the [Minikube image-loading guide](https://minikube.sigs.k8s.io/docs/handbook/pushing/).
 

@@ -227,6 +227,7 @@ spec:
                 - >-
                   import os, urllib.request;
                   urllib.request.urlopen(os.environ['MODULE4D_API_BASE_URL'] + '/health', timeout=3).read()
+            timeoutSeconds: 5
           volumeMounts:
             - name: tmp
               mountPath: /tmp

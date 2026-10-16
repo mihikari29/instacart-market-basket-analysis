@@ -12,6 +12,8 @@
 !deploy/module4/requirements/browser.txt
 !src/**/*.py
 !tests/**/*.py
+tests/test_k8s_ownership.py
+tests/test_k8s_static.py
 !scripts/module4/__init__.py
 !scripts/module4/module4d_api_validation.py
 !scripts/module4/module4d_demo_fixture.py
