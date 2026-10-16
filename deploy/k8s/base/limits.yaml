@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: it4931-quota
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+spec:
+  hard:
+    pods: "10"
+    persistentvolumeclaims: "2"
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    requests.storage: 3Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    requests.ephemeral-storage: 512Mi
+    limits.ephemeral-storage: 2Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: it4931-limits
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 100m
+        memory: 128Mi
+        ephemeral-storage: 64Mi
+      default:
+        cpu: 500m
+        memory: 512Mi
+        ephemeral-storage: 256Mi
+      min:
+        cpu: 50m
+        memory: 64Mi
+      max:
+        cpu: "2"
+        memory: 2Gi
+        ephemeral-storage: 1Gi
