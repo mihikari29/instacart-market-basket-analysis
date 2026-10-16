@@ -1394,10 +1394,16 @@ pointer. The pointer is not a multi-document MongoDB transaction and does not
 persist an intermediate `publishing` state.
 
 The supported serving entry point is
-`python3 -m src.module4.hybrid.cli serve-user`. It requires a positive user ID,
-explicit `--as-of-event-time`, `--source-namespace`, MongoDB URI, and database;
-ranking limits and lambda are validated against the same bounded contract.
-See the [Hybrid CLI operating instructions](module4-package-migration.md#hybrid-cli)
+`python3 -m src.module4.hybrid.cli serve-user`. Its five required options are
+`--user-id`, `--source-namespace`, `--as-of-event-time`, `--mongodb-uri`, and
+`--mongo-database`; the user ID must be positive. The cutoff must include a
+timezone; timestamps and namespaces are explicit per run, not universal
+defaults. Optional `--lambda-weight` defaults to `0.7`, and
+`--max-event-age-seconds` is optional. There is no readiness flag:
+the implementation verifies the required A/B readiness internally. This is a
+publisher operation that writes immutable rows and may promote the per-user
+readiness pointer, so it requires publisher credentials separate from the
+dashboard's read-only account. See the [Hybrid CLI operating instructions](docker.md#hybrid-cli)
 for command syntax and [docker.md](docker.md) for environment and container
 operations.
 
@@ -1608,3 +1614,7 @@ validation. These local and CI results demonstrate the recorded integration
 scope only; they do not establish production scalability. Exact dated test
 results, browser observations, report hashes, and historical failure/retry
 records remain in [the evidence archive](evidence/module4d/README.md).
+
+Milestones include D1A, the D1A-FIX C5 selection-parity correction, D1B, the
+D2 dashboard, and the D3 isolated synthetic fixture. Their detailed dates and
+receipts remain in the evidence archive.

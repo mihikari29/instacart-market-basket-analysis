@@ -21,6 +21,24 @@ docs/                              requirements, canonical guides and evidence
 .github/workflows/                 CI and gated full-data validation
 ```
 
+### Module 4 package paths
+
+<a id="module4-package-paths"></a>
+
+Module 4A and 4B remain in the root package. Module 4C and 4D use dedicated
+subpackages under the same canonical `src.module4` namespace:
+
+| Former path | Canonical path |
+|---|---|
+| `src/module4/` | `src/module4/` (Module 4A/4B retained) |
+| `src/module4c/` | `src/module4/hybrid/` |
+| `src/module4d/` | `src/module4/dashboard/` |
+
+Use `from src.module4.hybrid.service import serve_hybrid_user` for Hybrid
+serving and `from src.module4.dashboard.api import create_app` for the API.
+The dashboard ASGI application is `src.module4.dashboard.api:app`. There are
+no compatibility packages at `src.module4c` or `src.module4d`.
+
 ## Documentation map
 
 | Document | Responsibility |
