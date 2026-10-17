@@ -7,7 +7,7 @@ credentials and does not delete a topic, collection, checkpoint, or workload.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import math
@@ -229,6 +229,49 @@ def _check_module2_experiments(module2_receipt: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _controlled_trend_rows(
+    product_ids: list[int],
+    window_start: datetime,
+    window_end: datetime,
+    *,
+    trend_leader_index: int,
+    trend_weight_short: float,
+) -> list[dict[str, Any]]:
+    """Build two ranked rows consistent with Module 3 short-window scoring."""
+    if (
+        len(product_ids) != 2
+        or len(set(product_ids)) != 2
+        or any(type(product_id) is not int or product_id <= 0 for product_id in product_ids)
+        or type(trend_leader_index) is not int
+        or trend_leader_index not in (0, 1)
+        or isinstance(trend_weight_short, bool)
+        or not isinstance(trend_weight_short, (int, float))
+        or not math.isfinite(float(trend_weight_short))
+        or not 0.0 < float(trend_weight_short) <= 1.0
+        or not isinstance(window_start, datetime)
+        or not isinstance(window_end, datetime)
+        or window_start.tzinfo is None
+        or window_start.utcoffset() is None
+        or window_end.tzinfo is None
+        or window_end.utcoffset() is None
+        or window_start >= window_end
+    ):
+        raise TaskError("B4 controlled trend rows require two products, a valid leader, and a bounded window")
+    rows = []
+    for index, product_id in enumerate(product_ids):
+        is_leader = index == trend_leader_index
+        rows.append({
+            "window_start": window_start,
+            "window_end": window_end,
+            "product_id": product_id,
+            "purchase_count_30m": 1 if is_leader else 0,
+            "purchase_count_120m": 1,
+            "trend_score": float(trend_weight_short) if is_leader else 0.0,
+            "trend_rank": 1 if is_leader else 2,
+        })
+    return rows
+
+
 def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
     from kafka import KafkaConsumer, KafkaProducer, TopicPartition
     from kafka.admin import KafkaAdminClient, NewTopic
@@ -447,6 +490,8 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
         client.close()
     if not trend_result.available:
         raise TaskError("B4 Hybrid test cannot read a verified trend snapshot for the reviewed run")
+    if trend_result.window_start is None or trend_result.window_end is None:
+        raise TaskError("B4 Hybrid test requires verified trend window boundaries")
     captured = capture_verified_user_sources(
         module4_config, user_id,
         prospective_trend_product_ids=[row.product_id for row in trend_result.trend_recommendations],
@@ -456,11 +501,9 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     als = captured.als_recommendations
     catalog = captured.product_catalog
     catalog_ids = {row.product_id for row in catalog}
-    selected = [row.product_id for row in als[:2]]
-    if any(product_id not in catalog_ids for product_id in selected):
-        raise TaskError("B4 Hybrid test candidates are missing from the verified graph catalog")
-    ranking_config = HybridRankingConfig(lambda_weight=0.5, output_top_k=20)
-    processing_time = datetime.now(timezone.utc).replace(microsecond=(datetime.now(timezone.utc).microsecond // 1000) * 1000)
+    ranking_config = HybridRankingConfig()
+    now = datetime.now(timezone.utc)
+    processing_time = now.replace(microsecond=(now.microsecond // 1000) * 1000)
     as_of = as_of.replace(microsecond=(as_of.microsecond // 1000) * 1000)
 
     def read_api_snapshot() -> dict[str, Any]:
@@ -489,27 +532,38 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
         raise TaskError("B4 baseline Hybrid publication did not reach a ready state")
     before = read_api_snapshot()
 
-    changed_namespace = f"{source_namespace}-b4-{values['PIPELINE_RUN_ID']}"
-    changed_rows = [
-        {
-            "window_start": trend_result.window_start,
-            "window_end": trend_result.window_end,
-            "product_id": selected[0],
-            "purchase_count_30m": 0,
-            "purchase_count_120m": 1,
-            "trend_score": 0.0,
-            "trend_rank": 2,
-        },
-        {
-            "window_start": trend_result.window_start,
-            "window_end": trend_result.window_end,
-            "product_id": selected[1],
-            "purchase_count_30m": 1,
-            "purchase_count_120m": 1,
-            "trend_score": 1.0,
-            "trend_rank": 1,
-        },
-    ]
+    before_top = before["recommendations"][0]
+    target_product_id = before_top.get("product_id")
+    baseline_trend_score = before_top.get("normalized_trend_score")
+    if (
+        type(target_product_id) is not int
+        or target_product_id not in catalog_ids
+        or isinstance(baseline_trend_score, bool)
+        or not isinstance(baseline_trend_score, (int, float))
+        or not math.isfinite(float(baseline_trend_score))
+        or not 0.0 <= float(baseline_trend_score) <= 1.0
+    ):
+        raise TaskError("B4 API baseline lacks a catalog-backed recommendation score")
+    other_product_id = next((row.product_id for row in als if row.product_id != target_product_id), None)
+    if other_product_id is None or other_product_id not in catalog_ids:
+        raise TaskError("B4 Hybrid trend sensitivity has no second verified ALS candidate")
+    selected = [target_product_id, other_product_id]
+    stream_config = StreamConfig(
+        root=values["PIPELINE_HDFS_URI"], master="local[2]", mongodb_uri=uri,
+        mongo_database=database, mongo_top_k_per_window=20,
+        publish_trend_bundles=True, trend_source_namespace=source_namespace,
+        trend_source_scope="b4_controlled_trend_sensitivity",
+    )
+    changed_as_of = max(as_of, trend_result.window_end) + timedelta(milliseconds=1)
+    changed_window_start = changed_as_of - (trend_result.window_end - trend_result.window_start)
+    trend_leader_index = 1 if float(baseline_trend_score) > 0.5 else 0
+    changed_rows = _controlled_trend_rows(
+        selected,
+        changed_window_start,
+        changed_as_of,
+        trend_leader_index=trend_leader_index,
+        trend_weight_short=stream_config.weight_short,
+    )
     schema = StructType([
         StructField("window_start", TimestampType(), False),
         StructField("window_end", TimestampType(), False),
@@ -520,19 +574,13 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
         StructField("trend_rank", IntegerType(), False),
     ])
     controlled = spark.createDataFrame(changed_rows, schema=schema)
-    stream_config = StreamConfig(
-        root=values["PIPELINE_HDFS_URI"], master="local[2]", mongodb_uri=uri,
-        mongo_database=database, mongo_top_k_per_window=20,
-        publish_trend_bundles=True, trend_source_namespace=changed_namespace,
-        trend_source_scope="b4_controlled_trend_sensitivity",
-    )
     with MongoClient(uri, serverSelectionTimeoutMS=10000) as writer:
         collection = writer[database][BUNDLE_COLLECTION_NAME]
         publication = write_trend_bundles(
             controlled,
             collection,
             stream_config,
-            source_namespace=changed_namespace,
+            source_namespace=source_namespace,
             source_scope="b4_controlled_trend_sensitivity",
             published_at=processing_time,
             retention_seconds=86_400,
@@ -542,8 +590,8 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     with MongoClient(uri, serverSelectionTimeoutMS=10000) as reader:
         changed = read_verified_trend_snapshot(
             reader[database][BUNDLE_COLLECTION_NAME],
-            source_namespace=changed_namespace,
-            as_of_event_time=as_of,
+            source_namespace=source_namespace,
+            as_of_event_time=changed_as_of,
             processing_time_utc=processing_time,
         )
     if not changed.available or changed.content_sha256 is None:
@@ -551,8 +599,8 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     changed_publication = serve_hybrid_user(
         module4_config,
         user_id=user_id,
-        source_namespace=changed_namespace,
-        as_of_event_time=as_of,
+        source_namespace=source_namespace,
+        as_of_event_time=changed_as_of,
         ranking_config=ranking_config,
         processing_time_utc=processing_time,
     )
@@ -561,11 +609,11 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     after = read_api_snapshot()
     if (
         before.get("source", {}).get("trend_source_namespace") != source_namespace
-        or after.get("source", {}).get("trend_source_namespace") != changed_namespace
+        or after.get("source", {}).get("trend_source_namespace") != source_namespace
         or after.get("serving_version") != changed_publication.serving_version
+        or changed_publication.serving_version == baseline_publication.serving_version
     ):
-        raise TaskError("B4 API did not expose the controlled trend source and its new serving version")
-    before_top = before["recommendations"][0]
+        raise TaskError("B4 API did not expose the later same-source trend serving version")
     after_top = after["recommendations"][0]
     if (
         before_top["product_id"] == after_top["product_id"]
@@ -581,7 +629,10 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
         "controlled_trend_content_sha256": changed.content_sha256,
         "als_model_version": captured.model_version,
         "graph_version": captured.graph_version,
-        "source_namespace": changed_namespace,
+        "source_namespace": source_namespace,
+        "baseline_as_of_event_time": as_of.isoformat(),
+        "changed_as_of_event_time": changed_as_of.isoformat(),
+        "changed_trend_window_end": changed.window_end.isoformat() if changed.window_end else None,
         "baseline_serving_version": baseline_publication.serving_version,
         "changed_serving_version": changed_publication.serving_version,
         "api_readback_verified": True,
