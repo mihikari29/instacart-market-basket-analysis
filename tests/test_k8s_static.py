@@ -28,14 +28,14 @@ RENDER_LABELS = {
 }
 
 
-def _render_with_test_roots(run_id: str, output: Path, fixture_root: Path) -> Path:
+def _render_with_test_roots(run_id: str, output: Path, fixture_root: Path, **render_options) -> Path:
     worktree = fixture_root / "synthetic-protected-worktree"
     git_metadata = fixture_root / "synthetic-git-metadata"
     worktree.mkdir(exist_ok=True)
     git_metadata.mkdir(exist_ok=True)
     protected_roots = {ROOT.resolve(), BASE.resolve(), worktree.resolve(), git_metadata.resolve()}
     with patch("scripts.k8s.render._protected_roots", return_value=protected_roots):
-        return render_overlay(run_id, output)
+        return render_overlay(run_id, output, **render_options)
 
 
 def _rendered_objects(run_dir: Path) -> list[dict]:
@@ -688,13 +688,20 @@ class StaticFoundationTests(unittest.TestCase):
         for role, image in lock["images"].items():
             image.setdefault("source", f"offline render test fixture for {role}")
         with tempfile.TemporaryDirectory() as temporary:
-            output = Path(temporary) / "rendered"
-            run = render_overlay(
-                "0123456789ab",
-                output,
-                version_lock=lock,
-                trend_source_namespace=TREND_SOURCE_NAMESPACE,
-            )
+            fixture_root = Path(temporary)
+            output = fixture_root / "rendered"
+            with patch(
+                "scripts.k8s.render.subprocess.check_output",
+                side_effect=FileNotFoundError("git unavailable in application test container"),
+            ) as git_command:
+                run = _render_with_test_roots(
+                    "0123456789ab",
+                    output,
+                    fixture_root,
+                    version_lock=lock,
+                    trend_source_namespace=TREND_SOURCE_NAMESPACE,
+                )
+            git_command.assert_not_called()
             self.assertTrue(run.is_dir())
             api = json.loads((run / "api-config-patch.json").read_text(encoding="utf-8"))
             ui = json.loads((run / "ui-config-patch.json").read_text(encoding="utf-8"))
