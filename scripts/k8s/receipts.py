@@ -37,6 +37,15 @@ class ReceiptCollectionError(RuntimeError):
     """Live ownership evidence could not be collected completely."""
 
 
+def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
+    spec = pv.get("spec")
+    capacity = spec.get("capacity") if isinstance(spec, Mapping) else None
+    value = capacity.get("storage") if isinstance(capacity, Mapping) else None
+    if not isinstance(value, str) or not value:
+        raise ReceiptCollectionError("bound PV spec does not report storage capacity")
+    return value
+
+
 def _locked_image_digest(image: Mapping[str, Any]) -> str:
     """Read a digest from either accepted lock representation and reject conflicts."""
     immutable = image.get("immutable_digest")
@@ -326,7 +335,7 @@ def collect_runtime_ownership_receipt(
         storage_class_uid=sc_metadata.get("uid", ""),
         provisioner=provisioner or "",
         requested_storage=pvc_spec.get("resources", {}).get("requests", {}).get("storage", ""),
-        capacity=pv_spec.get("capacity", {}).get("storage", ""),
+        capacity=_pv_spec_capacity(pv),
         access_mode=(pvc_spec.get("accessModes") or [""])[0],
         profile_local=provisioner == lock["storage"].get("provisioner") and locality_kind == "hostPath",
         locality_kind=locality_kind,

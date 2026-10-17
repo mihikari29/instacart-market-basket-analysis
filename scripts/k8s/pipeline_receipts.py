@@ -117,6 +117,15 @@ class PipelineReceiptError(RuntimeError):
     """B3 live identity, owner-chain, storage, or image evidence is incomplete."""
 
 
+def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
+    spec = pv.get("spec")
+    capacity = spec.get("capacity") if isinstance(spec, Mapping) else None
+    value = capacity.get("storage") if isinstance(capacity, Mapping) else None
+    if not isinstance(value, str) or not value:
+        raise PipelineReceiptError("bound PV spec does not report storage capacity")
+    return value
+
+
 def _parse_owner_references(metadata: Mapping[str, Any]) -> tuple[OwnerReferenceIdentity, ...]:
     values = metadata.get("ownerReferences", [])
     if not isinstance(values, list):
@@ -316,7 +325,7 @@ def collect_pipeline_receipt(
         local = pv_spec.get("hostPath") or pv_spec.get("local")
         locality_kind = "hostPath" if isinstance(pv_spec.get("hostPath"), Mapping) else "local" if isinstance(pv_spec.get("local"), Mapping) else "unknown"
         locality_path = local.get("path", "") if isinstance(local, Mapping) else ""
-        capacity = pv_spec.get("capacity", {}).get("storage", "")
+        capacity = _pv_spec_capacity(pv)
         if (
             _quantity(capacity) < _quantity(requested)
             or locality_kind != "hostPath"

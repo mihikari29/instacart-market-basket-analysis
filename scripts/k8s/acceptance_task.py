@@ -455,8 +455,9 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
         raise TaskError("B4 Hybrid trend sensitivity needs at least two real run-scoped ALS candidates")
     als = captured.als_recommendations
     catalog = captured.product_catalog
+    catalog_ids = {row.product_id for row in catalog}
     selected = [row.product_id for row in als[:2]]
-    if any(product_id not in catalog for product_id in selected):
+    if any(product_id not in catalog_ids for product_id in selected):
         raise TaskError("B4 Hybrid test candidates are missing from the verified graph catalog")
     ranking_config = HybridRankingConfig(lambda_weight=0.5, output_top_k=20)
     processing_time = datetime.now(timezone.utc).replace(microsecond=(datetime.now(timezone.utc).microsecond // 1000) * 1000)
