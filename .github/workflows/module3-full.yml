@@ -66,7 +66,13 @@ jobs:
       - name: Regenerate bounded Module 1 feed
         run: |
           python scripts/fetch_instacart.py
-          python -m src.module1.clean --validate
+          if python -m src.module1.clean --validate; then
+            :
+          else
+            validation_status=$?
+            python -m src.module1.raw_diagnostic --raw-dir data/raw || true
+            exit "$validation_status"
+          fi
           python -m src.module1.generate --scenario default --scatter-weeks 13 \
             --limit-users 500 --batch-users 500 --out-dir data/synthesized/module3_dev
       - name: Build pinned Spark runtime and run streaming tests

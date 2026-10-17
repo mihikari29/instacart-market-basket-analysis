@@ -147,6 +147,24 @@ def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_p
     assert not output.exists()
 
 
+def test_raw_preflight_rejects_order_hour_above_documented_domain(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    orders_path = raw_dir / "orders.csv"
+    orders = pd.read_csv(orders_path, dtype="string", keep_default_na=False)
+    orders.loc[0, "order_hour_of_day"] = "24"
+    orders.to_csv(orders_path, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "orders.csv row 2: order_hour_of_day must be an integer in [0, 23]" in capsys.readouterr().err
+    assert not output.exists()
+
+
 def test_raw_preflight_rejects_incompatible_foreign_key_before_writing_outputs(tmp_path, monkeypatch, capsys):
     data_dir = tmp_path / "data"
     _write_raw_fixture(data_dir / "raw", bad_train_order="999")
