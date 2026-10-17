@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from .config import SyntheticConfig, preset_summary
+from .contracts import validate_cart_position_range
 
 BASE_TIMESTAMP = pd.Timestamp("2024-01-01")  # Monday; order_dow 0..6 aligns with +dow days
 DAY_MS = 86_400_000
@@ -196,13 +197,17 @@ def expand_events(
 
 
 def finalize(events_df: pd.DataFrame) -> pd.DataFrame:
+    cart_positions = events_df["add_to_cart_order"]
+    if not pd.api.types.is_integer_dtype(cart_positions.dtype) or cart_positions.isna().any():
+        raise ValueError("add_to_cart_order values must be non-null integers before event serialization")
+    validate_cart_position_range(int(cart_positions.min()), int(cart_positions.max()))
     output_df = pd.DataFrame(index=events_df.index)
     output_df["event_id"] = events_df["order_id"].astype(str) + "_" + events_df["add_to_cart_order"].astype(str)
     output_df["order_id"] = events_df["order_id"].astype("int64")
     output_df["user_id"] = events_df["user_id"].astype("int64")
     output_df["order_number"] = events_df["order_number"].astype("int16")
     output_df["product_id"] = events_df["product_id"].astype("int64")
-    output_df["add_to_cart_order"] = events_df["add_to_cart_order"].astype("int16")
+    output_df["add_to_cart_order"] = cart_positions.astype("int32")
     output_df["reordered"] = events_df["reordered"].astype("bool")
     output_df["aisle_id"] = events_df["aisle_id"].astype("int16")
     output_df["department_id"] = events_df["department_id"].astype("int8")
