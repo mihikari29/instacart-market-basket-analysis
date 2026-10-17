@@ -35,3 +35,11 @@ offline implementation.
 The comparison does not control host scheduling or operating-system/HDFS
 caches, so timing is descriptive for the recorded environment. It is not a
 distributed executor scaling result.
+
+The Kubernetes B3 Module 2 Job runs this same comparison after its batch
+publication. The run-specific step receipt includes the source identity,
+input rows/bytes, actual `local[1]` and `local[2]` masters, repeated runtime,
+physical plans, and Spark task/shuffle metrics. B4 rejects acceptance if either
+arm is missing or the arms do not reconcile to the same source and output.
+Those values are generated only by a future authorized runtime run; no result
+is included here.

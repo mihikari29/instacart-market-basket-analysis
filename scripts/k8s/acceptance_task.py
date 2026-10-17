@@ -93,6 +93,79 @@ def _check_hdfs_readback(run_id: str) -> dict[str, Any]:
     return {"tables": len(payload), "manifest_sha256": _canonical_digest(payload)}
 
 
+def _check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]:
+    """Require same-source local[1]/local[2] measurements and shuffle evidence."""
+    benchmark = module2_receipt.get("executor_benchmark")
+    if (
+        not isinstance(benchmark, dict)
+        or benchmark.get("status") != "passed"
+        or benchmark.get("same_source_and_output_verified") is not True
+        or benchmark.get("executor_scaling_claimed") is not False
+        or benchmark.get("execution_scope") != "single-host Spark local thread pool comparison"
+    ):
+        raise TaskError("Module 2 executor benchmark is missing or failed its source/output gate")
+    arms = benchmark.get("arms")
+    if not isinstance(arms, list) or len(arms) != 2:
+        raise TaskError("Module 2 executor benchmark must contain exactly two configurations")
+    summaries = {}
+    for arm in arms:
+        if not isinstance(arm, dict):
+            raise TaskError("Module 2 executor benchmark arm is malformed")
+        environment = arm.get("environment")
+        workload = arm.get("workload")
+        validation = arm.get("validation")
+        source = validation.get("source_receipt") if isinstance(validation, dict) else None
+        master = environment.get("actual_master") if isinstance(environment, dict) else None
+        if (
+            master not in {"local[1]", "local[2]"}
+            or environment.get("execution_model") != "Spark local mode"
+            or environment.get("native_executor_scaling") is not False
+            or arm.get("status") != "passed"
+            or not isinstance(source, dict)
+            or not isinstance(source.get("source_sha256"), str)
+            or len(source["source_sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in source["source_sha256"])
+            or not isinstance(workload, dict)
+            or type(workload.get("input_rows")) is not int
+            or workload["input_rows"] <= 0
+            or type(workload.get("input_bytes")) is not int
+            or workload["input_bytes"] <= 0
+            or type(workload.get("median_seconds")) not in (int, float)
+            or workload["median_seconds"] <= 0
+        ):
+            raise TaskError("Module 2 executor arm lacks actual source, runtime, or workload measurements")
+        trials = workload.get("trials")
+        if not isinstance(trials, list) or len(trials) < 3:
+            raise TaskError("Module 2 executor benchmark requires at least three measured trials per arm")
+        metrics = []
+        for trial in trials:
+            task = trial.get("task_metrics") if isinstance(trial, dict) else None
+            if not isinstance(task, dict) or any(
+                type(task.get(field)) is not int or task[field] < 0
+                for field in ("tasks", "shuffle_read_bytes", "shuffle_write_bytes")
+            ):
+                raise TaskError("Module 2 executor trial is missing Spark shuffle/task metrics")
+            metrics.append({
+                "tasks": task["tasks"],
+                "shuffle_read_bytes": task["shuffle_read_bytes"],
+                "shuffle_write_bytes": task["shuffle_write_bytes"],
+            })
+        summaries[master] = {
+            "source_sha256": source["source_sha256"],
+            "input_rows": workload["input_rows"],
+            "input_bytes": workload["input_bytes"],
+            "median_seconds": workload["median_seconds"],
+            "shuffle_metrics": metrics,
+        }
+    if set(summaries) != {"local[1]", "local[2]"}:
+        raise TaskError("Module 2 executor benchmark did not compare local[1] and local[2]")
+    if len({item["source_sha256"] for item in summaries.values()}) != 1 or len(
+        {(item["input_rows"], item["input_bytes"]) for item in summaries.values()}
+    ) != 1:
+        raise TaskError("Module 2 executor benchmark arms did not use the same measured source")
+    return {"scope": benchmark["execution_scope"], "arms": summaries, "executor_scaling_claimed": False}
+
+
 def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
     from kafka import KafkaConsumer, KafkaProducer, TopicPartition
     from kafka.admin import KafkaAdminClient, NewTopic
@@ -366,6 +439,7 @@ def run() -> dict[str, Any]:
     for label, value in (("Module 2", module2_receipt), ("Module 4", module4_receipt)):
         if not isinstance(value.get("artifacts"), list) or not value["artifacts"]:
             raise TaskError(f"{label} did not leave a hashed output artifact inventory")
+    executor_benchmark = _check_executor_benchmark(module2_receipt)
     replay_receipt = _load_step("replay")["receipt"]
     producer = replay_receipt.get("producer") if isinstance(replay_receipt, dict) else None
     if not isinstance(producer, dict) or producer.get("failed_events") != 0 or producer.get("acked_events") != producer.get("attempted_events"):
@@ -390,6 +464,7 @@ def run() -> dict[str, Any]:
         "hdfs_readback": _check_hdfs_readback(values["PIPELINE_RUN_ID"]),
         "kafka_delivery": _check_kafka_round_trip(values["PIPELINE_RUN_ID"]),
         "batch_outputs": {"module2": module2_receipt, "module4": module4_receipt},
+        "executor_benchmark": executor_benchmark,
         "late_data": late_data_detail,
         "checkpoint_recovery": checkpoint_detail,
         "mongo_idempotency": _check_mongo_idempotent(values["PIPELINE_RUN_ID"]),
@@ -412,6 +487,7 @@ def run() -> dict[str, Any]:
         _check("hdfs_readback", details["hdfs_readback"]),
         _check("kafka_delivery", details["kafka_delivery"]),
         _check("spark_batch_outputs", details["batch_outputs"]),
+        _check("spark_executor_benchmark", details["executor_benchmark"]),
         _check("event_time_watermark_late_data", details["late_data"]),
         _check("checkpoint_recovery", details["checkpoint_recovery"]),
         _check("mongo_idempotent_publication", details["mongo_idempotency"]),

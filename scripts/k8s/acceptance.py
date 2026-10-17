@@ -35,6 +35,7 @@ ACCEPTANCE_SCENARIOS = frozenset({
     "hdfs_readback",
     "kafka_delivery",
     "spark_batch_outputs",
+    "spark_executor_benchmark",
     "event_time_watermark_late_data",
     "checkpoint_recovery",
     "mongo_idempotent_publication",

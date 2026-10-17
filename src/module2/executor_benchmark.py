@@ -40,10 +40,13 @@ def validate_arms(arms: Sequence[str]) -> tuple[str, ...]:
 def build_plan(
     *, root: str, output: str | Path, run_id: str, arms: Sequence[str] = LOCAL_ARMS,
     repetitions: int = 3, warmups: int = 1, shuffle_partitions: int = 8,
+    timeout_seconds: int = 1200,
 ) -> dict[str, Any]:
     selected = validate_arms(arms)
     if repetitions < 3 or warmups < 1 or shuffle_partitions < 1:
         raise ValueError("require at least three repetitions and one warm-up")
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 7200:
+        raise ValueError("timeout_seconds must be between 1 and 7200")
     if not root or root.rstrip("/") in ("", "hdfs:", "file:"):
         raise ValueError("an explicit dataset root is required")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
@@ -57,6 +60,7 @@ def build_plan(
         "repetitions": repetitions,
         "warmups": warmups,
         "shuffle_partitions": shuffle_partitions,
+        "timeout_seconds": timeout_seconds,
         "spark_session_settings": {
             "spark.sql.adaptive.enabled": "false",
             "spark.sql.autoBroadcastJoinThreshold": "-1",
@@ -86,17 +90,20 @@ def build_plan(
 
 
 def execute_plan(
-    plan: dict[str, Any], runner: Callable[..., Any] = subprocess.run
+    plan: dict[str, Any], runner: Callable[..., Any] = subprocess.run, *, timeout_seconds: int | None = None,
 ) -> dict[str, Any]:
     """Run arms sequentially and fail if source identity or outputs differ."""
     output = Path(plan["output_directory"])
+    timeout = timeout_seconds if timeout_seconds is not None else plan.get("timeout_seconds", 1200)
+    if type(timeout) is not int or not 1 <= timeout <= 7200:
+        raise ValueError("execution timeout must be between 1 and 7200 seconds")
     output.mkdir(parents=True, exist_ok=False)
     (output / "plan.json").write_text(
         json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     summaries = []
     for arm in plan["arms_plan"]:
-        runner(arm["command"], check=True)
+        runner(arm["command"], check=True, timeout=timeout)
         run_id = arm["command"][arm["command"].index("--run-id") + 1]
         summary_path = output / run_id / "summary.json"
         if not summary_path.is_file():

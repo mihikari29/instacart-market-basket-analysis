@@ -102,6 +102,13 @@ def _validate_output_path(destination: Path) -> None:
         ancestor = ancestor.parent
 
 
+def validate_render_output_path(output: Path) -> Path:
+    """Validate and normalize a future render root without creating it."""
+    destination = _absolute_path_without_symlinks(Path(output))
+    _validate_output_path(destination)
+    return destination
+
+
 def _locked_image_reference(lock: dict, role: str) -> str:
     image = lock.get("images", {}).get(role)
     if not isinstance(image, dict):
@@ -164,8 +171,7 @@ def render_overlay(run_id: str, output: Path, *, version_lock: dict | None = Non
         cluster = version_lock.get("cluster", {})
         if cluster.get("profile") != identity.profile or cluster.get("context") != identity.profile:
             raise ValueError("complete version lock profile does not match the requested run ID")
-    destination = _absolute_path_without_symlinks(Path(output))
-    _validate_output_path(destination)
+    destination = validate_render_output_path(Path(output))
     if not BASE_DIRECTORY.is_dir():
         raise FileNotFoundError("Kubernetes base manifests are missing")
 

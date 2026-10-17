@@ -51,8 +51,11 @@ class SubprocessExecutor:
             raise RuntimePreflightError("command must be a non-empty argument sequence")
         if any(not isinstance(part, str) or "\x00" in part for part in argv):
             raise RuntimePreflightError("command arguments are invalid")
-        if type(timeout) is not int or not 1 <= timeout <= 1800:
-            raise RuntimePreflightError("command timeout must be between 1 and 1800 seconds")
+        # Pipeline Jobs can legitimately run for up to two hours; the wrapper
+        # must honor those reviewed per-stage bounds instead of rejecting them
+        # at the subprocess boundary.
+        if type(timeout) is not int or not 1 <= timeout <= 10800:
+            raise RuntimePreflightError("command timeout must be between 1 and 10800 seconds")
         try:
             result = subprocess.run(
                 list(argv),

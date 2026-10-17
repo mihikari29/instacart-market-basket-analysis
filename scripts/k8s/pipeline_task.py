@@ -245,9 +245,24 @@ def module2() -> dict:
         env=env, log_path=_result_root("module2") / "orchestrator.log", timeout=3600,
     )
     output = _result_root("module2")
+    from src.module2.executor_benchmark import build_plan, execute_plan
+
+    benchmark_plan = build_plan(
+        root=values["PIPELINE_HDFS_URI"],
+        output=output.parent,
+        run_id=f"executor-k8s-{values['PIPELINE_RUN_ID']}",
+        repetitions=3,
+        warmups=1,
+        shuffle_partitions=8,
+        timeout_seconds=1200,
+    )
+    benchmark_result = execute_plan(benchmark_plan)
+    benchmark_output = Path(benchmark_plan["output_directory"])
     return {
         "status": "completed", "run_id": values["PIPELINE_RUN_ID"],
         "module2_output": str(output), "artifacts": _artifact_inventory(output),
+        "executor_benchmark": benchmark_result,
+        "executor_benchmark_artifacts": _artifact_inventory(benchmark_output),
     }
 
 

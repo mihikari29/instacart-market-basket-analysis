@@ -8,6 +8,7 @@ from scripts.k8s.ownership import RunIdentity
 from scripts.k8s.runtime import (
     CommandResult,
     RuntimePreflightError,
+    SubprocessExecutor,
     cluster_creation_plan,
     collect_cluster_identity,
     collect_namespace_identity,
@@ -28,6 +29,20 @@ class FakeExecutor:
 
 
 class RuntimePreflightTests(unittest.TestCase):
+    def test_shell_free_executor_accepts_reviewed_long_job_timeouts(self):
+        executor = SubprocessExecutor()
+        with patch("scripts.k8s.runtime.subprocess.run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = "ok"
+            run.return_value.stderr = ""
+            result = executor.run(["python3", "-c", "pass"], timeout=7200)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(run.call_args.kwargs["timeout"], 7200)
+        self.assertIs(run.call_args.kwargs["shell"], False)
+
+        with self.assertRaisesRegex(RuntimePreflightError, "10800 seconds"):
+            executor.run(["python3", "-c", "pass"], timeout=10801)
+
     def test_collision_preflight_refuses_existing_profile_or_context(self):
         identity = RunIdentity("0123456789ab")
         executor = FakeExecutor(

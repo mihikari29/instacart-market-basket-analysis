@@ -383,7 +383,7 @@ def _step_specs(identity: RunIdentity) -> tuple[PipelineStep, ...]:
         for name, timeout, retry, retry_text in (
             ("input", 7200, 0, "fixture is deterministic; full input transfer is verified by the six-file manifest hash"),
             ("module1", 1800, 0, "no automatic retry; inspect partial staging before a new run identity"),
-            ("module2", 3600, 0, "no automatic retry; stable Mongo run ID permits a reviewed new attempt"),
+            ("module2", 7200, 0, "no automatic retry; includes bounded local[1]/local[2] executor benchmark"),
             ("module4", 7200, 0, "no automatic retry; stable model versions require a reviewed new attempt"),
             ("replay", 7200, 0, "no automatic retry; resume requires verified Kafka offsets and checkpoint receipt"),
             ("hybrid", 900, 0, "insert-only source identity; no automatic conflict repair"),

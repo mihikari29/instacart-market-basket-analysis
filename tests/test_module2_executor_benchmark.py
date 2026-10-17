@@ -27,8 +27,9 @@ class ExecutorBenchmarkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             plan = build_plan(root="hdfs://namenode:8020/instacart", output=tmp, run_id="offline")
 
-            def fake_runner(command, check):
+            def fake_runner(command, check, timeout):
                 self.assertTrue(check)
+                self.assertEqual(timeout, 1200)
                 output = Path(command[command.index("--output") + 1])
                 run_id = command[command.index("--run-id") + 1]
                 arm = command[command.index("--master") + 1]
@@ -54,6 +55,15 @@ class ExecutorBenchmarkTests(unittest.TestCase):
         self.assertTrue(result["same_source_and_output_verified"])
         self.assertFalse(result["executor_scaling_claimed"])
         self.assertEqual(len(result["arms"]), 2)
+
+    def test_execution_timeout_is_bounded_and_recorded(self):
+        plan = build_plan(root="hdfs://namenode:8020/instacart", output="results/bench", run_id="timeout")
+        self.assertEqual(plan["timeout_seconds"], 1200)
+        with self.assertRaisesRegex(ValueError, "between 1 and 7200"):
+            build_plan(
+                root="hdfs://namenode:8020/instacart", output="results/bench", run_id="timeout",
+                timeout_seconds=7201,
+            )
 
 
 if __name__ == "__main__":
