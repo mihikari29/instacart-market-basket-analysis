@@ -27,8 +27,8 @@
 
 | Milestone | Status | Files changed | Tests added / run | Checkpoint |
 |---|---|---|---|---|
-| 1 Application completeness | Implemented; automated suite blocked by missing runtime dependencies | Module 1 preflight/atomic publisher; ALS reader/API/schema/client/UI; Module 2 provenance; Module 4 feature reader/CLI; focused tests | Added tests in `test_module1_hardening.py`, `test_module4d_readers.py`, `test_module4d_api.py`, `test_module4d_ui_client.py`, `test_module4d_ui_app.py`, `test_module4_feature_reader.py`, and `test_k8s_static.py`. Executed AST parse for 18 changed Python files, `git diff --check`, and a five-case direct feature-reader smoke. `pytest` suite NOT RUN: pytest and application dependencies are absent. | Pending |
-| 2 Kubernetes B2 | Not started | — | — | — |
+| 1 Application completeness | Implemented; automated application suite blocked by missing runtime dependencies | Module 1 preflight/atomic publisher; ALS reader/API/schema/client/UI; Module 2 provenance; Module 4 feature reader/CLI; focused tests | Added tests in `test_module1_hardening.py`, `test_module4d_readers.py`, `test_module4d_api.py`, `test_module4d_ui_client.py`, `test_module4d_ui_app.py`, `test_module4_feature_reader.py`, and `test_k8s_static.py`. Executed AST parse for 18 changed Python files, `git diff --check`, and a five-case direct feature-reader smoke. `pytest` suite NOT RUN: pytest and application dependencies are absent. | `05ddd1f` |
+| 2 Kubernetes B2 | Code implemented; runtime evidence and execution pending | Staged strict lock lifecycle; host/toolchain/profile/storage discovery; run-scoped image build/load provenance; Python package inventory; MongoDB bootstrap/indexes and in-memory Secrets; serving deployment/readiness; exact NetworkPolicy inventory; complete live ownership/storage/image receipt and comparison | Added fake/static tests under `test_k8s_runtime.py`, `test_k8s_lock_lifecycle.py`, `test_k8s_image_provenance.py`, `test_k8s_mongo_secrets.py`, `test_k8s_network_policy.py`, `test_k8s_deployment.py`; extended ownership/static suites. Executed 47 focused K8s `unittest` cases (PASS), AST parse for 21 Python files (PASS), YAML parse for 8 lock/manifests (PASS), offline Kustomize rendering as part of the suite (PASS), and `git diff --check` (PASS). Docker/Minikube/Kubernetes/MongoDB were not contacted. | Pending |
 | 3 Kubernetes B3 | Not started | — | — | — |
 | 4 Kubernetes B4 | Not started | — | — | — |
 | 5 Experiments/evaluation | Not started | — | — | — |
@@ -40,7 +40,7 @@
 - B3 will target a single isolated Minikube profile and Kubernetes-owned HDFS, Kafka, MongoDB and pipeline storage. Spark will use `local[2]` inside run-scoped Kubernetes Jobs; this is not native Spark-on-Kubernetes executor scaling.
 - No image digest, toolchain identity, cluster UID, runtime metric or successful runtime receipt will be invented. Values that require a later authorized image build or cluster are runtime-discovered lock fields.
 - Runtime deployment, Docker, package installation, full-data execution, existing service access, and teardown are prohibited for this campaign.
-- No tests have been run yet. Test safety and available dependencies will be checked before each targeted invocation.
+- B2's 47 focused offline K8s tests have run and passed. Milestone 1 application suites remain NOT RUN because the available Python runtime lacks pytest, pandas, PyArrow, FastAPI, PyMongo, Streamlit, and PySpark; no packages were installed.
 
 ### Milestone 1 implementation record
 
@@ -49,6 +49,16 @@
 - The dashboard requests ALS and Hybrid snapshots independently, shows source versions, aligns by product ID, and leaves unavailable scores blank. An empty ALS result is explicitly not proof that a user is absent from source data.
 - Module 2 now stamps `user_features` rows with `module2_run_id`, `feature_scope=prior_only`, and UTC generation time. The new Module 4 `user-features --user-id` command reads one bounded descriptive row; the exact schema rejects unexpected fields and the consumer is explicitly excluded from ALS model inputs.
 - Test execution blocker: `/usr/bin/python3` is Python 3.14.4 and has no pytest, pandas, PyArrow, FastAPI, PyMongo, Streamlit, or PySpark. No installation was attempted. The five-case feature-reader smoke ran with the Python standard library and passed; it does not replace the test suite.
+
+### Milestone 2 implementation record
+
+- The lock remains incomplete in `deploy/k8s/versions.lock.yaml`. Static validation accepts only exact selected releases and image sources; finalization requires measured host capacity, the exact dedicated cluster marker/profile/context, control-plane and Calico digests, toolchain and StorageClass identities, clean-source BuildKit provenance, image manifest/config digests, exact Python inventory hashes, and no unresolved fields. A finalized copy must be a new output file; the committed template cannot be overwritten by the writer.
+- Host preflight measures guest CPU/memory/disk and fails closed below B2 (4 CPU, 6 GiB RAM, 20 GiB disk). WSL backing-disk capacity must be provided as measured evidence. The existing prior preflight reported 5.41 GiB available RAM and unknown Windows backing-disk capacity; that blocks runtime creation until refreshed, but does not block implementation.
+- Dedicated profile/context discovery and every future `kubectl` execution use the generated run identity. Creation, image build/load, Docker image metadata extraction, Secret apply, cluster identity queries, deployment, and live receipt collection require explicit `execute=True`; no such external operation was invoked.
+- The renderer can still produce a private offline base render without a lock. A render intended for deployment must validate a complete lock, matching profile, all serving image digests, namespace labels, and the Mongo PVC claim-template ownership labels. Image build plans use run-specific tags and an explicit platform.
+- MongoDB now bootstraps a separate admin credential, a database-scoped read account, and a separate database-scoped publisher account. Four opaque Secret manifests exist only in memory and are applied through stdin. Bootstrap code creates the B1/B2 read indexes; API readiness remains read-only. The publisher is currently scoped to the per-run database with MongoDB's `readWrite` built-in role; B3 must narrow this if its actual write contracts permit a custom role.
+- The B2 receipt model validates namespace and cluster marker, exact direct inventory, controller children and owner-reference chains, PVC/PV claim identity, StorageClass UID/provisioner/local hostPath/node, serving Pod image IDs, and all Kubernetes/Calico component image digests. A separate live comparator rejects any drift. No teardown or automatic cleanup is implemented.
+- Validation scope is offline only: 47 focused K8s unit/static tests passed; AST and YAML parsing and `git diff --check` passed. There is no live deployment receipt or runtime acceptance result.
 
 ## Remaining acceptance work
 

@@ -1,0 +1,479 @@
+"""Collect sanitized live Kubernetes ownership and storage receipts."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from collections.abc import Mapping
+import json
+from typing import Any
+
+from .image_provenance import collect_cluster_component_images, verify_running_image_id
+from .lock_lifecycle import validate_static_lock
+from .ownership import (
+    IMAGE_DIGEST_PATTERN,
+    OwnershipError,
+    OwnerReferenceIdentity,
+    REQUIRED_SERVING_RUNTIME_IMAGE_ROLES,
+    RunIdentity,
+    RuntimeImageIdentity,
+    RuntimeObjectIdentity,
+    RuntimeOwnershipReceipt,
+    RuntimeStorageIdentity,
+    validate_version_lock,
+)
+from .runtime import (
+    CommandExecutor,
+    RuntimePreflightError,
+    _checked,
+    _json_output,
+    collect_cluster_identity,
+    collect_namespace_identity,
+    containerd_image_inventory_command,
+    kubectl,
+)
+
+
+class ReceiptCollectionError(RuntimeError):
+    """Live ownership evidence could not be collected completely."""
+
+
+_NAMESPACED_RESOURCE_TYPES = (
+    "resourcequotas",
+    "limitranges",
+    "serviceaccounts",
+    "configmaps",
+    "services",
+    "statefulsets",
+    "deployments",
+    "networkpolicies",
+    "persistentvolumeclaims",
+    "replicasets",
+    "pods",
+)
+
+# Kubernetes creates these two namespace support objects automatically. They
+# are not workload-owned resources and are intentionally outside the teardown
+# inventory; any other unapproved object still fails exact receipt validation.
+_SYSTEM_NAMESPACE_OBJECTS = {
+    ("ServiceAccount", "default"),
+    ("ConfigMap", "kube-root-ca.crt"),
+}
+
+_SECRET_METADATA_TEMPLATE = (
+    '{{range .items}}{{.metadata.name}}{{"\\t"}}{{.metadata.namespace}}{{"\\t"}}'
+    '{{.metadata.uid}}{{"\\t"}}{{index .metadata.labels "it4931.instacart.edu/owner"}}'
+    '{{"\\t"}}{{index .metadata.labels "it4931.instacart.edu/run-id"}}'
+    '{{"\\t"}}{{index .metadata.labels "app.kubernetes.io/managed-by"}}{{"\\n"}}{{end}}'
+)
+
+
+def _get_json(executor: CommandExecutor, command: list[str], description: str) -> dict[str, Any]:
+    payload = _json_output(_checked(executor, command), description)
+    if not isinstance(payload, dict):
+        raise ReceiptCollectionError(f"{description} response is invalid")
+    return payload
+
+
+def _owner_references(metadata: Mapping[str, Any]) -> tuple[OwnerReferenceIdentity, ...]:
+    values = metadata.get("ownerReferences", [])
+    if not isinstance(values, list):
+        raise ReceiptCollectionError("live owner reference list is invalid")
+    result = []
+    for item in values:
+        if not isinstance(item, Mapping):
+            raise ReceiptCollectionError("live owner reference is invalid")
+        result.append(
+            OwnerReferenceIdentity(
+                kind=item.get("kind", ""),
+                name=item.get("name", ""),
+                uid=item.get("uid", ""),
+                controller=item.get("controller") is True,
+            )
+        )
+    return tuple(result)
+
+
+def _containerd_config_digest(raw: str, image_reference: str, manifest_digest: str) -> str:
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ReceiptCollectionError("containerd image inventory is invalid") from exc
+    images = payload.get("images") if isinstance(payload, dict) else None
+    if not isinstance(images, list):
+        raise ReceiptCollectionError("containerd image inventory has an unsupported shape")
+    base_reference = image_reference.split("@", 1)[0]
+    candidates = []
+    for image in images:
+        if not isinstance(image, Mapping):
+            continue
+        repo_digests = image.get("repoDigests") or []
+        repo_tags = image.get("repoTags") or []
+        if not isinstance(repo_tags, list):
+            continue
+        contains_digest = any(
+            isinstance(value, str) and value.endswith("@" + manifest_digest)
+            for value in repo_digests
+        )
+        image_id = image.get("id")
+        if contains_digest and isinstance(image_id, str):
+            expected_tail = base_reference.rsplit("/", 1)[-1]
+            tag_matches = any(
+                isinstance(value, str) and value.rsplit("/", 1)[-1] == expected_tail
+                for value in repo_tags
+            )
+            if not tag_matches:
+                continue
+            config = image_id if image_id.startswith("sha256:") else "sha256:" + image_id
+            if IMAGE_DIGEST_PATTERN.fullmatch(config):
+                candidates.append(config)
+    if len(set(candidates)) != 1:
+        raise ReceiptCollectionError("containerd config digest does not resolve uniquely")
+    return candidates[0]
+
+
+def collect_runtime_ownership_receipt(
+    executor: CommandExecutor,
+    identity: RunIdentity,
+    lock: Mapping[str, Any],
+    *,
+    execute: bool = False,
+) -> RuntimeOwnershipReceipt:
+    """Collect every expected object and live identity from the dedicated profile."""
+    if execute is not True:
+        raise ReceiptCollectionError("live receipt collection requires explicit execute=True authorization")
+    validate_static_lock(lock)
+    try:
+        validate_version_lock(lock)
+    except OwnershipError as exc:
+        raise ReceiptCollectionError("runtime receipt collection requires a complete version lock") from exc
+    if lock["cluster"].get("profile") != identity.profile or lock["cluster"].get("context") != identity.profile:
+        raise ReceiptCollectionError("version lock does not identify the requested profile")
+
+    cluster = collect_cluster_identity(executor, identity, execute=True)
+    namespace = collect_namespace_identity(executor, identity, execute=True)
+    if cluster["cluster_uid"] != lock["cluster"].get("cluster_uid"):
+        raise ReceiptCollectionError("live cluster identity does not match the finalized version lock")
+    for field in ("kubernetes_version", "driver", "container_runtime", "cni", "architecture", "node_count"):
+        if cluster.get(field) != lock["cluster"].get(field):
+            raise ReceiptCollectionError(f"live cluster {field} does not match the finalized version lock")
+    component_images = collect_cluster_component_images(executor, identity, execute=True)
+    expected_control_plane = lock["toolchain"].get("kubernetes_control_plane_images", {})
+    expected_calico = lock["toolchain"].get("calico_images", {})
+    if (
+        component_images["kubernetes_control_plane_images"] != expected_control_plane
+        or component_images["calico_images"] != expected_calico
+        or component_images["cni_version"] != lock["cluster"].get("cni_version")
+    ):
+        raise ReceiptCollectionError("live Kubernetes or Calico image identity does not match the version lock")
+    objects: list[RuntimeObjectIdentity] = []
+    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for resource_type in _NAMESPACED_RESOURCE_TYPES:
+        payload = _get_json(
+            executor,
+            kubectl(identity, "--namespace", identity.namespace, "get", resource_type, "-o", "json"),
+            f"{resource_type} inventory",
+        )
+        items = payload.get("items")
+        if not isinstance(items, list):
+            raise ReceiptCollectionError(f"{resource_type} inventory is invalid")
+        for item in items:
+            if not isinstance(item, Mapping):
+                raise ReceiptCollectionError("live Kubernetes object is invalid")
+            metadata = item.get("metadata", {})
+            if not isinstance(metadata, Mapping):
+                raise ReceiptCollectionError("live Kubernetes metadata is invalid")
+            kind, name = item.get("kind"), metadata.get("name")
+            uid, labels = metadata.get("uid"), metadata.get("labels", {})
+            object_namespace = metadata.get("namespace")
+            if (kind, name) in _SYSTEM_NAMESPACE_OBJECTS:
+                continue
+            if not all(isinstance(value, str) and value for value in (kind, name, uid, object_namespace)):
+                raise ReceiptCollectionError("live Kubernetes kind, name, namespace, or UID is missing")
+            if not isinstance(labels, Mapping):
+                raise ReceiptCollectionError("live Kubernetes labels are invalid")
+            record = RuntimeObjectIdentity(
+                kind=kind,
+                name=name,
+                namespace=object_namespace,
+                uid=uid,
+                labels=dict(labels),
+                owner_references=_owner_references(metadata),
+            )
+            key = (kind, name)
+            if key in by_key:
+                raise ReceiptCollectionError("live Kubernetes inventory contains duplicate objects")
+            by_key[key] = dict(item)
+            objects.append(record)
+
+    # Secret data is deliberately excluded from the API response; only its
+    # metadata is collected for the ownership inventory.
+    secret_result = _checked(
+        executor,
+        kubectl(
+            identity,
+            "--namespace",
+            identity.namespace,
+            "get",
+            "secrets",
+            "-o",
+            f"go-template={_SECRET_METADATA_TEMPLATE}",
+        ),
+    )
+    for line in secret_result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) != 6:
+            raise ReceiptCollectionError("Secret metadata inventory is invalid")
+        name, object_namespace, uid, owner_label, run_label, manager_label = fields
+        metadata = {
+            "name": name,
+            "namespace": object_namespace,
+            "uid": uid,
+            "labels": {
+                "it4931.instacart.edu/owner": owner_label,
+                "it4931.instacart.edu/run-id": run_label,
+                "app.kubernetes.io/managed-by": manager_label,
+            },
+        }
+        record = RuntimeObjectIdentity(
+            kind="Secret",
+            name=name,
+            namespace=object_namespace,
+            uid=uid,
+            labels=metadata["labels"],
+            owner_references=(),
+        )
+        key = ("Secret", name)
+        if key in by_key:
+            raise ReceiptCollectionError("Secret inventory contains a duplicate object")
+        by_key[key] = {"kind": "Secret", "metadata": metadata}
+        objects.append(record)
+
+    pvc = by_key.get(("PersistentVolumeClaim", "data-module4d-mongo-0"))
+    if pvc is None:
+        raise ReceiptCollectionError("Mongo PVC is missing from the live inventory")
+    pvc_metadata = pvc.get("metadata", {})
+    pvc_spec = pvc.get("spec", {})
+    pvc_status = pvc.get("status", {})
+    volume_name = pvc_spec.get("volumeName")
+    storage_class_name = pvc_spec.get("storageClassName")
+    if pvc_status.get("phase") != "Bound" or not isinstance(volume_name, str) or not volume_name:
+        raise ReceiptCollectionError("Mongo PVC is not bound to a PV")
+    pv = _get_json(executor, kubectl(identity, "get", "pv", volume_name, "-o", "json"), "bound PV")
+    storage_class = _get_json(
+        executor,
+        kubectl(identity, "get", "storageclass", storage_class_name, "-o", "json"),
+        "bound StorageClass",
+    )
+    pv_metadata, pv_spec, pv_status = pv.get("metadata", {}), pv.get("spec", {}), pv.get("status", {})
+    sc_metadata = storage_class.get("metadata", {})
+    provisioner = storage_class.get("provisioner")
+    owner_refs = _owner_references(pvc_metadata)
+    if len(owner_refs) != 1 or owner_refs[0].kind != "StatefulSet":
+        raise ReceiptCollectionError("Mongo PVC does not have one StatefulSet owner reference")
+    host_path = pv_spec.get("hostPath")
+    local = pv_spec.get("local")
+    if isinstance(host_path, Mapping):
+        locality_kind = "hostPath"
+        locality_path = host_path.get("path", "")
+    elif isinstance(local, Mapping):
+        locality_kind = "local"
+        locality_path = local.get("path", "")
+    else:
+        locality_kind = "unknown"
+        locality_path = ""
+    claim_ref = pv_spec.get("claimRef", {})
+    if (
+        claim_ref.get("namespace") != identity.namespace
+        or claim_ref.get("name") != "data-module4d-mongo-0"
+        or claim_ref.get("uid") != pvc_metadata.get("uid")
+    ):
+        raise ReceiptCollectionError("bound PV claim reference does not match the owned Mongo PVC")
+    node_items = _get_json(executor, kubectl(identity, "get", "nodes", "-o", "json"), "node inventory").get("items")
+    if not isinstance(node_items, list) or len(node_items) != 1:
+        raise ReceiptCollectionError("profile must have one node for local storage ownership")
+    node_metadata = node_items[0].get("metadata", {})
+    runtime_storage = RuntimeStorageIdentity(
+        claim_name="data-module4d-mongo-0",
+        claim_uid=pvc_metadata.get("uid", ""),
+        volume_name=volume_name,
+        volume_uid=pv_metadata.get("uid", ""),
+        pv_claim_namespace=claim_ref.get("namespace", ""),
+        pv_claim_name=claim_ref.get("name", ""),
+        pv_claim_uid=claim_ref.get("uid", ""),
+        storage_class=storage_class_name or "",
+        storage_class_uid=sc_metadata.get("uid", ""),
+        provisioner=provisioner or "",
+        requested_storage=pvc_spec.get("resources", {}).get("requests", {}).get("storage", ""),
+        capacity=pv_status.get("capacity", {}).get("storage", ""),
+        access_mode=(pvc_spec.get("accessModes") or [""])[0],
+        profile_local=provisioner == lock["storage"].get("provisioner") and locality_kind == "hostPath",
+        locality_kind=locality_kind,
+        locality_path=locality_path,
+        claim_owner_uid=owner_refs[0].uid,
+        locality_node_name=node_metadata.get("name", ""),
+        locality_node_uid=node_metadata.get("uid", ""),
+    )
+
+    cri_inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
+    provenance = lock.get("image_provenance", {})
+    image_records = []
+    role_specs = (
+        ("mongo", "module4d-mongo-0", "mongodb"),
+        ("api_application_image", "module4d-api-", "api"),
+        ("ui_application_image", "module4d-ui-", "ui"),
+    )
+    for role, pod_prefix, container_name in role_specs:
+        pod_candidates = [
+            item for item in objects
+            if item.kind == "Pod" and (
+                item.name == pod_prefix if not pod_prefix.endswith("-") else item.name.startswith(pod_prefix)
+            )
+        ]
+        if len(pod_candidates) != 1:
+            raise ReceiptCollectionError(f"expected one running Pod for image role {role}")
+        pod = by_key[("Pod", pod_candidates[0].name)]
+        spec_containers = pod.get("spec", {}).get("containers", [])
+        statuses = pod.get("status", {}).get("containerStatuses", [])
+        declared = [item for item in spec_containers if item.get("name") == container_name]
+        status = [item for item in statuses if item.get("name") == container_name]
+        if len(declared) != 1 or len(status) != 1 or status[0].get("ready") is not True:
+            raise ReceiptCollectionError(f"running container identity is incomplete for {role}")
+        reference = declared[0].get("image")
+        runtime_image_id = status[0].get("imageID")
+        image_lock = lock["images"].get(role, {})
+        role_provenance = provenance.get(role, {})
+        digest = role_provenance.get("image_digest") or image_lock.get("immutable_digest")
+        if not isinstance(reference, str) or not isinstance(digest, str):
+            raise ReceiptCollectionError(f"locked image identity is incomplete for {role}")
+        if role == "mongo":
+            config_digest = _containerd_config_digest(cri_inventory, reference, digest)
+        else:
+            config_digest = role_provenance.get("config_digest", "")
+        try:
+            verify_running_image_id(
+                runtime_image_id=runtime_image_id,
+                declared_reference=reference,
+                image_digest=digest,
+                config_digest=config_digest,
+            )
+        except OwnershipError as exc:
+            raise ReceiptCollectionError(f"running image for {role} does not match the lock") from exc
+        image_records.append(
+            RuntimeImageIdentity(
+                role=role,
+                pod_uid=pod_candidates[0].uid,
+                container_name=container_name,
+                declared_reference=reference,
+                runtime_image_id=runtime_image_id,
+                digest=digest,
+                config_digest=config_digest,
+            )
+        )
+
+    receipt = RuntimeOwnershipReceipt(
+        profile=identity.profile,
+        context=identity.profile,
+        cluster_uid=cluster["cluster_uid"],
+        namespace=identity.namespace,
+        namespace_uid=namespace["namespace_uid"],
+        namespace_labels=namespace["namespace_labels"],
+        objects=tuple(objects),
+        storage=runtime_storage,
+        images=tuple(image_records),
+        cluster_images={**expected_control_plane, **expected_calico},
+    )
+    return receipt
+
+
+def validate_collected_receipt(receipt: RuntimeOwnershipReceipt, lock: Mapping[str, Any]) -> None:
+    """Apply full receipt checks using only identities in the finalized lock."""
+    expected_images = {
+        role: (
+            lock["image_provenance"][role]["image_digest"]
+            if role in lock.get("image_provenance", {})
+            else lock["images"][role]["immutable_digest"]
+        )
+        for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES
+    }
+    from .ownership import validate_runtime_receipt
+
+    try:
+        if (
+            receipt.profile != lock["cluster"]["profile"]
+            or receipt.context != lock["cluster"]["context"]
+            or receipt.cluster_uid != lock["cluster"]["cluster_uid"]
+        ):
+            raise OwnershipError("receipt cluster does not match the finalized version lock")
+        expected_cluster_images = {
+            **lock["toolchain"]["kubernetes_control_plane_images"],
+            **lock["toolchain"]["calico_images"],
+        }
+        validate_runtime_receipt(
+            RunIdentity(receipt.namespace.removeprefix("it4931-k8s-")),
+            receipt,
+            expected_images=expected_images,
+            expected_cluster_images=expected_cluster_images,
+            expected_storage_class=lock["storage"]["default_storage_class"],
+            expected_provisioner=lock["storage"]["provisioner"],
+        )
+    except (KeyError, OwnershipError) as exc:
+        raise ReceiptCollectionError("collected runtime receipt failed complete ownership validation") from exc
+
+
+def receipt_document(receipt: RuntimeOwnershipReceipt) -> dict[str, Any]:
+    """Return only identity metadata; Secret contents are never part of the model."""
+    return {"schema_version": 1, **asdict(receipt)}
+
+
+def receipt_json(receipt: RuntimeOwnershipReceipt) -> str:
+    """Serialize a sanitized receipt for a private evidence file."""
+    return json.dumps(receipt_document(receipt), sort_keys=True, indent=2) + "\n"
+
+
+def receipt_from_document(value: Mapping[str, Any]) -> RuntimeOwnershipReceipt:
+    """Parse a persisted receipt while rejecting missing or extra schema fields."""
+    if (
+        not isinstance(value, Mapping)
+        or type(value.get("schema_version")) is not int
+        or value.get("schema_version") != 1
+    ):
+        raise ReceiptCollectionError("ownership receipt schema is unsupported")
+    expected_top = {
+        "schema_version", "profile", "context", "cluster_uid", "namespace", "namespace_uid",
+        "namespace_labels", "objects", "storage", "images", "cluster_images",
+    }
+    if set(value) != expected_top:
+        raise ReceiptCollectionError("ownership receipt fields are incomplete or unsupported")
+    try:
+        objects = []
+        for item in value["objects"]:
+            if set(item) != {"kind", "name", "namespace", "uid", "labels", "owner_references"}:
+                raise ValueError
+            owners = tuple(OwnerReferenceIdentity(**owner) for owner in item["owner_references"])
+            objects.append(
+                RuntimeObjectIdentity(
+                    kind=item["kind"],
+                    name=item["name"],
+                    namespace=item["namespace"],
+                    uid=item["uid"],
+                    labels=item["labels"],
+                    owner_references=owners,
+                )
+            )
+        images = tuple(RuntimeImageIdentity(**item) for item in value["images"])
+        storage = RuntimeStorageIdentity(**value["storage"])
+        receipt = RuntimeOwnershipReceipt(
+            profile=value["profile"],
+            context=value["context"],
+            cluster_uid=value["cluster_uid"],
+            namespace=value["namespace"],
+            namespace_uid=value["namespace_uid"],
+            namespace_labels=value["namespace_labels"],
+            objects=tuple(objects),
+            storage=storage,
+            images=images,
+            cluster_images=value["cluster_images"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ReceiptCollectionError("ownership receipt document is malformed") from exc
+    return receipt

@@ -7,7 +7,7 @@ complete receipt before any destructive action.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 import re
 import secrets
@@ -33,6 +33,9 @@ PLACEHOLDER_PATTERN = re.compile(
 )
 REQUIRED_IMAGE_ROLES = frozenset(
     {"mongo", "spark_base", "ui_base", "api_application_image", "ui_application_image"}
+)
+REQUIRED_SERVING_RUNTIME_IMAGE_ROLES = frozenset(
+    {"mongo", "api_application_image", "ui_application_image"}
 )
 REQUIRED_RESOLVED_ENVIRONMENTS = frozenset({"api", "ui", "spark_parent"})
 REQUIRED_CALICO_IMAGES = frozenset({"cni", "node", "kube-controllers"})
@@ -128,6 +131,82 @@ class StorageIdentity:
     access_mode: str
     volume_name: str
     volume_uid: str
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerReferenceIdentity:
+    """Kubernetes owner reference captured from a live object."""
+
+    kind: str
+    name: str
+    uid: str
+    controller: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeObjectIdentity:
+    """A directly declared object or controller-created child observed live."""
+
+    kind: str
+    name: str
+    namespace: str
+    uid: str
+    labels: Mapping[str, str]
+    owner_references: Sequence[OwnerReferenceIdentity] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeStorageIdentity:
+    """PVC/PV/StorageClass identity plus evidence that the volume is profile-local."""
+
+    claim_name: str
+    claim_uid: str
+    volume_name: str
+    volume_uid: str
+    pv_claim_namespace: str
+    pv_claim_name: str
+    pv_claim_uid: str
+    storage_class: str
+    storage_class_uid: str
+    provisioner: str
+    requested_storage: str
+    capacity: str
+    access_mode: str
+    profile_local: bool
+    locality_kind: str
+    locality_path: str
+    claim_owner_uid: str
+    locality_node_name: str
+    locality_node_uid: str
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeImageIdentity:
+    """Declared image role and the immutable digest reported by a running container."""
+
+    role: str
+    pod_uid: str
+    container_name: str
+    declared_reference: str
+    runtime_image_id: str
+    digest: str
+    config_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOwnershipReceipt:
+    """Complete live identity evidence required before a scoped destructive action."""
+
+    profile: str
+    context: str
+    cluster_uid: str
+    namespace: str
+    namespace_uid: str
+    namespace_labels: Mapping[str, str]
+    objects: Sequence[RuntimeObjectIdentity]
+    storage: RuntimeStorageIdentity
+    images: Sequence[RuntimeImageIdentity]
+    cluster_images: Mapping[str, str] = field(default_factory=dict)
 
 
 # This is the complete direct-object inventory rendered by deploy/k8s/base.
@@ -250,6 +329,283 @@ def validate_receipt(identity: RunIdentity, receipt: OwnershipReceipt) -> None:
         raise OwnershipError("bound PV UID conflicts with another owned object")
 
 
+_EXPECTED_CONTROLLER_CHILDREN = frozenset(
+    {
+        ("Pod", "module4d-mongo-0", "StatefulSet", "module4d-mongo"),
+        ("ReplicaSet", "module4d-api-", "Deployment", "module4d-api"),
+        ("Pod", "module4d-api-", "ReplicaSet", "module4d-api-"),
+        ("ReplicaSet", "module4d-ui-", "Deployment", "module4d-ui"),
+        ("Pod", "module4d-ui-", "ReplicaSet", "module4d-ui-"),
+    }
+)
+
+
+def validate_runtime_receipt(
+    identity: RunIdentity,
+    receipt: RuntimeOwnershipReceipt,
+    *,
+    expected_images: Mapping[str, str],
+    expected_cluster_images: Mapping[str, str],
+    expected_storage_class: str,
+    expected_provisioner: str,
+) -> None:
+    """Fail closed unless live objects, owner chains, images, and storage agree."""
+    if not isinstance(receipt, RuntimeOwnershipReceipt):
+        raise OwnershipError("complete runtime ownership receipt is required")
+    validate_target(
+        identity,
+        profile=receipt.profile,
+        context=receipt.context,
+        namespace=receipt.namespace,
+    )
+    if not isinstance(receipt.cluster_uid, str) or not receipt.cluster_uid.strip():
+        raise OwnershipError("live cluster UID is required")
+    if not isinstance(receipt.namespace_uid, str) or not receipt.namespace_uid.strip():
+        raise OwnershipError("live namespace UID is required")
+    if not isinstance(receipt.namespace_labels, Mapping) or any(
+        receipt.namespace_labels.get(key) != value for key, value in identity.labels.items()
+    ):
+        raise OwnershipError("live namespace ownership labels do not match")
+    if not isinstance(receipt.objects, Sequence) or isinstance(receipt.objects, (str, bytes)):
+        raise OwnershipError("live object inventory must be a sequence")
+
+    observed: dict[tuple[str, str], RuntimeObjectIdentity] = {}
+    uids = {receipt.cluster_uid, receipt.namespace_uid}
+    for item in receipt.objects:
+        if not isinstance(item, RuntimeObjectIdentity):
+            raise OwnershipError("live object inventory contains an invalid record")
+        if not all(isinstance(value, str) and value.strip() for value in (item.kind, item.name, item.uid)):
+            raise OwnershipError("live object kind, name, and UID are required")
+        if item.namespace != identity.namespace:
+            raise OwnershipError("live object belongs to a different namespace")
+        if item.uid in uids:
+            raise OwnershipError("live object UIDs must be unique")
+        uids.add(item.uid)
+        if not isinstance(item.labels, Mapping) or any(
+            item.labels.get(key) != value for key, value in identity.labels.items()
+        ):
+            raise OwnershipError(f"live ownership labels do not match for {item.kind}/{item.name}")
+        key = (item.kind, item.name)
+        if key in observed:
+            raise OwnershipError("live object inventory contains a duplicate")
+        if not isinstance(item.owner_references, Sequence) or isinstance(item.owner_references, (str, bytes)):
+            raise OwnershipError("live owner references must be an explicit sequence")
+        observed[key] = item
+
+    expected_direct = ALLOWED_RESOURCE_INVENTORY | frozenset(
+        {
+            ("ConfigMap", "module4d-mongo-bootstrap"),
+            ("Secret", "module4d-mongo-admin"),
+            ("Secret", "module4d-mongo-accounts"),
+            ("Secret", "module4d-api-readonly"),
+            ("Secret", "module4d-mongo-publisher"),
+        }
+    )
+    # A PVC made from the StatefulSet claim template is controller-created.
+    direct_actual = set(observed).difference(
+        key for key in observed if key[0] in {"Pod", "ReplicaSet"}
+    )
+    if direct_actual != expected_direct:
+        raise OwnershipError("live direct-resource inventory is incomplete or contains an unapproved object")
+    matched_child_keys: set[tuple[str, str]] = set()
+    for kind, prefix, owner_kind, owner_prefix in _EXPECTED_CONTROLLER_CHILDREN:
+        candidates = [
+            item for item in observed.values()
+            if item.kind == kind and (item.name == prefix if not prefix.endswith("-") else item.name.startswith(prefix))
+        ]
+        if len(candidates) != 1:
+            raise OwnershipError(f"expected exactly one controller child for {owner_kind}/{owner_prefix}")
+        child = candidates[0]
+        matched_child_keys.add((child.kind, child.name))
+        if len(child.owner_references) != 1:
+            raise OwnershipError(f"{child.kind}/{child.name} must have exactly one owner reference")
+        owner = child.owner_references[0]
+        parent_candidates = [
+            parent for parent in observed.values()
+            if parent.kind == owner_kind
+            and (parent.name == owner_prefix if not owner_prefix.endswith("-") else parent.name.startswith(owner_prefix))
+        ]
+        if (
+            not isinstance(owner, OwnerReferenceIdentity)
+            or not owner.controller
+            or len(parent_candidates) != 1
+            or owner.kind != owner_kind
+            or owner.name != parent_candidates[0].name
+            or owner.uid != parent_candidates[0].uid
+        ):
+            raise OwnershipError(f"owner reference does not bind {child.kind}/{child.name} to its controller")
+    dynamic_child_keys = {key for key in observed if key[0] in {"Pod", "ReplicaSet"}}
+    if dynamic_child_keys != matched_child_keys:
+        raise OwnershipError("live inventory contains an unapproved controller-created child")
+
+    storage = receipt.storage
+    if not isinstance(storage, RuntimeStorageIdentity):
+        raise OwnershipError("live PVC/PV/StorageClass receipt is required")
+    storage_strings = (
+        storage.claim_name,
+        storage.claim_uid,
+        storage.volume_name,
+        storage.volume_uid,
+        storage.pv_claim_namespace,
+        storage.pv_claim_name,
+        storage.pv_claim_uid,
+        storage.storage_class,
+        storage.storage_class_uid,
+        storage.provisioner,
+        storage.requested_storage,
+        storage.capacity,
+        storage.access_mode,
+        storage.locality_kind,
+        storage.locality_path,
+        storage.claim_owner_uid,
+        storage.locality_node_name,
+        storage.locality_node_uid,
+    )
+    if not all(isinstance(value, str) and value.strip() for value in storage_strings):
+        raise OwnershipError("live PVC/PV/StorageClass identity fields are incomplete")
+    pvc = observed.get(("PersistentVolumeClaim", storage.claim_name))
+    sts = observed.get(("StatefulSet", "module4d-mongo"))
+    if (
+        pvc is None
+        or sts is None
+        or storage.claim_name != "data-module4d-mongo-0"
+        or storage.claim_uid != pvc.uid
+        or storage.pv_claim_namespace != identity.namespace
+        or storage.pv_claim_name != storage.claim_name
+        or storage.pv_claim_uid != pvc.uid
+        or storage.claim_owner_uid != sts.uid
+        or len(pvc.owner_references) != 1
+        or not isinstance(pvc.owner_references[0], OwnerReferenceIdentity)
+        or pvc.owner_references[0].kind != "StatefulSet"
+        or pvc.owner_references[0].name != sts.name
+        or pvc.owner_references[0].uid != sts.uid
+        or not pvc.owner_references[0].controller
+        or storage.volume_name.strip() == ""
+        or storage.volume_uid.strip() == ""
+        or storage.volume_uid in uids
+        or storage.storage_class_uid in uids
+        or storage.locality_node_uid in uids
+        or len({storage.volume_uid, storage.storage_class_uid, storage.locality_node_uid}) != 3
+        or storage.storage_class != expected_storage_class
+        or storage.provisioner != expected_provisioner
+        or storage.storage_class_uid.strip() == ""
+        or storage.requested_storage != "2Gi"
+        or storage.capacity != "2Gi"
+        or storage.access_mode != "ReadWriteOnce"
+        or storage.profile_local is not True
+        or storage.locality_kind != "hostPath"
+        or not storage.locality_path.startswith("/tmp/hostpath-provisioner/")
+        or not storage.locality_node_name.strip()
+        or not storage.locality_node_uid.strip()
+    ):
+        raise OwnershipError("live PVC/PV/StorageClass locality contract does not match")
+
+    if not isinstance(expected_images, Mapping) or set(expected_images) != set(REQUIRED_SERVING_RUNTIME_IMAGE_ROLES):
+        raise OwnershipError("expected immutable identities for every running serving image role are required")
+    images = receipt.images
+    if not isinstance(images, Sequence) or isinstance(images, (str, bytes)):
+        raise OwnershipError("live image identities must be a sequence")
+    if len(images) != len(REQUIRED_SERVING_RUNTIME_IMAGE_ROLES):
+        raise OwnershipError("live image receipt is incomplete")
+    seen_roles = set()
+    role_pod_names = {
+        "mongo": ("module4d-mongo-0",),
+        "api_application_image": ("module4d-api-",),
+        "ui_application_image": ("module4d-ui-",),
+    }
+    pod_name_by_uid = {item.uid: item.name for item in observed.values() if item.kind == "Pod"}
+    for image in images:
+        if (
+            not isinstance(image, RuntimeImageIdentity)
+            or not isinstance(image.role, str)
+            or image.role in seen_roles
+        ):
+            raise OwnershipError("live image receipt contains an invalid or duplicate role")
+        seen_roles.add(image.role)
+        if (
+            image.role not in expected_images
+            or not isinstance(image.pod_uid, str)
+            or image.pod_uid not in pod_name_by_uid
+            or not isinstance(image.container_name, str)
+            or not any(
+                pod_name_by_uid[image.pod_uid] == name
+                if not name.endswith("-")
+                else pod_name_by_uid[image.pod_uid].startswith(name)
+                for name in role_pod_names.get(image.role, ())
+            )
+            or not image.container_name.strip()
+            or not isinstance(image.declared_reference, str)
+            or not isinstance(image.runtime_image_id, str)
+            or not isinstance(image.digest, str)
+            or not isinstance(image.config_digest, str)
+            or image.digest != expected_images[image.role]
+            or not IMAGE_DIGEST_PATTERN.fullmatch(image.digest)
+            or not IMAGE_DIGEST_PATTERN.fullmatch(image.config_digest)
+            or not (
+                f"@{image.digest}" in image.runtime_image_id
+                or image.runtime_image_id.rstrip("/").endswith(image.config_digest)
+            )
+            or "@" not in image.declared_reference
+            or image.declared_reference.rsplit("@", 1)[-1] != image.digest
+        ):
+            raise OwnershipError(f"running image identity does not match the lock for {image.role}")
+    required_cluster_roles = REQUIRED_CONTROL_PLANE_IMAGES | REQUIRED_CALICO_IMAGES
+    if (
+        not isinstance(expected_cluster_images, Mapping)
+        or set(expected_cluster_images) != set(required_cluster_roles)
+        or not isinstance(receipt.cluster_images, Mapping)
+        or set(receipt.cluster_images) != set(required_cluster_roles)
+    ):
+        raise OwnershipError("complete Kubernetes and Calico image identities are required in the receipt")
+    if dict(receipt.cluster_images) != dict(expected_cluster_images):
+        raise OwnershipError("cluster component image identities do not match the version lock")
+    for role, reference in receipt.cluster_images.items():
+        _validate_digest_reference(reference, f"receipt.cluster_images.{role}")
+
+
+def assert_receipt_matches_live(
+    identity: RunIdentity,
+    recorded: RuntimeOwnershipReceipt,
+    live: RuntimeOwnershipReceipt,
+    *,
+    expected_images: Mapping[str, str],
+    expected_cluster_images: Mapping[str, str],
+    expected_storage_class: str,
+    expected_provisioner: str,
+) -> None:
+    """Reject teardown or resume when any live UID, owner, image, or volume has drifted."""
+    validate_runtime_receipt(
+        identity,
+        recorded,
+        expected_images=expected_images,
+        expected_cluster_images=expected_cluster_images,
+        expected_storage_class=expected_storage_class,
+        expected_provisioner=expected_provisioner,
+    )
+    validate_runtime_receipt(
+        identity,
+        live,
+        expected_images=expected_images,
+        expected_cluster_images=expected_cluster_images,
+        expected_storage_class=expected_storage_class,
+        expected_provisioner=expected_provisioner,
+    )
+    if (
+        recorded.profile != live.profile
+        or recorded.context != live.context
+        or recorded.cluster_uid != live.cluster_uid
+        or recorded.namespace != live.namespace
+        or recorded.namespace_uid != live.namespace_uid
+        or dict(recorded.namespace_labels) != dict(live.namespace_labels)
+        or {(item.kind, item.name): item for item in recorded.objects}
+        != {(item.kind, item.name): item for item in live.objects}
+        or recorded.storage != live.storage
+        or {item.role: item for item in recorded.images} != {item.role: item for item in live.images}
+        or dict(recorded.cluster_images) != dict(live.cluster_images)
+    ):
+        raise OwnershipError("live identities do not match the recorded ownership receipt")
+
+
 def validate_version_lock(lock: Mapping[str, Any]) -> None:
     """Require every runtime identity needed by a future B2 deployment lock."""
     if not isinstance(lock, Mapping):
@@ -276,6 +632,12 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
         raise OwnershipError("cluster driver and container runtime do not match the B1 Docker/containerd contract")
     if cluster["cni"].lower() != "calico":
         raise OwnershipError("cluster.cni must match the required Calico policy-enforcing CNI")
+    for field in ("profile", "context", "cluster_uid"):
+        _require_concrete_string(cluster, field, f"cluster.{field}")
+    if cluster["profile"] != cluster["context"] or not re.fullmatch(
+        r"it4931-k8s-[0-9a-f]{12}", cluster["profile"]
+    ):
+        raise OwnershipError("cluster profile and context must match the dedicated run identity")
     architecture = cluster.get("architecture")
     if not isinstance(architecture, str) or not ARCHITECTURE_PATTERN.fullmatch(architecture):
         raise OwnershipError("cluster.architecture must identify a supported Linux architecture")
@@ -317,6 +679,40 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
         elif reference_digest is None:
             raise OwnershipError(f"image {name} has no immutable digest")
 
+    provenance = lock.get("image_provenance")
+    if not isinstance(provenance, Mapping) or not {"api_application_image", "ui_application_image"}.issubset(provenance):
+        raise OwnershipError("version lock is missing application image build provenance")
+    for role in ("api_application_image", "ui_application_image"):
+        record = provenance.get(role)
+        if not isinstance(record, Mapping):
+            raise OwnershipError(f"image_provenance.{role} is required")
+        _require_concrete_string(record, "source_revision", f"image_provenance.{role}.source_revision")
+        if not re.fullmatch(r"[0-9a-f]{40}", record["source_revision"]):
+            raise OwnershipError(f"image_provenance.{role}.source_revision must be a full Git SHA")
+        if record.get("source_dirty") is not False:
+            raise OwnershipError(f"image_provenance.{role}.source_dirty must be false")
+        for field in ("source_tree_sha256", "build_metadata_sha256"):
+            value = record.get(field)
+            if not isinstance(value, str) or not HEX_SHA256_PATTERN.fullmatch(value):
+                raise OwnershipError(f"image_provenance.{role}.{field} must be a SHA-256")
+        config_digest = record.get("config_digest")
+        if not isinstance(config_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(config_digest):
+            raise OwnershipError(f"image_provenance.{role}.config_digest must be an OCI SHA-256")
+        digest = record.get("image_digest")
+        if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+            raise OwnershipError(f"image_provenance.{role}.image_digest is malformed")
+        if images[role].get("immutable_digest", _reference_digest(images[role]["reference"], f"images.{role}.reference")) != digest:
+            raise OwnershipError(f"image_provenance.{role}.image_digest does not match the image lock")
+        python_version = record.get("python_version")
+        if not isinstance(python_version, str) or not PYTHON_VERSION_PATTERN.fullmatch(python_version):
+            raise OwnershipError(f"image_provenance.{role}.python_version must be exact")
+        environment_digest = record.get("python_environment_sha256")
+        if not isinstance(environment_digest, str) or not HEX_SHA256_PATTERN.fullmatch(environment_digest):
+            raise OwnershipError(f"image_provenance.{role}.python_environment_sha256 must be a SHA-256")
+        platform = record.get("platform")
+        if platform != cluster["architecture"]:
+            raise OwnershipError(f"image_provenance.{role}.platform does not match the Kubernetes node")
+
     dependencies = lock.get("python_dependencies")
     if not isinstance(dependencies, Mapping):
         raise OwnershipError("version lock is missing python_dependencies")
@@ -331,12 +727,34 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
         digest = environment_digests[role]
         if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
             raise OwnershipError(f"python_dependencies.{role} environment digest is malformed")
+    for role, environment_role in (
+        ("api_application_image", "api"),
+        ("ui_application_image", "ui"),
+    ):
+        record = provenance[role]
+        if environment_digests[environment_role] != "sha256:" + record["python_environment_sha256"]:
+            raise OwnershipError(f"python_dependencies.{environment_role} does not match image provenance")
+    api_image_provenance = provenance["api_application_image"]
+    ui_image_provenance = provenance["ui_application_image"]
+    if (
+        api_image_provenance["source_revision"] != ui_image_provenance["source_revision"]
+        or api_image_provenance["source_tree_sha256"] != ui_image_provenance["source_tree_sha256"]
+    ):
+        raise OwnershipError("API and UI images must share one clean source revision and tree")
+    api_provenance = api_image_provenance
+    if (
+        dependencies["spark_parent_python"] != api_provenance["python_version"]
+        or environment_digests["spark_parent"] != "sha256:" + api_provenance["python_environment_sha256"]
+    ):
+        raise OwnershipError("Spark parent Python environment does not match the API runner base")
 
     toolchain = lock.get("toolchain")
     if not isinstance(toolchain, Mapping):
         raise OwnershipError("version lock is missing the toolchain section")
-    for field in ("kubectl_version", "docker_engine_version"):
+    for field in ("minikube_version", "kubectl_version", "docker_engine_version"):
         _require_concrete_string(toolchain, field, f"toolchain.{field}")
+    if toolchain["minikube_version"] != cluster["minikube_version"]:
+        raise OwnershipError("toolchain Minikube version does not match the cluster lock")
     minikube_sha = toolchain.get("minikube_binary_sha256")
     if not isinstance(minikube_sha, str) or not HEX_SHA256_PATTERN.fullmatch(minikube_sha):
         raise OwnershipError("toolchain.minikube_binary_sha256 must be a verified SHA-256 checksum")
@@ -356,6 +774,7 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
         raise OwnershipError("version lock is missing the storage section")
     for field in ("default_storage_class", "provisioner", "volume_binding_mode"):
         _require_concrete_string(storage, field, f"storage.{field}")
+    _require_concrete_string(storage, "storage_class_uid", "storage.storage_class_uid")
     if storage.get("access_mode") != "ReadWriteOnce" or storage.get("capacity") != "2Gi":
         raise OwnershipError("storage contract must match the 2Gi ReadWriteOnce Mongo claim")
     if storage.get("profile_local") is not True:

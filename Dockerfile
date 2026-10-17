@@ -6,6 +6,8 @@ COPY requirements.txt requirements-dev.txt /tmp/dependencies/
 RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
 COPY deploy/module4/requirements/api.txt /tmp/module4-api-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python3 /tmp/write-python-environment.py
 
 # Spark does not bundle the Structured Streaming Kafka source. Keep the
 # connector and its compile-time dependencies in the image, pinned and
@@ -59,6 +61,9 @@ CMD ["python3", "-m", "pytest", "-q"]
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS ui
 
 ARG MODULE4D_UI_DEV=0
+ARG MODULE4_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \
+      org.opencontainers.image.revision=${MODULE4_COMMIT}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -74,6 +79,8 @@ RUN python -m pip install --no-cache-dir --disable-pip-version-check \
     fi \
     && python -m pip check \
     && useradd --uid 10001 --create-home --shell /usr/sbin/nologin dashboard
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python /tmp/write-python-environment.py
 
 COPY src/__init__.py ./src/__init__.py
 COPY src/module4/__init__.py ./src/module4/__init__.py

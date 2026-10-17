@@ -331,7 +331,7 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertNotIn("kind: Job", contents)
         self.assertNotIn("kind: CronJob", contents)
         self.assertRegex(contents, r"(?m)^\s*kind: (?:StatefulSet|Deployment)$")
-        self.assertEqual(contents.count("namespace: __K8S_RENDER_REQUIRED__"), 20)
+        self.assertEqual(contents.count("namespace: __K8S_RENDER_REQUIRED__"), 21)
         self.assertFalse((BASE / "kustomization.yaml").exists())
 
     def test_mongo_requires_nonempty_admin_credentials_and_explicit_auth(self) -> None:
@@ -353,6 +353,28 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertEqual(env_refs["MONGO_INITDB_ROOT_PASSWORD"], {"name": "module4d-mongo-admin", "key": "password"})
         mongo = next(item for item in pod_spec["containers"] if item["name"] == "mongodb")
         self.assertIn("--auth", mongo["args"])
+
+    def test_mongo_bootstrap_scopes_users_and_declares_read_contract_indexes(self) -> None:
+        document = yaml.safe_load((BASE / "mongo-bootstrap.yaml").read_text(encoding="utf-8"))
+        script = document["data"]["20-users-and-indexes.js"]
+        self.assertIn('roles: [{role: "read", db: databaseName}]', script)
+        self.assertIn('roles: [{role: "readWrite", db: databaseName}]', script)
+        self.assertNotIn('role: "root"', script)
+        for name in (
+            "idx_batch_product_purchase_count_desc_product_id_asc",
+            "idx_batch_product_reorder_rate_desc_product_id_asc",
+            "idx_source_namespace_window_end_desc",
+            "uq_serving_user_rank",
+            "uq_serving_user_product",
+            "uq_model_user_rank",
+            "uq_model_user_product",
+            "idx_model_user",
+            "uq_graph_product",
+        ):
+            self.assertIn(name, script)
+        readiness_source = (ROOT / "scripts/k8s/api_readiness.py").read_text(encoding="utf-8")
+        self.assertNotIn("create_index", readiness_source)
+        self.assertNotIn("create_user", readiness_source)
 
     def test_authenticated_readiness_checks_identity_and_index_options(self) -> None:
         expected = {
@@ -574,13 +596,12 @@ class StaticFoundationTests(unittest.TestCase):
             with self.subTest(value=invalid):
                 self.assertNotEqual(run(invalid).returncode, 0)
 
-    def test_docker_context_excludes_only_the_two_host_kubernetes_tests(self) -> None:
+    def test_docker_context_excludes_all_host_kubernetes_tests(self) -> None:
         ignore_lines = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
         allow_index = ignore_lines.index("!tests/**/*.py")
-        ownership_index = ignore_lines.index("tests/test_k8s_ownership.py")
-        static_index = ignore_lines.index("tests/test_k8s_static.py")
-        self.assertLess(allow_index, ownership_index)
-        self.assertLess(allow_index, static_index)
+        excluded_index = ignore_lines.index("tests/test_k8s_*.py")
+        self.assertLess(allow_index, excluded_index)
+        self.assertTrue(list((ROOT / "tests").glob("test_k8s_*.py")))
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn("COPY tests/", dockerfile)
         self.assertIn("FROM spark AS k8s-runner", dockerfile)
@@ -639,6 +660,14 @@ class StaticFoundationTests(unittest.TestCase):
         )
         docs = (ROOT / "docs/kubernetes.md").read_text(encoding="utf-8")
         self.assertIn(lock["cluster"]["cni_compatibility_source"], docs)
+
+    def test_deployment_renderer_refuses_the_incomplete_lock(self) -> None:
+        lock = yaml.safe_load((ROOT / "deploy/k8s/versions.lock.yaml").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "rendered"
+            with self.assertRaisesRegex(ValueError, "complete version lock"):
+                render_overlay("0123456789ab", output, version_lock=lock)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

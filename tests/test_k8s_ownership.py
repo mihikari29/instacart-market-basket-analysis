@@ -1,5 +1,6 @@
 from dataclasses import replace
 from copy import deepcopy
+import json
 from pathlib import Path
 import unittest
 
@@ -14,13 +15,21 @@ from scripts.k8s.ownership import (
     MANAGED_BY_VALUE,
     OwnershipError,
     OwnershipReceipt,
+    OwnerReferenceIdentity,
     ResourceIdentity,
+    RuntimeImageIdentity,
+    RuntimeObjectIdentity,
+    RuntimeOwnershipReceipt,
+    RuntimeStorageIdentity,
     RunIdentity,
     StorageIdentity,
     validate_receipt,
+    validate_runtime_receipt,
+    assert_receipt_matches_live,
     validate_target,
     validate_version_lock,
 )
+from scripts.k8s.receipts import receipt_from_document, receipt_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +45,9 @@ def _complete_lock() -> dict:
         "cluster": {
             "kubernetes_version": "v1.37.1",
             "minikube_version": "v1.39.0",
+            "profile": "it4931-k8s-0123456789ab",
+            "context": "it4931-k8s-0123456789ab",
+            "cluster_uid": "cluster-uid-0123",
             "driver": "docker",
             "container_runtime": "containerd",
             "cni": "calico",
@@ -56,6 +68,20 @@ def _complete_lock() -> dict:
             "api_application_image": {"reference": "registry.local/api:b1", "immutable_digest": _DIGEST_A},
             "ui_application_image": {"reference": "registry.local/ui:b1", "immutable_digest": _DIGEST_A},
         },
+        "image_provenance": {
+            role: {
+                "source_revision": "1" * 40,
+                "source_dirty": False,
+                "source_tree_sha256": "d" * 64,
+                "build_metadata_sha256": "e" * 64,
+                "image_digest": _DIGEST_A,
+                "config_digest": _DIGEST_B,
+                "python_version": "3.10.16" if role == "api_application_image" else "3.14.0",
+                "python_environment_sha256": "a" * 64,
+                "platform": "linux/amd64",
+            }
+            for role in ("api_application_image", "ui_application_image")
+        },
         "python_dependencies": {
             "api_python": "3.10.16",
             "ui_python": "3.14.0",
@@ -67,6 +93,7 @@ def _complete_lock() -> dict:
             },
         },
         "toolchain": {
+            "minikube_version": "v1.39.0",
             "kubectl_version": "v1.36.1",
             "minikube_binary_sha256": "c" * 64,
             "docker_engine_version": "27.5.1",
@@ -90,6 +117,7 @@ def _complete_lock() -> dict:
         },
         "storage": {
             "default_storage_class": "standard",
+            "storage_class_uid": "storage-class-uid-0123",
             "provisioner": "k8s.io/minikube-hostpath",
             "access_mode": "ReadWriteOnce",
             "capacity": "2Gi",
@@ -246,6 +274,18 @@ class OwnershipTests(unittest.TestCase):
         candidate["host_capacity"]["memory_gib"] = float("nan")
         cases.append(("non-finite host measurement", candidate))
 
+        candidate = deepcopy(_complete_lock())
+        del candidate["image_provenance"]["api_application_image"]
+        cases.append(("missing image provenance", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        candidate["cluster"]["cluster_uid"] = "unresolved-cluster-uid"
+        cases.append(("unresolved cluster identity", candidate))
+
+        candidate = deepcopy(_complete_lock())
+        del candidate["storage"]["storage_class_uid"]
+        cases.append(("missing StorageClass UID", candidate))
+
         for label, candidate in cases:
             with self.subTest(case=label), self.assertRaises(OwnershipError):
                 validate_version_lock(candidate)
@@ -283,6 +323,130 @@ class OwnershipTests(unittest.TestCase):
             "registry.local/my_service/api_image:b1"
         )
         validate_version_lock(candidate)
+
+    def test_complete_live_receipt_binds_children_storage_and_running_images(self) -> None:
+        identity = RunIdentity("0123456789ab")
+        labels = identity.labels
+        objects: list[RuntimeObjectIdentity] = []
+        uid_by_key: dict[tuple[str, str], str] = {}
+        direct = ALLOWED_RESOURCE_INVENTORY | frozenset(
+            {
+                ("ConfigMap", "module4d-mongo-bootstrap"),
+                ("Secret", "module4d-mongo-admin"),
+                ("Secret", "module4d-mongo-accounts"),
+                ("Secret", "module4d-api-readonly"),
+                ("Secret", "module4d-mongo-publisher"),
+            }
+        )
+        uid_by_key = {key: f"direct-uid-{index}" for index, key in enumerate(sorted(direct), start=1)}
+        for key in sorted(direct):
+            uid = uid_by_key[key]
+            owners = ()
+            if key == ("PersistentVolumeClaim", "data-module4d-mongo-0"):
+                owners = (OwnerReferenceIdentity("StatefulSet", "module4d-mongo", uid_by_key[("StatefulSet", "module4d-mongo")], True),)
+            objects.append(RuntimeObjectIdentity(key[0], key[1], identity.namespace, uid, labels, owners))
+
+        # Add deterministic controller owner chains for the one-replica serving setup.
+        children = (
+            ("Pod", "module4d-mongo-0", "StatefulSet", "module4d-mongo"),
+            ("ReplicaSet", "module4d-api-hash", "Deployment", "module4d-api"),
+            ("Pod", "module4d-api-hash-pod", "ReplicaSet", "module4d-api-hash"),
+            ("ReplicaSet", "module4d-ui-hash", "Deployment", "module4d-ui"),
+            ("Pod", "module4d-ui-hash-pod", "ReplicaSet", "module4d-ui-hash"),
+        )
+        for index, (kind, name, owner_kind, owner_name) in enumerate(children, start=1):
+            owner_uid = uid_by_key[(owner_kind, owner_name)]
+            uid = f"child-uid-{index}"
+            uid_by_key[(kind, name)] = uid
+            objects.append(
+                RuntimeObjectIdentity(
+                    kind,
+                    name,
+                    identity.namespace,
+                    uid,
+                    labels,
+                    (OwnerReferenceIdentity(owner_kind, owner_name, owner_uid, True),),
+                )
+            )
+
+        mongo_digest, api_digest, ui_digest = _DIGEST_A, _DIGEST_B, "sha256:" + "f" * 64
+        expected_images = {
+            "mongo": mongo_digest,
+            "api_application_image": api_digest,
+            "ui_application_image": ui_digest,
+        }
+        images = (
+            RuntimeImageIdentity("mongo", uid_by_key[("Pod", "module4d-mongo-0")], "mongodb", f"mongo:7.0.16@{mongo_digest}", "containerd://sha256:" + "1" * 64, mongo_digest, "sha256:" + "1" * 64),
+            RuntimeImageIdentity("api_application_image", uid_by_key[("Pod", "module4d-api-hash-pod")], "api", f"registry.local/api:b1@{api_digest}", "containerd://sha256:" + "2" * 64, api_digest, "sha256:" + "2" * 64),
+            RuntimeImageIdentity("ui_application_image", uid_by_key[("Pod", "module4d-ui-hash-pod")], "ui", f"registry.local/ui:b1@{ui_digest}", "containerd://sha256:" + "3" * 64, ui_digest, "sha256:" + "3" * 64),
+        )
+        complete_lock = _complete_lock()
+        cluster_images = {
+            **complete_lock["toolchain"]["kubernetes_control_plane_images"],
+            **complete_lock["toolchain"]["calico_images"],
+        }
+        receipt = RuntimeOwnershipReceipt(
+            profile=identity.profile,
+            context=identity.profile,
+            cluster_uid="cluster-uid",
+            namespace=identity.namespace,
+            namespace_uid="namespace-uid",
+            namespace_labels=labels,
+            objects=tuple(objects),
+            storage=RuntimeStorageIdentity(
+                "data-module4d-mongo-0",
+                uid_by_key[("PersistentVolumeClaim", "data-module4d-mongo-0")],
+                "pvc-volume",
+                "pv-uid",
+                identity.namespace,
+                "data-module4d-mongo-0",
+                uid_by_key[("PersistentVolumeClaim", "data-module4d-mongo-0")],
+                "standard",
+                "storage-class-uid",
+                "k8s.io/minikube-hostpath",
+                "2Gi",
+                "2Gi",
+                "ReadWriteOnce",
+                True,
+                "hostPath",
+                "/tmp/hostpath-provisioner/data-module4d-mongo-0",
+                uid_by_key[("StatefulSet", "module4d-mongo")],
+                "minikube",
+                "node-uid",
+            ),
+            images=images,
+            cluster_images=cluster_images,
+        )
+        validate_runtime_receipt(
+            identity,
+            receipt,
+            expected_images=expected_images,
+            expected_cluster_images=cluster_images,
+            expected_storage_class="standard",
+            expected_provisioner="k8s.io/minikube-hostpath",
+        )
+        restored = receipt_from_document(json.loads(receipt_json(receipt)))
+        self.assertEqual(restored, receipt)
+        assert_receipt_matches_live(
+            identity,
+            receipt,
+            receipt,
+            expected_images=expected_images,
+            expected_cluster_images=cluster_images,
+            expected_storage_class="standard",
+            expected_provisioner="k8s.io/minikube-hostpath",
+        )
+        changed_live = replace(receipt, namespace_uid="replacement-namespace-uid")
+        with self.assertRaisesRegex(OwnershipError, "do not match"):
+            assert_receipt_matches_live(
+                identity,
+                receipt,
+                changed_live,
+                expected_images=expected_images,
+                expected_cluster_images=cluster_images,
+                expected_storage_class="standard",
+                expected_provisioner="k8s.io/minikube-hostpath",
+            )
 
 
 if __name__ == "__main__":

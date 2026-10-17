@@ -10,6 +10,9 @@ cluster:
   cni_version: v3.33.0
   node_count: 1
   architecture: unresolved-host-architecture
+  profile: unresolved-until-dedicated-profile-exists
+  context: unresolved-until-dedicated-profile-exists
+  cluster_uid: unresolved-until-dedicated-profile-exists
   minikube_release_source: https://github.com/kubernetes/minikube/releases/tag/v1.39.0
   kubernetes_release_source: https://kubernetes.io/releases/1.37/
   cni_compatibility_source: https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements
@@ -26,9 +29,14 @@ images:
   api_application_image:
     reference: instacart-module4d-k8s-api:b1
     immutable_digest: unresolved-until-built-and-inspected
+    source: Dockerfile k8s-runner target
   ui_application_image:
     reference: instacart-module4d-k8s-ui:b1
     immutable_digest: unresolved-until-built-and-inspected
+    source: Dockerfile ui target
+image_provenance:
+  api_application_image: unresolved-until-built-from-a-clean-commit
+  ui_application_image: unresolved-until-built-from-a-clean-commit
 python_dependencies:
   api_manifest: deploy/module4/requirements/api.txt (exact declared package pins; transitive closure not confirmed)
   ui_manifest: deploy/module4/requirements/ui.txt (exact declared package pins; transitive closure not confirmed)
@@ -53,6 +61,7 @@ host_capacity:
   free_disk_gib: unresolved-until-measured
   measured_at: unresolved-until-measured
 toolchain:
+  minikube_version: unresolved-until-inspected
   kubectl_version: unresolved-until-inspected
   minikube_binary_sha256: unresolved-until-verified
   docker_engine_version: unresolved-until-inspected
@@ -63,6 +72,7 @@ toolchain:
     kube-controllers: unresolved-until-profile-created-and-inspected
 storage:
   default_storage_class: unresolved-until-inspected
+  storage_class_uid: unresolved-until-inspected
   provisioner: unresolved-until-inspected
   access_mode: ReadWriteOnce
   capacity: 2Gi
