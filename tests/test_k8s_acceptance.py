@@ -248,6 +248,59 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertTrue(executor.calls)
         self.assertFalse(any("delete" in call for call in executor.calls))
 
+    def test_unfiltered_teardown_inventory_accepts_only_owned_statefulset_revisions(self):
+        statefulset = SimpleNamespace(
+            kind="StatefulSet", name="module4d-mongo", uid="mongo-sts-uid",
+            labels=self.identity.labels, owner_references=(),
+        )
+        b2, b3 = self._inventory_receipts()
+        b2.objects = (*b2.objects, statefulset)
+
+        class RevisionExecutor(FakeProfileInventoryExecutor):
+            def __init__(self, owner_uid):
+                super().__init__(self_identity)
+                self.owner_uid = owner_uid
+
+            def run(self, argv, *, timeout, input_text=None):
+                self.calls.append(list(argv))
+                if "api-resources" in argv:
+                    return CommandResult(0, "configmaps\nstatefulsets.apps\ncontrollerrevisions.apps\n")
+                if "statefulsets.apps" in argv:
+                    return CommandResult(0, json.dumps({"items": [{
+                        "kind": "StatefulSet",
+                        "metadata": {
+                            "name": "module4d-mongo", "namespace": self.identity.namespace,
+                            "uid": "mongo-sts-uid", "labels": self.identity.labels,
+                        },
+                    }]}))
+                if "controllerrevisions.apps" in argv:
+                    return CommandResult(0, json.dumps({"items": [{
+                        "kind": "ControllerRevision",
+                        "metadata": {
+                            "name": "module4d-mongo-abc123", "namespace": self.identity.namespace,
+                            "uid": "mongo-revision-uid", "labels": self.identity.labels,
+                            "ownerReferences": [{
+                                "kind": "StatefulSet", "name": "module4d-mongo",
+                                "uid": self.owner_uid, "controller": True,
+                            }],
+                        },
+                    }]}))
+                return super().run(argv, timeout=timeout, input_text=input_text)
+
+        self_identity = self.identity
+        valid = RevisionExecutor("mongo-sts-uid")
+        _validate_complete_profile_inventory(
+            valid, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+        )
+        self.assertFalse(any("delete" in call for call in valid.calls))
+
+        foreign = RevisionExecutor("foreign-sts-uid")
+        with self.assertRaisesRegex(TeardownError, "owner chain"):
+            _validate_complete_profile_inventory(
+                foreign, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+            )
+        self.assertFalse(any("delete" in call for call in foreign.calls))
+
     def test_unfiltered_teardown_inventory_rejects_foreign_pipeline_or_unlabelled_resources(self):
         b2, b3 = self._inventory_receipts()
         for labels in (

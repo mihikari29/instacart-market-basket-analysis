@@ -171,6 +171,24 @@ def _validate_complete_profile_inventory(
                 raise TeardownError("run namespace contains an event for an unowned object")
             derived.add(key)
             continue
+        if kind == "ControllerRevision":
+            owners = metadata.get("ownerReferences", [])
+            if not isinstance(owners, list) or len(owners) != 1 or not isinstance(owners[0], Mapping):
+                raise TeardownError("ControllerRevision has no unique StatefulSet owner")
+            owner = owners[0]
+            owner_name = owner.get("name")
+            owner_identity = expected.get(("StatefulSet", owner_name)) if isinstance(owner_name, str) else None
+            labels = metadata.get("labels", {})
+            if (
+                owner.get("kind") != "StatefulSet"
+                or owner.get("uid") != (owner_identity[0] if owner_identity else None)
+                or owner.get("controller") is not True
+                or not isinstance(labels, Mapping)
+                or any(labels.get(label) != value for label, value in identity.labels.items())
+            ):
+                raise TeardownError("ControllerRevision owner chain differs from an authorized StatefulSet")
+            derived.add(key)
+            continue
         if kind == "Endpoints" and name in allowed_service_names:
             derived.add(key)
             continue
