@@ -118,7 +118,7 @@ class ReceiptInventoryExecutor:
     def __init__(
         self, identity, b2, b3, *, derived_mutation=None, live_mutation=None,
         extra_namespace=False, acceptance_job_uid=None, acceptance_pod_uid=None,
-        controller_revision_owner_uid=None, pv_mutation=None,
+        controller_revision_owner_uid=None, pv_mutation=None, endpoint_mutation=None,
     ):
         self.identity = identity
         self.calls = []
@@ -197,7 +197,60 @@ class ReceiptInventoryExecutor:
 
         service_name = "module4d-api"
         service_uid = self.service_uids[service_name]
+        service_item = next(
+            item for item in self.resources["services"] if item["metadata"]["name"] == service_name
+        )
+        service_item["spec"] = {"selector": {"app.kubernetes.io/name": service_name}}
+        api_pod = next(
+            item for item in self.resources["pods"]
+            if item["metadata"]["name"] == "module4d-api-hash-pod"
+        )
+        api_pod["status"] = {"podIP": "10.244.0.7", "podIPs": [{"ip": "10.244.0.7"}]}
+        target_ref = {
+            "apiVersion": "v1", "kind": "Pod", "namespace": identity.namespace,
+            "name": api_pod["metadata"]["name"], "uid": api_pod["metadata"]["uid"],
+        }
+        endpoint_address = {"ip": "10.244.0.7", "targetRef": target_ref}
+        endpoint_subsets = [{"addresses": [endpoint_address]}]
         endpoint_owners = []
+        if endpoint_mutation == "foreign_namespace":
+            target_ref["namespace"] = "foreign-namespace"
+        elif endpoint_mutation == "foreign_uid":
+            target_ref["uid"] = "foreign-pod-uid"
+        elif endpoint_mutation == "mismatched_name":
+            target_ref["name"] = "module4d-ui-hash-pod"
+        elif endpoint_mutation == "different_service_pod":
+            ui_pod = next(
+                item for item in self.resources["pods"]
+                if item["metadata"]["name"] == "module4d-ui-hash-pod"
+            )
+            target_ref.update({"name": ui_pod["metadata"]["name"], "uid": ui_pod["metadata"]["uid"]})
+        elif endpoint_mutation == "tampered_address":
+            endpoint_address["ip"] = "10.244.9.99"
+        elif endpoint_mutation == "missing_target":
+            endpoint_address.pop("targetRef")
+        elif endpoint_mutation == "original_counterexample":
+            target_ref.update({
+                "namespace": "foreign-namespace", "name": "foreign-pod", "uid": "foreign-pod-uid",
+            })
+            endpoint_address["ip"] = "10.244.9.99"
+        elif endpoint_mutation == "no_targets":
+            endpoint_subsets = []
+        elif endpoint_mutation == "unexpected_owner":
+            endpoint_owners = [{
+                "kind": "Deployment", "name": service_name, "uid": service_uid, "controller": True,
+            }]
+        elif endpoint_mutation == "multiple_subsets_valid":
+            endpoint_subsets = [
+                {"addresses": [endpoint_address]},
+                {"notReadyAddresses": [dict(endpoint_address, targetRef=dict(target_ref))]},
+            ]
+        elif endpoint_mutation == "foreign_not_ready_target":
+            invalid_target = dict(target_ref, uid="foreign-pod-uid")
+            endpoint_subsets = [
+                {"addresses": [endpoint_address]},
+                {"notReadyAddresses": [{"ip": "10.244.0.7", "targetRef": invalid_target}]},
+            ]
         slice_owners = [{"kind": "Service", "name": service_name, "uid": service_uid, "controller": True}]
         if derived_mutation == "foreign_endpoints_uid":
             endpoint_owners = [{"kind": "Service", "name": service_name, "uid": "foreign-service-uid", "controller": True}]
@@ -210,7 +263,7 @@ class ReceiptInventoryExecutor:
         self.resources["endpoints"].append({"kind": "Endpoints", "metadata": {
             "name": service_name, "namespace": identity.namespace, "uid": "api-endpoints-uid",
             "labels": {}, "ownerReferences": endpoint_owners,
-        }})
+        }, "subsets": endpoint_subsets})
         slice_name = "module4d-api-abcde"
         if derived_mutation == "unverifiable_slice_label":
             slice_labels = {"kubernetes.io/service-name": "missing-service"}
@@ -553,6 +606,18 @@ class AcceptanceContractTests(unittest.TestCase):
         b2_lock = _complete_lock()
         b3_lock = _complete_b3_lock()
         b2 = _valid_runtime_receipt(self.identity)
+        b2 = replace(
+            b2,
+            objects=tuple(
+                replace(
+                    item,
+                    labels={**item.labels, "app.kubernetes.io/name": "module4d-api"},
+                )
+                if (item.kind, item.name) == ("Pod", "module4d-api-hash-pod")
+                else item
+                for item in b2.objects
+            ),
+        )
         b3 = _valid_pipeline_receipt(self.identity, b3_lock)
         b3 = replace(b3, namespace_uid=b2.namespace_uid)
         validate_collected_receipt(b2, b2_lock)
@@ -630,6 +695,48 @@ class AcceptanceContractTests(unittest.TestCase):
                 self.identity, b2, b3, derived_mutation=mutation,
             )
             with self.subTest(mutation=mutation), self.assertRaisesRegex(TeardownError, expected):
+                _validate_complete_profile_inventory(
+                    executor, self.identity, b2, b3,
+                    acceptance_job_uid=None, acceptance_pod_uid=None,
+                )
+            self.assertFalse(any("delete" in call for call in executor.calls))
+
+    def test_ownerless_endpoints_require_receipted_service_pod_targets_and_addresses(self):
+        _b2_lock, _b3_lock, b2, b3 = self._genuine_b2_b3_receipts()
+
+        valid = ReceiptInventoryExecutor(self.identity, b2, b3)
+        endpoints = valid.resources["endpoints"][0]
+        self.assertEqual(endpoints["metadata"]["ownerReferences"], [])
+        _validate_complete_profile_inventory(
+            valid, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+        )
+
+        multiple_groups = ReceiptInventoryExecutor(
+            self.identity, b2, b3, endpoint_mutation="multiple_subsets_valid",
+        )
+        _validate_complete_profile_inventory(
+            multiple_groups, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+        )
+        self.assertEqual(len(multiple_groups.resources["endpoints"][0]["subsets"]), 2)
+        self.assertIn("notReadyAddresses", multiple_groups.resources["endpoints"][0]["subsets"][1])
+
+        cases = (
+            ("original_counterexample", "missing or foreign Pod target identity"),
+            ("foreign_namespace", "missing or foreign Pod target identity"),
+            ("foreign_uid", "approved identity"),
+            ("mismatched_name", "approved identity"),
+            ("different_service_pod", "Service selector"),
+            ("tampered_address", "current IP"),
+            ("unexpected_owner", "owner chain"),
+            ("missing_target", "missing or foreign Pod target identity"),
+            ("no_targets", "no verifiable approved Pod targets"),
+            ("foreign_not_ready_target", "approved identity"),
+        )
+        for mutation, message in cases:
+            executor = ReceiptInventoryExecutor(
+                self.identity, b2, b3, endpoint_mutation=mutation,
+            )
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(TeardownError, message):
                 _validate_complete_profile_inventory(
                     executor, self.identity, b2, b3,
                     acceptance_job_uid=None, acceptance_pod_uid=None,
@@ -728,7 +835,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
             }
             executor = ReceiptInventoryExecutor(
-                self.identity, b2, b3, derived_mutation="foreign_slice_uid",
+                self.identity, b2, b3, endpoint_mutation="original_counterexample",
                 acceptance_job_uid=job_uid, acceptance_pod_uid=pod_uid,
             )
             with (

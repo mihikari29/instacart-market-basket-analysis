@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -59,6 +60,112 @@ def _json_inventory(executor: CommandExecutor, identity: RunIdentity, *args: str
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise TeardownError(f"{description} is malformed")
     return payload
+
+
+def _validate_endpoints_targets(
+    endpoints: Mapping[str, Any],
+    service: Mapping[str, Any],
+    identity: RunIdentity,
+    expected: Mapping[tuple[str, str], tuple[str, dict[str, str], tuple]],
+    live: Mapping[tuple[str, str], Mapping[str, Any]],
+) -> None:
+    """Bind every generated Endpoints address to a receipted Pod and Service selector."""
+    metadata = endpoints.get("metadata")
+    service_metadata = service.get("metadata")
+    service_spec = service.get("spec")
+    selector = service_spec.get("selector") if isinstance(service_spec, Mapping) else None
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("namespace") != identity.namespace
+        or not isinstance(service_metadata, Mapping)
+        or service_metadata.get("namespace") != identity.namespace
+        or not isinstance(selector, Mapping)
+        or not selector
+        or any(not isinstance(key, str) or not key or not isinstance(value, str) for key, value in selector.items())
+    ):
+        raise TeardownError("Endpoints cannot be linked to a namespaced Service selector")
+
+    subsets = endpoints.get("subsets")
+    if not isinstance(subsets, list) or not subsets:
+        raise TeardownError("Endpoints has no verifiable approved Pod targets")
+
+    target_count = 0
+    for subset in subsets:
+        if not isinstance(subset, Mapping):
+            raise TeardownError("Endpoints contains a malformed subset")
+        for address_group in ("addresses", "notReadyAddresses"):
+            addresses = subset.get(address_group, [])
+            if not isinstance(addresses, list):
+                raise TeardownError("Endpoints contains a malformed address group")
+            for address in addresses:
+                if not isinstance(address, Mapping):
+                    raise TeardownError("Endpoints contains a malformed address")
+                target = address.get("targetRef")
+                if (
+                    not isinstance(target, Mapping)
+                    or target.get("kind") != "Pod"
+                    or target.get("apiVersion") not in (None, "v1")
+                    or target.get("namespace") != identity.namespace
+                    or not isinstance(target.get("name"), str)
+                    or not target.get("name")
+                    or not isinstance(target.get("uid"), str)
+                    or not target.get("uid")
+                ):
+                    raise TeardownError("Endpoints address has a missing or foreign Pod target identity")
+
+                pod_key = ("Pod", target["name"])
+                approved_pod = expected.get(pod_key)
+                pod_item = live.get(pod_key)
+                if approved_pod is None or pod_item is None:
+                    raise TeardownError("Endpoints target is not in the approved live Pod inventory")
+                pod_metadata = pod_item.get("metadata")
+                if not isinstance(pod_metadata, Mapping):
+                    raise TeardownError("Endpoints target Pod has malformed metadata")
+                pod_labels = pod_metadata.get("labels", {})
+                pod_owners = pod_metadata.get("ownerReferences", [])
+                if not isinstance(pod_owners, list) or not pod_owners or any(
+                    not isinstance(owner, Mapping) for owner in pod_owners
+                ):
+                    raise TeardownError("Endpoints target Pod has no verifiable owner chain")
+                owner_identities = tuple(
+                    (owner.get("kind"), owner.get("name"), owner.get("uid"), owner.get("controller") is True)
+                    for owner in pod_owners
+                )
+                if (
+                    target["uid"] != approved_pod[0]
+                    or pod_metadata.get("uid") != approved_pod[0]
+                    or pod_metadata.get("namespace") != identity.namespace
+                    or pod_labels != approved_pod[1]
+                    or owner_identities != approved_pod[2]
+                    or not isinstance(pod_labels, Mapping)
+                    or any(pod_labels.get(key) != value for key, value in selector.items())
+                ):
+                    raise TeardownError("Endpoints target approved identity differs from its receipt or Service selector")
+
+                status = pod_item.get("status")
+                raw_pod_ips: list[Any] = []
+                if isinstance(status, Mapping):
+                    if "podIP" in status:
+                        raw_pod_ips.append(status["podIP"])
+                    if "podIPs" in status:
+                        pod_ips = status["podIPs"]
+                        if not isinstance(pod_ips, list):
+                            raise TeardownError("Endpoints target Pod has malformed IP identities")
+                        for pod_ip in pod_ips:
+                            if not isinstance(pod_ip, Mapping):
+                                raise TeardownError("Endpoints target Pod has malformed IP identities")
+                            raw_pod_ips.append(pod_ip.get("ip"))
+                try:
+                    approved_ips = {ipaddress.ip_address(value) for value in raw_pod_ips}
+                    endpoint_ip = ipaddress.ip_address(address.get("ip"))
+                except (TypeError, ValueError) as exc:
+                    raise TeardownError("Endpoints address or target Pod IP is invalid") from exc
+                if not approved_ips or endpoint_ip not in approved_ips:
+                    raise TeardownError("Endpoints address is not a current IP of its approved target Pod")
+                target_count += 1
+
+    if target_count == 0:
+        raise TeardownError("Endpoints has no verifiable approved Pod targets")
 
 
 def _validate_complete_profile_inventory(
@@ -217,9 +324,9 @@ def _validate_complete_profile_inventory(
                 or object_labels.get("kubernetes.io/service-name") != service_name
             ):
                 raise TeardownError(f"EndpointSlice/{name} has no verifiable Service label")
-            # Core Endpoints may legitimately have no ownerReferences; its
-            # same-name Service in the exact namespace is the API identity
-            # association. EndpointSlices are always controller-owned.
+            # Core Endpoints may legitimately have no ownerReferences, so bind
+            # each address to a receipted Pod selected by this live Service.
+            # EndpointSlices retain their stricter controller-owner contract.
             if owners:
                 if (
                     len(owners) != 1
@@ -231,6 +338,8 @@ def _validate_complete_profile_inventory(
                     raise TeardownError(f"{kind}/{name} owner chain differs from its approved Service")
             elif kind == "EndpointSlice":
                 raise TeardownError(f"EndpointSlice/{name} has no controller Service owner")
+            if kind == "Endpoints":
+                _validate_endpoints_targets(item, service_item, identity, expected, live)
             derived.add(key)
 
     if acceptance_pod_uid is not None:
