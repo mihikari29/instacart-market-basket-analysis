@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -21,8 +22,10 @@ from scripts.k8s.pipeline import (
     _require_pipeline_namespace_clear,
     execute_pipeline,
     finalize_pipeline_lock,
+    load_pipeline_images,
     plan_pipeline,
     render_pipeline_assets,
+    validate_full_data_storage_budget,
     validate_pipeline_manifest_sources,
     validate_pipeline_policy_inventory,
 )
@@ -238,6 +241,25 @@ class PipelinePlannerTests(unittest.TestCase):
         self.assertEqual(datanode, {"transfer": 9866, "web": 9864})
         self.assertEqual(kafka, {"broker": 29092, "controller": 9093})
 
+    def test_kafka_environment_is_validated_after_yaml_parsing(self):
+        documents = list(yaml.safe_load_all((ROOT / "deploy/k8s/pipeline/platform.yaml").read_text()))
+        kafka = next(item for item in documents if item and item.get("kind") == "StatefulSet" and item["metadata"]["name"] == "kafka")
+        environment = kafka["spec"]["template"]["spec"]["containers"][0]["env"]
+        values = {item["name"]: item["value"] for item in environment}
+        self.assertEqual(values["KAFKA_PROCESS_ROLES"], "controller,broker")
+        self.assertEqual(values["KAFKA_LISTENERS"], "INTERNAL://:29092,CONTROLLER://:9093")
+        self.assertTrue(all(isinstance(item["value"], str) for item in environment))
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in ("network-policies.yaml", "job.yaml"):
+                (root / name).write_text((ROOT / "deploy/k8s/pipeline" / name).read_text())
+            kafka_env = next(item for item in environment if item["name"] == "KAFKA_LISTENERS")
+            kafka_env["value"] = ["INTERNAL://:29092", "CONTROLLER://:9093"]
+            (root / "platform.yaml").write_text(yaml.safe_dump_all(documents, sort_keys=False))
+            with self.assertRaisesRegex(PipelineError, "Kafka environment"):
+                validate_pipeline_manifest_sources(root)
+
     def test_deterministic_fixture_matches_exact_six_file_input_contract(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "input"
@@ -282,6 +304,79 @@ class PipelinePlannerTests(unittest.TestCase):
             self.assertEqual(saved["scope"], "synthetic_fixture")
             self.assertEqual(inspect_input_directory(root / "runtime/input")["manifest_sha256"], saved["manifest_sha256"])
 
+    def test_module1_task_uses_input_root_without_creating_raw_raw(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime_root = Path(temporary) / "runtime"
+            input_root = runtime_root / "input"
+            write_fixture(input_root)
+            source = inspect_input_directory(input_root)
+            (runtime_root / "evidence").mkdir(parents=True)
+            (runtime_root / "evidence" / "source-receipt.json").write_text(json.dumps({
+                "run_id": self.identity.run_id,
+                "scope": "synthetic_fixture",
+                "manifest_sha256": source["manifest_sha256"],
+                "fixture": {"scope": "synthetic_fixture", "users": 12},
+            }), encoding="utf-8")
+            base_env = {
+                "PIPELINE_RUN_ID": self.identity.run_id,
+                "PIPELINE_MODE": "fixture",
+                "PIPELINE_HDFS_ROOT": f"/instacart/{self.identity.run_id}",
+                "PIPELINE_HDFS_URI": f"hdfs://namenode:8020/instacart/{self.identity.run_id}",
+                "PIPELINE_TOPIC": f"instacart-purchase-events-{self.identity.run_id}",
+                "PIPELINE_KAFKA_BOOTSTRAP": "kafka:29092",
+                "POD_NAME": "module1-offline",
+            }
+            calls = []
+
+            def fake_subprocess(command, *, env, log_path, timeout):
+                calls.append((list(command), dict(env)))
+                if "src.module1.generate" in command:
+                    feed = Path(command[command.index("--out-dir") + 1])
+                    feed.mkdir(parents=True)
+                    (feed / "events.parquet").write_bytes(b"offline synthetic parquet placeholder")
+
+            pyarrow = types.ModuleType("pyarrow")
+            parquet = types.ModuleType("pyarrow.parquet")
+            parquet.ParquetFile = lambda _path: types.SimpleNamespace(metadata=types.SimpleNamespace(num_rows=24))
+            pyarrow.parquet = parquet
+            with (
+                patch.dict(os.environ, base_env, clear=True),
+                patch.object(pipeline_task, "RUNTIME_ROOT", runtime_root),
+                patch.object(pipeline_task, "INPUT_ROOT", input_root),
+                patch.object(pipeline_task, "_subprocess", side_effect=fake_subprocess),
+                patch.dict("sys.modules", {"pyarrow": pyarrow, "pyarrow.parquet": parquet}),
+            ):
+                receipt = pipeline_task.module1()
+            clean = calls[0][0]
+            self.assertEqual(clean[clean.index("--data-dir") + 1], str(runtime_root / "work" / "module1-offline"))
+            self.assertEqual(clean[clean.index("--raw-dir") + 1], str(input_root))
+            stage = calls[2][0]
+            self.assertEqual(stage[stage.index("--raw-dir") + 1], str(input_root))
+            self.assertFalse((runtime_root / "work" / "module1-offline" / "raw").exists())
+            self.assertEqual(receipt["status"], "completed")
+
+    def test_module4_task_passes_run_scoped_database_to_publisher(self):
+        environment = {
+            "PIPELINE_RUN_ID": self.identity.run_id,
+            "PIPELINE_MODE": "fixture",
+            "PIPELINE_HDFS_ROOT": f"/instacart/{self.identity.run_id}",
+            "PIPELINE_HDFS_URI": f"hdfs://namenode:8020/instacart/{self.identity.run_id}",
+            "PIPELINE_TOPIC": f"instacart-purchase-events-{self.identity.run_id}",
+            "PIPELINE_KAFKA_BOOTSTRAP": "kafka:29092",
+            "MODULE4D_MONGO_DATABASE": f"module4d_demo_{self.identity.run_id}",
+            "MONGODB_URI": "mongodb://publisher:secret@module4d-mongo:27017/admin",
+        }
+        calls = []
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(pipeline_task, "RUNTIME_ROOT", Path("/tmp/offline-pipeline-test")),
+            patch.object(pipeline_task, "_subprocess", side_effect=lambda command, **kwargs: calls.append((command, kwargs))),
+            patch.object(pipeline_task, "_artifact_inventory", return_value=[]),
+        ):
+            pipeline_task.module4()
+        self.assertEqual(calls[0][1]["env"]["MODULE4_MONGO_DATABASE"], f"module4d_demo_{self.identity.run_id}")
+        self.assertEqual(calls[0][1]["env"]["MODULE4D_MONGO_DATABASE"], f"module4d_demo_{self.identity.run_id}")
+
     def test_task_cli_persists_success_receipt_and_redacts_unexpected_exception(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -312,13 +407,107 @@ class PipelinePlannerTests(unittest.TestCase):
             plan = json.loads((output / "plan.json").read_text())
             self.assertEqual(len(plan["steps"]), 6)
             self.assertTrue(plan["as_of_event_time"].endswith("Z"))
+            self.assertIs(type(plan["as_of_event_time"]), str)
+            self.assertEqual((plan["fixture_max_users"], plan["fixture_max_events"]), (50, 5000))
             jobs = {step: yaml.safe_load((output / f"job-{step}.yaml").read_text()) for step in ("input", "module1", "module2", "module4", "replay", "hybrid")}
             for step, job in jobs.items():
                 container = job["spec"]["template"]["spec"]["containers"][0]
                 self.assertIn("@sha256:", container["image"])
+                self.assertIs(type(job["spec"]["backoffLimit"]), int)
+                self.assertIs(type(job["spec"]["activeDeadlineSeconds"]), int)
                 self.assertEqual("MONGODB_URI" in {env["name"] for env in container.get("env", [])}, step not in {"input", "module1"})
                 checkpoint_mount = any(mount["name"] == "pipeline-checkpoints" for mount in container["volumeMounts"])
                 self.assertEqual(checkpoint_mount, step == "replay")
+
+    def test_full_data_pvc_budget_bounds_peak_working_set(self):
+        self.assertEqual(validate_full_data_storage_budget(4 * 1024**3), 14 * 1024**3)
+        with self.assertRaisesRegex(PipelineError, "three working-set copies"):
+            validate_full_data_storage_budget(4 * 1024**3 + 1)
+
+    def test_pipeline_image_loader_verifies_all_four_locked_identities(self):
+        lock = _complete_b3_lock()
+        expected_images = []
+        for role in ("pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"):
+            image = lock["images"][role]
+            provenance = lock.get("pipeline_image_provenance", {}) if role == "pipeline_application_image" else lock["pipeline_component_image_provenance"][role]
+            expected_images.append({
+                "repoTags": [image["reference"].split("@", 1)[0]],
+                "repoDigests": [f"{image['reference'].split('@', 1)[0]}@{image['immutable_digest']}"],
+                "id": provenance["config_digest"],
+            })
+
+        class LoaderExecutor:
+            def __init__(self):
+                self.calls = []
+
+            def run(self, argv, *, timeout, input_text=None):
+                self.calls.append((list(argv), timeout))
+                stdout = json.dumps({"images": expected_images}) if argv[-1:] == ["json"] else ""
+                return type("Result", (), {"returncode": 0, "stdout": stdout})()
+
+        executor = LoaderExecutor()
+        loaded = load_pipeline_images(executor, self.identity, lock, execute=True)
+        self.assertEqual(set(loaded), {"pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"})
+        self.assertEqual(len(executor.calls), 5)
+        self.assertTrue(all(call[0][:4] == ["minikube", "image", "load", "-p"] for call in executor.calls[:4]))
+        self.assertEqual(executor.calls[4][0][:3], ["minikube", "-p", self.identity.profile])
+
+    def test_pipeline_executes_verified_image_load_before_workload_apply_without_api_restart(self):
+        lock = _complete_b3_lock()
+        images = []
+        for role in ("pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"):
+            item = lock["images"][role]
+            provenance = lock.get("pipeline_image_provenance", {}) if role == "pipeline_application_image" else lock["pipeline_component_image_provenance"][role]
+            images.append({
+                "repoTags": [item["reference"].split("@", 1)[0]],
+                "repoDigests": [f"{item['reference'].split('@', 1)[0]}@{item['immutable_digest']}"],
+                "id": provenance["config_digest"],
+            })
+
+        class FullPathExecutor:
+            def __init__(self):
+                self.calls = []
+
+            def run(self, argv, *, timeout, input_text=None):
+                self.calls.append(list(argv))
+                stdout = json.dumps({"images": images}) if argv[-1:] == ["json"] else ""
+                return type("Result", (), {"returncode": 0, "stdout": stdout})()
+
+        executor = FullPathExecutor()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "private-render"
+            root.mkdir(mode=0o700)
+            (root / ".it4931-k8s-render-root").touch(mode=0o600)
+            (root / "run").mkdir()
+            (root / "run" / "namespace.json").write_text(
+                json.dumps({"metadata": {"name": self.identity.namespace}}), encoding="utf-8"
+            )
+            pipeline_dir = render_pipeline_assets(
+                self.identity, root, lock, mode="fixture", host_capacity=lock["host_capacity"]
+            )
+            b2_path = root / "b2-ownership-receipt.json"
+            b2_path.write_text("{}", encoding="utf-8")
+            valid_receipt = _valid_pipeline_receipt(self.identity, lock)
+            with (
+                patch("scripts.k8s.receipts.receipt_from_document", return_value=object()),
+                patch("scripts.k8s.receipts.validate_collected_receipt"),
+                patch("scripts.k8s.receipts.collect_runtime_ownership_receipt", return_value=object()),
+                patch("scripts.k8s.receipts.assert_receipt_matches_lock_and_live"),
+                patch("scripts.k8s.network_policy.collect_network_policy_inventory", return_value={}),
+                patch("scripts.k8s.pipeline._require_pipeline_namespace_clear"),
+                patch("scripts.k8s.pipeline_receipts.collect_pipeline_receipt", return_value=valid_receipt),
+            ):
+                result = execute_pipeline(
+                    executor, self.identity, pipeline_dir, lock=lock,
+                    serving_receipt_path=b2_path, host_capacity=lock["host_capacity"], execute=True,
+                )
+        first_apply = next(i for i, call in enumerate(executor.calls) if call[:2] == ["kubectl", "--context"] and "apply" in call)
+        first_image_load = next(i for i, call in enumerate(executor.calls) if call[:3] == ["minikube", "image", "load"])
+        self.assertLess(first_image_load, first_apply)
+        self.assertTrue(result["status"] == "completed")
+        self.assertEqual(result["completed_steps"], ["platform", "input", "module1", "module2", "module4", "replay", "hybrid"])
+        self.assertFalse(any("rollout" in call and "restart" in call for call in executor.calls))
+        self.assertFalse(any("api-config.yaml" in call for call in executor.calls))
 
     def test_renderer_refuses_incomplete_lock_without_claiming_output(self):
         template = yaml.safe_load((ROOT / "deploy/k8s/versions.lock.yaml").read_text(encoding="utf-8"))

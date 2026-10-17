@@ -156,6 +156,13 @@ class RuntimePreflightTests(unittest.TestCase):
             validate_host_capacity(
                 {"cpu_cores": 6, "memory_gib": 12, "free_disk_gib": 50, "wsl_guest": True}
             )
+        for invalid_backing in (float("nan"), float("inf"), True):
+            with self.subTest(windows_backing_disk_gib=invalid_backing):
+                with self.assertRaisesRegex(RuntimePreflightError, "backing-disk"):
+                    validate_host_capacity({
+                        "cpu_cores": 6, "memory_gib": 12, "free_disk_gib": 50,
+                        "wsl_guest": True, "windows_backing_disk_gib": invalid_backing,
+                    })
         identity = RunIdentity("0123456789ab")
         command = cluster_creation_plan(
             identity, kubernetes_version="v1.37.1", cpus=4, memory_mib=6144, disk_gib=40

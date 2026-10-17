@@ -29,7 +29,7 @@ from scripts.k8s.ownership import (
     validate_target,
     validate_version_lock,
 )
-from scripts.k8s.receipts import receipt_from_document, receipt_json
+from scripts.k8s.receipts import ReceiptCollectionError, _locked_image_digest, receipt_from_document, receipt_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -324,6 +324,13 @@ class OwnershipTests(unittest.TestCase):
         )
         validate_version_lock(candidate)
 
+    def test_mongo_lock_digest_accepts_digest_pinned_reference_without_duplicate_field(self) -> None:
+        digest = _DIGEST_A
+        self.assertEqual(_locked_image_digest({"reference": f"mongo:7.0.16@{digest}"}), digest)
+        self.assertEqual(_locked_image_digest({"reference": "mongo:7.0.16", "immutable_digest": digest}), digest)
+        with self.assertRaisesRegex(ReceiptCollectionError, "disagree"):
+            _locked_image_digest({"reference": f"mongo:7.0.16@{digest}", "immutable_digest": _DIGEST_B})
+
     def test_complete_live_receipt_binds_children_storage_and_running_images(self) -> None:
         identity = RunIdentity("0123456789ab")
         labels = identity.labels
@@ -341,10 +348,9 @@ class OwnershipTests(unittest.TestCase):
         uid_by_key = {key: f"direct-uid-{index}" for index, key in enumerate(sorted(direct), start=1)}
         for key in sorted(direct):
             uid = uid_by_key[key]
-            owners = ()
-            if key == ("PersistentVolumeClaim", "data-module4d-mongo-0"):
-                owners = (OwnerReferenceIdentity("StatefulSet", "module4d-mongo", uid_by_key[("StatefulSet", "module4d-mongo")], True),)
-            objects.append(RuntimeObjectIdentity(key[0], key[1], identity.namespace, uid, labels, owners))
+            # Mongo volumeClaimTemplates use Retain semantics and do not put
+            # a deletion owner reference on the generated PVC.
+            objects.append(RuntimeObjectIdentity(key[0], key[1], identity.namespace, uid, labels, ()))
 
         # Add deterministic controller owner chains for the one-replica serving setup.
         children = (

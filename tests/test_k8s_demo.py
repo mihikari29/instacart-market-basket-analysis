@@ -1,24 +1,29 @@
 """Offline state-machine and safety contracts for the one-session demo CLI."""
 
 import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from contextlib import redirect_stdout
 
 from scripts.k8s.demo import (
     DemoError,
     REPOSITORY_ROOT,
     _plan_document,
     _require_absent_namespace,
+    _acceptance_passed,
     _validate_mode_inputs,
+    main,
     run_demo,
     verify_run,
 )
 from scripts.k8s.ownership import RunIdentity
 from scripts.k8s.runtime import CommandResult
 from tests.test_k8s_pipeline import _complete_b3_lock
+from scripts.k8s.fixture_data import write_fixture
 
 
 class FakeCommandExecutor:
@@ -48,6 +53,45 @@ class DemoRunnerOfflineTests(unittest.TestCase):
         self.assertEqual(plan["pipeline_steps"][0]["backoff_limit"], 0)
         self.assertIn("not native distributed", plan["execution_model"])
         self.assertEqual(plan["resume_policy"].split(";")[0], "disabled")
+
+    def test_full_data_plan_accepts_measured_wsl_backing_disk_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            input_directory = Path(temporary) / "input"
+            write_fixture(input_directory)
+            capacity = {
+                "cpu_cores": 8,
+                "memory_gib": 16,
+                "free_disk_gib": 50,
+                "wsl_guest": True,
+            }
+            output = io.StringIO()
+            with patch("scripts.k8s.demo.measure_host_capacity", side_effect=lambda: dict(capacity)), redirect_stdout(output):
+                status = main([
+                    "plan", "--mode", "full", "--run-id", "0123456789ab",
+                    "--input-dir", str(input_directory), "--windows-backing-disk-gib", "60",
+                ])
+            self.assertEqual(status, 0)
+            plan = json.loads(output.getvalue())
+            self.assertEqual(plan["host_capacity"]["windows_backing_disk_gib"], 60.0)
+            self.assertEqual(plan["host_capacity"]["windows_backing_disk_source"], "operator-supplied measured value")
+
+            with patch("scripts.k8s.demo.measure_host_capacity", side_effect=lambda: dict(capacity)), redirect_stdout(io.StringIO()):
+                status = main([
+                    "plan", "--mode", "full", "--run-id", "abcdef012345",
+                    "--input-dir", str(input_directory),
+                ])
+            self.assertEqual(status, 2)
+
+    def test_full_data_acceptance_scope_matches_runtime_receipt(self):
+        self.assertTrue(_acceptance_passed("full", {
+            "status": "full_data_runtime_pass", "scope": "full_data_runtime",
+        }))
+        self.assertTrue(_acceptance_passed("fixture", {
+            "status": "fixture_runtime_pass", "scope": "fixture_runtime",
+        }))
+        self.assertFalse(_acceptance_passed("full", {
+            "status": "full_data_runtime_pass", "scope": "full_runtime",
+        }))
 
     def test_namespace_preflight_uses_only_explicit_profile_and_rejects_collisions(self):
         identity = RunIdentity("0123456789ab")
@@ -98,14 +142,14 @@ class DemoRunnerOfflineTests(unittest.TestCase):
         self.assertEqual(executor.calls, [])
         self.assertFalse(output.exists())
 
-    def test_full_mode_checks_capacity_and_a_separate_hdfs_source_size_guard(self):
+    def test_full_mode_checks_capacity_and_run_pvc_working_set_budget(self):
         capacity = {"cpu_cores": 6, "memory_gib": 12.0, "free_disk_gib": 50.0, "wsl_guest": False}
         with tempfile.TemporaryDirectory() as temporary:
             with patch(
                 "scripts.k8s.demo.inspect_input_directory",
-                return_value={"total_bytes": 12 * 1024**3 + 1, "manifest_sha256": "a" * 64},
+                return_value={"total_bytes": 4 * 1024**3 + 1, "manifest_sha256": "a" * 64},
             ):
-                with self.assertRaisesRegex(DemoError, "12 GiB source-storage guard"):
+                with self.assertRaisesRegex(DemoError, "three working-set copies and 2 GiB reserve"):
                     _validate_mode_inputs("full", input_directory=temporary, capacity=capacity)
 
         with self.assertRaisesRegex(DemoError, "memory_gib"):

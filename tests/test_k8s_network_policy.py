@@ -55,6 +55,9 @@ class NetworkPolicyTests(unittest.TestCase):
         self.assertEqual(result["status"], "objects_present")
         self.assertIn("not_proven", result["enforcement"])
         self.assertEqual(executor.argv[:3], ["kubectl", "--context", identity.profile])
+        namespace_index = executor.argv.index("--namespace")
+        self.assertEqual(executor.argv[namespace_index + 1], identity.namespace)
+        self.assertEqual(executor.argv[namespace_index + 2:namespace_index + 5], ["get", "networkpolicies", "-o"])
 
 
 if __name__ == "__main__":

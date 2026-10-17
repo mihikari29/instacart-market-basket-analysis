@@ -12,6 +12,8 @@ import yaml
 from scripts.k8s import api_readiness, render as k8s_render
 from scripts.k8s.api_readiness import IndexRequirement
 from scripts.k8s.render import MANAGED_MARKER, _validate_output_path, render_overlay
+from scripts.k8s.pipeline import TREND_SOURCE_NAMESPACE
+from tests.test_k8s_ownership import _complete_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -620,6 +622,18 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertIn("**/secrets/**", ignore_lines)
         self.assertNotIn("COPY data/", dockerfile)
 
+    def test_pipeline_task_build_context_contains_all_runtime_imports(self) -> None:
+        allowlisted = {line[1:] for line in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines() if line.startswith("!")}
+        required = {
+            "scripts/k8s/__init__.py", "scripts/k8s/pipeline.py",
+            "scripts/k8s/pipeline_task.py", "scripts/k8s/acceptance_task.py",
+            "scripts/k8s/data_receipts.py", "scripts/k8s/fixture_data.py",
+            "scripts/k8s/runtime.py", "scripts/k8s/ownership.py",
+        }
+        self.assertTrue(required.issubset(allowlisted))
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("COPY scripts/ /workspace/scripts/", dockerfile)
+
     def test_ui_readiness_timeout_exceeds_internal_request_timeout(self) -> None:
         documents = [item for item in yaml.safe_load_all((BASE / "serving.yaml").read_text(encoding="utf-8")) if item]
         deployment = next(item for item in documents if item.get("kind") == "Deployment" and item["metadata"]["name"] == "module4d-ui")
@@ -668,6 +682,25 @@ class StaticFoundationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "complete version lock"):
                 render_overlay("0123456789ab", output, version_lock=lock)
             self.assertFalse(output.exists())
+
+    def test_complete_lock_render_accepts_workloads_without_init_containers(self) -> None:
+        lock = _complete_lock()
+        for role, image in lock["images"].items():
+            image.setdefault("source", f"offline render test fixture for {role}")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "rendered"
+            run = render_overlay(
+                "0123456789ab",
+                output,
+                version_lock=lock,
+                trend_source_namespace=TREND_SOURCE_NAMESPACE,
+            )
+            self.assertTrue(run.is_dir())
+            api = json.loads((run / "api-config-patch.json").read_text(encoding="utf-8"))
+            ui = json.loads((run / "ui-config-patch.json").read_text(encoding="utf-8"))
+            expected_sources = f"{TREND_SOURCE_NAMESPACE},{TREND_SOURCE_NAMESPACE}-b4-0123456789ab"
+            self.assertEqual(api["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
+            self.assertEqual(ui["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
 
 
 if __name__ == "__main__":
