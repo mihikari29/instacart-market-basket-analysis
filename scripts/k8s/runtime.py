@@ -217,7 +217,12 @@ def validate_host_capacity(
             raise RuntimePreflightError(f"host {field} is below the documented {phase.upper()} reserve")
     if require_backing_disk and capacity.get("wsl_guest") is True:
         backing = capacity.get("windows_backing_disk_gib")
-        if not isinstance(backing, (int, float)) or isinstance(backing, bool) or backing < minimum_disk:
+        if (
+            not isinstance(backing, (int, float))
+            or isinstance(backing, bool)
+            or not math.isfinite(backing)
+            or backing < minimum_disk
+        ):
             raise RuntimePreflightError("Windows backing-disk capacity is not verified for this WSL guest")
 
 

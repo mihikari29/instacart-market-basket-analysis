@@ -154,9 +154,10 @@ for `/data/db`; config and temporary files use bounded ephemeral volumes. The
 manifest relies on the profile's default dynamic StorageClass. B2's runtime
 checks require a StorageClass that provisions a profile-local volume and verify
 that the actual PVC/PV binding and capacity match the run receipt. B3 adds isolated
-1 GiB NameNode, 16 GiB DataNode, 2 GiB Kafka, 8 GiB pipeline, and 2 GiB
-checkpoint claims. Together with Mongo, the run requests 31 GiB of profile-local
-storage. No Compose volume or checkpoint path is reused.
+1 GiB NameNode, 16 GiB DataNode, 2 GiB Kafka, 16 GiB pipeline, and 2 GiB
+checkpoint claims. Together with Mongo, the run requests 39 GiB of profile-local
+storage, within the 40 GiB namespace quota. No Compose volume or checkpoint path
+is reused.
 
 The serving Pods request 400 millicores and 896 MiB in total; their combined
 limits are 1.75 CPU and 1.75 GiB. Namespace quota caps the phase at 2 CPU,
@@ -166,12 +167,15 @@ ephemeral-storage. These are initial planning values, not measurements.
 The runner fails closed below 6 physical CPU cores, 12 GiB available RAM, and
 40 GiB free disk for B3 and the image builds. The B2 serving reserve alone is 4
 CPU, 6 GiB RAM, and 20 GiB disk. Full-data mode also requires exactly six
-reviewed CSV inputs, applies the 40 GiB host reserve, and caps raw source files
-at 12 GiB to leave headroom in the 16 GiB DataNode claim. On WSL, the operator
+reviewed CSV inputs and applies the 40 GiB host reserve. On WSL, the operator
 must provide a measured Windows backing-disk value with
-`--windows-backing-disk-gib`; guest free space is not accepted as evidence of
-Windows capacity. The measured values below show this machine does not meet the
-B3 reserve.
+`--windows-backing-disk-gib` to `preflight`, `plan`, or `run`; guest free space is
+not accepted as evidence of Windows capacity. Full-data mode caps the six raw
+files at 4 GiB, streams them directly from the run PVC input directory without a
+second raw copy, reserves 2 GiB for filesystem and metadata overhead, and
+budgets up to three times the raw byte count for raw, cleaned, and generated feed
+working sets (14 GiB maximum against the 16 GiB pipeline claim). The measured
+values below show this machine does not meet the B3 reserve.
 
 ## Images and version lock
 
