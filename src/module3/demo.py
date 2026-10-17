@@ -111,10 +111,12 @@ def run_late_data_demo(
     run_id: str,
     duration_seconds: int,
     checkpoint_id: str | None = None,
+    reset_topic: bool = True,
+    checkpoint_root: Path | None = None,
 ) -> dict:
     """Exercise on-time, within-watermark, and dropped late events."""
     topic = safe_topic_name(f"{config.topic}-late-demo")
-    metadata = create_topic(config.bootstrap_servers, topic, partitions=1, reset=True)
+    metadata = create_topic(config.bootstrap_servers, topic, partitions=1, reset=reset_topic)
     demo_config = replace(
         config,
         topic=topic,
@@ -215,6 +217,7 @@ def run_late_data_demo(
         run_id,
         duration_seconds=duration_seconds,
         checkpoint_id=checkpoint_id or f"late-data-{run_id}",
+        checkpoint_root=checkpoint_root,
         on_query_started=orchestrate,
     )
 

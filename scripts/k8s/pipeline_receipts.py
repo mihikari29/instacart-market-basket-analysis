@@ -193,8 +193,9 @@ def collect_pipeline_receipt(
     lock: Mapping[str, Any],
     *,
     execute: bool = False,
+    include_b4_acceptance: bool = False,
 ) -> PipelineOwnershipReceipt:
-    """Collect all B3 direct objects, child Pods, PVC/PVs, and loaded image IDs."""
+    """Collect B3 identities, optionally excluding the separately receipted B4 Job."""
     if execute is not True:
         raise PipelineReceiptError("B3 receipt collection requires explicit execute=True authorization")
     try:
@@ -234,6 +235,13 @@ def collect_pipeline_receipt(
                 raise PipelineReceiptError(f"B3 ownership labels do not match for {kind}/{name}")
             if labels.get("it4931.instacart.edu/component") != "pipeline":
                 raise PipelineReceiptError(f"B3 component label is missing for {kind}/{name}")
+            acceptance_job = f"it4931-acceptance-{identity.run_id}"
+            if include_b4_acceptance and kind == "Job" and name == acceptance_job:
+                continue
+            if include_b4_acceptance and kind == "Pod":
+                owners = _parse_owner_references(metadata)
+                if len(owners) == 1 and owners[0].kind == "Job" and owners[0].name == acceptance_job:
+                    continue
             record = PipelineObject(kind, name, namespace_name, uid, dict(labels), _parse_owner_references(metadata))
             key = (kind, name)
             if key in by_key:
