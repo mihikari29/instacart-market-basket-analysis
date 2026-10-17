@@ -9,7 +9,7 @@ import re
 from typing import Any, Mapping
 
 from .acceptance import ACCEPTANCE_SCENARIOS, _read_receipt, _sha256_bytes, _sha256_json
-from .ownership import RunIdentity
+from .ownership import PROTECTED_NAMESPACES, RunIdentity
 from .pipeline import _validate_pipeline_lock
 from .pipeline_receipts import (
     assert_pipeline_receipt_matches_live,
@@ -29,6 +29,264 @@ class TeardownError(RuntimeError):
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_NAMESPACE_SYSTEM_OBJECTS = {
+    ("ServiceAccount", "default"),
+    ("ConfigMap", "kube-root-ca.crt"),
+}
+
+
+def _receipt_object_map(*receipts) -> dict[tuple[str, str], tuple[str, dict[str, str], tuple]]:
+    expected: dict[tuple[str, str], tuple[str, dict[str, str], tuple]] = {}
+    for receipt in receipts:
+        for item in receipt.objects:
+            key = (item.kind, item.name)
+            owners = tuple(
+                (owner.kind, owner.name, owner.uid, owner.controller)
+                for owner in item.owner_references
+            )
+            identity = (item.uid, dict(item.labels), owners)
+            previous = expected.setdefault(key, identity)
+            if previous != identity:
+                raise TeardownError(f"B2/B3 receipts disagree about {item.kind}/{item.name}")
+    return expected
+
+
+def _json_inventory(executor: CommandExecutor, identity: RunIdentity, *args: str, description: str) -> dict[str, Any]:
+    try:
+        payload = _json_output(_checked(executor, kubectl(identity, *args)), description)
+    except Exception as exc:
+        raise TeardownError(f"{description} could not be collected") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise TeardownError(f"{description} is malformed")
+    return payload
+
+
+def _validate_complete_profile_inventory(
+    executor: CommandExecutor,
+    identity: RunIdentity,
+    b2_receipt,
+    b3_receipt,
+    *,
+    acceptance_job_uid: str | None,
+    acceptance_pod_uid: str | None,
+) -> None:
+    """Compare every discoverable run-namespace object and bound volume before deletion."""
+    namespaces = _json_inventory(executor, identity, "get", "namespaces", "-o", "json", description="profile namespace inventory")
+    namespace_names = {
+        item.get("metadata", {}).get("name")
+        for item in namespaces["items"]
+        if isinstance(item, Mapping) and isinstance(item.get("metadata"), Mapping)
+    }
+    allowed_namespaces = set(PROTECTED_NAMESPACES) | {identity.namespace}
+    if namespace_names != allowed_namespaces:
+        raise TeardownError("dedicated profile contains an unexpected or missing namespace")
+    run_namespace = [
+        item for item in namespaces["items"]
+        if isinstance(item, Mapping)
+        and isinstance(item.get("metadata"), Mapping)
+        and item["metadata"].get("name") == identity.namespace
+    ]
+    if len(run_namespace) != 1:
+        raise TeardownError("run namespace identity is missing or duplicated")
+    namespace_metadata = run_namespace[0]["metadata"]
+    if not isinstance(namespace_metadata.get("uid"), str) or not namespace_metadata.get("uid"):
+        raise TeardownError("run namespace UID is missing")
+    if namespace_metadata["uid"] != b2_receipt.namespace_uid or namespace_metadata["uid"] != b3_receipt.namespace_uid:
+        raise TeardownError("live run namespace UID differs from the B2/B3 receipts")
+    labels = namespace_metadata.get("labels", {})
+    if not isinstance(labels, Mapping) or any(labels.get(key) != value for key, value in identity.labels.items()):
+        raise TeardownError("run namespace ownership labels do not match")
+
+    expected = _receipt_object_map(b2_receipt, b3_receipt)
+    acceptance_job_name = f"it4931-acceptance-{identity.run_id}"
+    acceptance_job_labels = {
+        **identity.labels,
+        "app.kubernetes.io/name": "pipeline-task",
+        "app.kubernetes.io/part-of": "instacart-k8s-demo",
+        "it4931.instacart.edu/component": "pipeline",
+        "it4931.instacart.edu/step": "acceptance",
+    }
+    if acceptance_job_uid is not None:
+        expected[("Job", acceptance_job_name)] = (
+            acceptance_job_uid,
+            acceptance_job_labels,
+            (),
+        )
+
+    # Discovery keeps this inventory exhaustive when a new namespaced API kind
+    # is introduced. A failed discovery or list request blocks teardown.
+    try:
+        discovered = _checked(
+            executor,
+            kubectl(identity, "api-resources", "--verbs=list", "--namespaced=true", "-o", "name"),
+        ).stdout
+    except Exception as exc:
+        raise TeardownError("namespaced API resource discovery failed") from exc
+    resource_names = sorted({line.strip() for line in discovered.splitlines() if line.strip()})
+    if not resource_names or any(any(char.isspace() for char in name) or "/" in name for name in resource_names):
+        raise TeardownError("namespaced API resource discovery returned an invalid inventory")
+
+    live: dict[tuple[str, str], Mapping[str, Any]] = {}
+    for resource_name in resource_names:
+        payload = _json_inventory(
+            executor,
+            identity,
+            "--namespace", identity.namespace, "get", resource_name, "-o", "json",
+            description=f"unfiltered {resource_name} inventory",
+        )
+        for item in payload["items"]:
+            if not isinstance(item, Mapping) or not isinstance(item.get("metadata"), Mapping):
+                raise TeardownError("unfiltered run namespace inventory contains a malformed object")
+            metadata = item["metadata"]
+            kind, name = item.get("kind"), metadata.get("name")
+            uid, object_namespace = metadata.get("uid"), metadata.get("namespace")
+            if not all(isinstance(value, str) and value for value in (kind, name, uid)):
+                raise TeardownError("unfiltered run namespace inventory is missing kind, name, or UID")
+            if object_namespace not in (None, identity.namespace):
+                raise TeardownError("unfiltered run namespace inventory returned an object from another namespace")
+            if (kind, name) in _NAMESPACE_SYSTEM_OBJECTS:
+                continue
+            key = (kind, name)
+            previous = live.get(key)
+            if previous is not None:
+                left = (previous["metadata"].get("uid"), previous["metadata"].get("labels", {}), previous["metadata"].get("ownerReferences", []))
+                right = (uid, metadata.get("labels", {}), metadata.get("ownerReferences", []))
+                if left != right:
+                    raise TeardownError(f"API aliases disagree about {kind}/{name}")
+                continue
+            live[key] = item
+
+    derived: set[tuple[str, str]] = set()
+    allowed_service_names = {name for kind, name in expected if kind == "Service"}
+    authorized_uids = {record[0] for record in expected.values()} | {
+        namespace_metadata["uid"],
+        *(storage.locality_node_uid for storage in (b2_receipt.storage, *b3_receipt.storage)),
+    }
+    for key, item in live.items():
+        kind, name = key
+        metadata = item["metadata"]
+        if kind == "Event":
+            reference = item.get("regarding") or item.get("involvedObject") or {}
+            if not isinstance(reference, Mapping) or reference.get("uid") not in authorized_uids:
+                raise TeardownError("run namespace contains an event for an unowned object")
+            derived.add(key)
+            continue
+        if kind == "Endpoints" and name in allowed_service_names:
+            derived.add(key)
+            continue
+        if kind == "EndpointSlice":
+            object_labels = metadata.get("labels", {})
+            service_name = object_labels.get("kubernetes.io/service-name") if isinstance(object_labels, Mapping) else None
+            if service_name in allowed_service_names:
+                derived.add(key)
+
+    if acceptance_pod_uid is not None:
+        matches = [
+            item for (kind, _), item in live.items()
+            if kind == "Pod" and item["metadata"].get("uid") == acceptance_pod_uid
+        ]
+        if len(matches) != 1:
+            raise TeardownError("B4 Pod UID is missing or duplicated in the complete inventory")
+        owners = matches[0]["metadata"].get("ownerReferences", [])
+        if (
+            not isinstance(owners, list) or len(owners) != 1 or not isinstance(owners[0], Mapping)
+            or owners[0].get("kind") != "Job" or owners[0].get("name") != acceptance_job_name
+            or owners[0].get("uid") != acceptance_job_uid or owners[0].get("controller") is not True
+        ):
+            raise TeardownError("B4 Pod owner chain differs from its recorded Job")
+        pod = matches[0]
+        pod_labels = pod["metadata"].get("labels", {})
+        if not isinstance(pod_labels, Mapping) or any(
+            pod_labels.get(key) != value for key, value in {
+                **identity.labels,
+                "app.kubernetes.io/name": "pipeline-task",
+                "it4931.instacart.edu/component": "pipeline",
+                "it4931.instacart.edu/role": "pipeline",
+                "it4931.instacart.edu/step": "acceptance",
+            }.items()
+        ):
+            raise TeardownError("B4 Pod ownership labels do not match")
+        pod_name = pod["metadata"].get("name")
+        if not isinstance(pod_name, str) or not pod_name.startswith(acceptance_job_name + "-"):
+            raise TeardownError("B4 Pod name is outside its run-scoped Job")
+        expected[("Pod", pod_name)] = (
+            acceptance_pod_uid,
+            {
+                **identity.labels,
+                "app.kubernetes.io/name": "pipeline-task",
+                "it4931.instacart.edu/component": "pipeline",
+                "it4931.instacart.edu/role": "pipeline",
+                "it4931.instacart.edu/step": "acceptance",
+            },
+            (("Job", acceptance_job_name, acceptance_job_uid, True),),
+        )
+
+    observed_expected = set(live).difference(derived)
+    if observed_expected != set(expected):
+        raise TeardownError("unfiltered run namespace inventory is incomplete or contains a foreign resource")
+    for key, (expected_uid, expected_labels, expected_owners) in expected.items():
+        item = live.get(key)
+        if item is None:
+            raise TeardownError(f"authorized resource {key[0]}/{key[1]} is missing")
+        metadata = item["metadata"]
+        labels = metadata.get("labels", {})
+        owners = metadata.get("ownerReferences", [])
+        owner_identities = tuple(
+            (owner.get("kind"), owner.get("name"), owner.get("uid"), owner.get("controller") is True)
+            for owner in owners
+            if isinstance(owner, Mapping)
+        ) if isinstance(owners, list) else ()
+        if metadata.get("uid") != expected_uid or labels != expected_labels or owner_identities != expected_owners:
+            raise TeardownError(f"live identity for {key[0]}/{key[1]} differs from its receipt")
+
+    expected_storage = {}
+    for storage in (b2_receipt.storage, *b3_receipt.storage):
+        identity_value = (storage.volume_uid, storage.claim_name, storage.claim_uid)
+        if storage.volume_name in expected_storage or identity_value[0] in {
+            value[0] for value in expected_storage.values()
+        }:
+            raise TeardownError("B2/B3 storage receipts contain duplicate PV identities")
+        expected_storage[storage.volume_name] = identity_value
+    pv_payload = _json_inventory(executor, identity, "get", "pv", "-o", "json", description="profile PV inventory")
+    pv_items = pv_payload["items"]
+    observed_pvs = {}
+    for volume in pv_items:
+        if not isinstance(volume, Mapping) or not isinstance(volume.get("metadata"), Mapping):
+            raise TeardownError("profile PV inventory contains a malformed volume")
+        metadata = volume["metadata"]
+        spec = volume.get("spec", {})
+        claim_ref = spec.get("claimRef", {}) if isinstance(spec, Mapping) else {}
+        name, uid = metadata.get("name"), metadata.get("uid")
+        if not isinstance(name, str) or not isinstance(uid, str):
+            raise TeardownError("profile PV inventory is missing name or UID")
+        if name in observed_pvs:
+            raise TeardownError("profile PV inventory contains duplicate names")
+        observed_pvs[name] = (uid, claim_ref.get("namespace"), claim_ref.get("name"), claim_ref.get("uid"))
+    if set(observed_pvs) != set(expected_storage):
+        raise TeardownError("profile contains an unexpected or missing PersistentVolume")
+    for name, (expected_uid, claim_name, claim_uid) in expected_storage.items():
+        if observed_pvs[name] != (expected_uid, identity.namespace, claim_name, claim_uid):
+            raise TeardownError(f"PV binding for {name} differs from its claim receipt")
+    expected_classes = {
+        storage.storage_class: storage.storage_class_uid
+        for storage in (b2_receipt.storage, *b3_receipt.storage)
+    }
+    if len(expected_classes) != 1:
+        raise TeardownError("B2/B3 storage receipts disagree about the profile StorageClass")
+    class_payload = _json_inventory(
+        executor, identity, "get", "storageclasses", "-o", "json", description="profile StorageClass inventory"
+    )
+    observed_classes = {}
+    for storage_class in class_payload["items"]:
+        if not isinstance(storage_class, Mapping) or not isinstance(storage_class.get("metadata"), Mapping):
+            raise TeardownError("profile StorageClass inventory contains a malformed object")
+        metadata = storage_class["metadata"]
+        name, uid = metadata.get("name"), metadata.get("uid")
+        if not isinstance(name, str) or not isinstance(uid, str):
+            raise TeardownError("profile StorageClass inventory is missing name or UID")
+        observed_classes[name] = uid
+    if observed_classes != expected_classes:
+        raise TeardownError("profile contains an unexpected or stale StorageClass")
 
 
 def _failure_evidence(
@@ -232,16 +490,27 @@ def teardown_run(
         raise TeardownError("B4 acceptance receipt belongs to a different live cluster or namespace")
 
     live_job_uid, live_pod_uid = _live_acceptance_job(executor, identity)
-    if live_job_uid is not None:
-        if acceptance_document is not None:
-            expected = (acceptance_document.get("acceptance_job_uid"), acceptance_document.get("acceptance_pod_uid"))
-        else:
-            assert captured_failure is not None
-            expected = _acceptance_job_identity_from_failure(captured_failure[0], identity)
-        if expected != (live_job_uid, live_pod_uid):
-            raise TeardownError("B4 Job or Pod UID differs from its recorded acceptance/failure evidence")
-    elif acceptance_document is not None and acceptance_document.get("acceptance_job_uid"):
-        raise TeardownError("recorded B4 Job is missing from the live run namespace")
+    if acceptance_document is not None:
+        expected_acceptance = (
+            acceptance_document.get("acceptance_job_uid"),
+            acceptance_document.get("acceptance_pod_uid"),
+        )
+    else:
+        assert captured_failure is not None
+        expected_acceptance = _acceptance_job_identity_from_failure(captured_failure[0], identity)
+    if expected_acceptance != (live_job_uid, live_pod_uid):
+        raise TeardownError("B4 Job or Pod UID differs from its recorded acceptance/failure evidence")
+    try:
+        _validate_complete_profile_inventory(
+            executor,
+            identity,
+            recorded_b2,
+            recorded_b3,
+            acceptance_job_uid=live_job_uid,
+            acceptance_pod_uid=live_pod_uid,
+        )
+    except Exception as exc:
+        raise TeardownError("complete profile inventory is not exclusively owned; no resources were deleted") from exc
 
     actions = [
         ["kubectl", "--context", identity.profile, "delete", "namespace", identity.namespace, "--wait=true", "--timeout=180s"],

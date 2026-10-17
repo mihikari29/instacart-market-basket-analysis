@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import os
 import re
@@ -39,13 +40,13 @@ RAW_DATA_TYPES = {
     "order_products__prior": {
         "order_id": "int32",
         "product_id": "int32",
-        "add_to_cart_order": "int16",
+        "add_to_cart_order": "int32",
         "reordered": "int8",
     },
     "order_products__train": {
         "order_id": "int32",
         "product_id": "int32",
-        "add_to_cart_order": "int16",
+        "add_to_cart_order": "int32",
         "reordered": "int8",
     },
     "products": {
@@ -69,6 +70,17 @@ RAW_COLUMNS = {
     "aisles": ("aisle_id", "aisle"),
     "departments": ("department_id", "department"),
 }
+_CLEAN_OUTPUT_MANIFEST = ".it4931-clean-output.json"
+_CLEAN_OUTPUT_FILES = frozenset(
+    {
+        "orders.parquet",
+        "order_products__prior.parquet",
+        "order_products__train.parquet",
+        "products.parquet",
+        "aisles.parquet",
+        "departments.parquet",
+    }
+)
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)\Z")
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)\Z")
 _MAX_DIAGNOSTICS = 20
@@ -220,6 +232,81 @@ def _coerce_raw_tables(tables: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
     return tables
 
 
+def _validate_publication_paths(data_dir: Path, output_dir: Path) -> tuple[Path, Path]:
+    """Reject aliases and replacement boundaries that can contain raw inputs."""
+    for candidate in (data_dir, output_dir.parent):
+        absolute = candidate.absolute()
+        current = Path(absolute.anchor)
+        for part in absolute.parts[1:]:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError("data and output paths must not traverse symlinks")
+    raw_dir = data_dir / "raw"
+    if raw_dir.is_symlink():
+        raise ValueError("raw input directory must not be a symlink")
+    raw_real = raw_dir.resolve(strict=False)
+    output_real = output_dir.resolve(strict=False)
+    if output_dir.is_symlink():
+        raise ValueError("output directory must not be a symlink")
+    try:
+        output_real.relative_to(raw_real)
+        output_inside_raw = True
+    except ValueError:
+        output_inside_raw = False
+    try:
+        raw_real.relative_to(output_real)
+        raw_inside_output = True
+    except ValueError:
+        raw_inside_output = False
+    if output_real == raw_real or output_inside_raw or raw_inside_output:
+        raise ValueError("output directory overlaps the raw input directory")
+
+    # Do not follow symlinked raw files during input validation. Resolve every
+    # expected source path as a second defense against a file alias escape.
+    for table_name in RAW_COLUMNS:
+        source = raw_dir / f"{table_name}.csv"
+        if source.is_symlink():
+            raise ValueError(f"raw input {table_name}.csv must not be a symlink")
+        try:
+            source.resolve(strict=False).relative_to(raw_real)
+        except ValueError as exc:
+            raise ValueError(f"raw input {table_name}.csv escapes the raw input directory") from exc
+    return raw_real, output_real
+
+
+def _validate_existing_output(output_dir: Path) -> None:
+    """Allow replacement only for a previously published, fully owned output."""
+    if not output_dir.exists():
+        return
+    if output_dir.is_symlink() or not output_dir.is_dir():
+        raise ValueError("output path must be a regular directory")
+    entries = list(output_dir.iterdir())
+    if not entries:
+        return
+    if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+        raise ValueError("existing output contains a symlink or non-file entry")
+    if {entry.name for entry in entries} != _CLEAN_OUTPUT_FILES | {_CLEAN_OUTPUT_MANIFEST}:
+        raise ValueError("existing output contains unrecognized or unowned files")
+    try:
+        manifest = json.loads((output_dir / _CLEAN_OUTPUT_MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError("existing output ownership manifest is invalid") from exc
+    if manifest != {"schema_version": 1, "files": sorted(_CLEAN_OUTPUT_FILES)}:
+        raise ValueError("existing output ownership manifest is invalid")
+
+
+def _remove_published_output(path: Path) -> None:
+    """Remove only the known files of a validated, owned publication."""
+    _validate_existing_output(path)
+    if not path.exists():
+        return
+    for filename in (*sorted(_CLEAN_OUTPUT_FILES), _CLEAN_OUTPUT_MANIFEST):
+        candidate = path / filename
+        if candidate.exists():
+            candidate.unlink()
+    path.rmdir()
+
+
 def load_raw(data_dir: Path) -> dict[str, pd.DataFrame]:
     dataframes: dict[str, pd.DataFrame] = {}
     diagnostics: list[str] = []
@@ -261,13 +348,22 @@ def load_raw(data_dir: Path) -> dict[str, pd.DataFrame]:
 
 
 def _write_outputs_atomically(output_dir: Path, outputs: dict[str, pd.DataFrame]) -> None:
-    """Stage every Parquet file before replacing the published output directory."""
+    """Stage Parquet files and replace only a verified Module 1 publication."""
+    if set(outputs) != _CLEAN_OUTPUT_FILES:
+        raise ValueError("clean output set does not match the reviewed publication contract")
+    if output_dir.is_symlink():
+        raise ValueError("output directory must not be a symlink")
+    _validate_existing_output(output_dir)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.stage-", dir=output_dir.parent))
     backup: Path | None = None
     try:
         for filename, frame in outputs.items():
             frame.to_parquet(stage / filename, index=False)
+        (stage / _CLEAN_OUTPUT_MANIFEST).write_text(
+            json.dumps({"schema_version": 1, "files": sorted(_CLEAN_OUTPUT_FILES)}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         if output_dir.exists():
             backup = output_dir.parent / f".{output_dir.name}.previous-{os.getpid()}-{uuid.uuid4().hex}"
             os.replace(output_dir, backup)
@@ -281,7 +377,9 @@ def _write_outputs_atomically(output_dir: Path, outputs: dict[str, pd.DataFrame]
         if stage.exists():
             shutil.rmtree(stage)
     if backup is not None:
-        shutil.rmtree(backup)
+        # Never recursively delete a replacement boundary. If an unexpected
+        # entry appeared during publication, leave the private backup intact.
+        _remove_published_output(backup)
 
 
 def clean_orders(orders: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
@@ -351,6 +449,11 @@ def main() -> int:
 
     data_dir = Path(args.data_dir)
     output_dir = Path(args.output_dir) if args.output_dir else data_dir / "clean"
+    try:
+        _validate_publication_paths(data_dir, output_dir)
+    except (OSError, ValueError) as exc:
+        print(f"unsafe cleaned-output path: {exc}", file=sys.stderr)
+        return 2
     try:
         dataframes = load_raw(data_dir)
     except RawInputValidationError as exc:

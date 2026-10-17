@@ -4,6 +4,7 @@ import json
 import hashlib
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 import yaml
@@ -23,6 +24,7 @@ from scripts.k8s.teardown import (
     _failure_evidence,
     _validate_acceptance_checks,
     _verify_acceptance_artifacts,
+    _validate_complete_profile_inventory,
     teardown_run,
 )
 from tests.test_k8s_pipeline import _complete_b3_lock
@@ -35,6 +37,56 @@ class InertExecutor:
     def run(self, argv, *, timeout, input_text=None):
         self.calls.append(list(argv))
         raise AssertionError("offline acceptance tests must not contact Kubernetes")
+
+
+class FakeProfileInventoryExecutor:
+    def __init__(self, identity, *, foreign=None, extra_namespace=False, stale_uid=False):
+        self.identity = identity
+        self.foreign = foreign
+        self.extra_namespace = extra_namespace
+        self.stale_uid = stale_uid
+        self.calls = []
+
+    def run(self, argv, *, timeout, input_text=None):
+        self.calls.append(list(argv))
+        if argv[3:5] == ["get", "namespaces"]:
+            names = ["default", "kube-system", "kube-public", "kube-node-lease", self.identity.namespace]
+            if self.extra_namespace:
+                names.append("foreign-namespace")
+            items = [{"metadata": {"name": name}} for name in names if name != self.identity.namespace]
+            items.append({"metadata": {
+                "name": self.identity.namespace,
+                "uid": "namespace-uid",
+                "labels": self.identity.labels,
+            }})
+            return CommandResult(0, json.dumps({"items": items}))
+        if "api-resources" in argv:
+            return CommandResult(0, "configmaps\n")
+        if "get" in argv and "configmaps" in argv:
+            owned = {
+                "apiVersion": "v1", "kind": "ConfigMap",
+                "metadata": {
+                    "name": "owned", "namespace": self.identity.namespace,
+                    "uid": "stale-uid" if self.stale_uid else "owned-uid",
+                    "labels": self.identity.labels,
+                },
+            }
+            items = [owned]
+            if self.foreign is not None:
+                items.append(self.foreign)
+            return CommandResult(0, json.dumps({"items": items}))
+        if argv[3:6] == ["get", "pv", "-o"]:
+            return CommandResult(0, json.dumps({"items": [{
+                "metadata": {"name": "pv-owned", "uid": "pv-uid"},
+                "spec": {"claimRef": {
+                    "namespace": self.identity.namespace, "name": "claim-owned", "uid": "claim-uid",
+                }},
+            }]}))
+        if argv[3:6] == ["get", "storageclasses", "-o"]:
+            return CommandResult(0, json.dumps({"items": [{
+                "metadata": {"name": "standard", "uid": "sc-uid"},
+            }]}))
+        raise AssertionError(f"unexpected fake inventory command: {argv}")
 
 
 def _checks(status="passed"):
@@ -170,6 +222,63 @@ class AcceptanceContractTests(unittest.TestCase):
             log.write_text("changed\n")
             with self.assertRaisesRegex(TeardownError, "changed"):
                 _verify_acceptance_artifacts(receipt)
+
+    def _inventory_receipts(self):
+        owned = SimpleNamespace(
+            kind="ConfigMap", name="owned", uid="owned-uid", labels=self.identity.labels,
+            owner_references=(),
+        )
+        storage = SimpleNamespace(
+            volume_name="pv-owned", volume_uid="pv-uid", claim_name="claim-owned", claim_uid="claim-uid",
+            storage_class="standard", storage_class_uid="sc-uid", locality_node_uid="node-uid",
+        )
+        return (
+            SimpleNamespace(namespace_uid="namespace-uid", objects=(owned,), storage=storage),
+            SimpleNamespace(namespace_uid="namespace-uid", objects=(), storage=()),
+        )
+
+    def test_unfiltered_teardown_inventory_accepts_exact_offline_fixture(self):
+        b2, b3 = self._inventory_receipts()
+        executor = FakeProfileInventoryExecutor(self.identity)
+
+        _validate_complete_profile_inventory(
+            executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+        )
+
+        self.assertTrue(executor.calls)
+        self.assertFalse(any("delete" in call for call in executor.calls))
+
+    def test_unfiltered_teardown_inventory_rejects_foreign_pipeline_or_unlabelled_resources(self):
+        b2, b3 = self._inventory_receipts()
+        for labels in (
+            {"it4931.instacart.edu/component": "pipeline"},
+            {},
+        ):
+            foreign = {
+                "apiVersion": "v1", "kind": "ConfigMap",
+                "metadata": {
+                    "name": "foreign", "namespace": self.identity.namespace,
+                    "uid": "foreign-uid", "labels": labels,
+                },
+            }
+            executor = FakeProfileInventoryExecutor(self.identity, foreign=foreign)
+            with self.subTest(labels=labels), self.assertRaisesRegex(TeardownError, "foreign resource"):
+                _validate_complete_profile_inventory(
+                    executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+                )
+            self.assertFalse(any("delete" in call for call in executor.calls))
+
+    def test_unfiltered_teardown_inventory_rejects_extra_namespace_and_stale_uid(self):
+        b2, b3 = self._inventory_receipts()
+        for executor, message in (
+            (FakeProfileInventoryExecutor(self.identity, extra_namespace=True), "unexpected or missing namespace"),
+            (FakeProfileInventoryExecutor(self.identity, stale_uid=True), "differs from its receipt"),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(TeardownError, message):
+                _validate_complete_profile_inventory(
+                    executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
+                )
+            self.assertFalse(any("delete" in call for call in executor.calls))
 
 
 if __name__ == "__main__":

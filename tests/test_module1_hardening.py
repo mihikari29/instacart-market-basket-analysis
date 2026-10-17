@@ -12,6 +12,15 @@ from src.module1.generate import expand_events, finalize, prepare_orders
 from src.module1.producer import main as producer_main, publish_rows
 
 
+class _ParquetFixture:
+    def __init__(self, value: bytes = b"staged"):
+        self.value = value
+
+    def to_parquet(self, path, index=False):
+        assert index is False
+        Path(path).write_bytes(self.value)
+
+
 def _generation_fixture():
     orders = pd.DataFrame(
         {
@@ -182,6 +191,130 @@ def test_raw_preflight_keeps_first_order_null_and_accepts_reordered_columns(tmp_
     assert len(tables) == 6
     assert pd.isna(tables["orders"].loc[0, "days_since_prior_order"])
     assert tables["order_products__prior"].loc[0, "reordered"] == 0
+
+
+def _clean_output_frames(value: bytes = b"new"):
+    return {name: _ParquetFixture(value) for name in raw_clean._CLEAN_OUTPUT_FILES}
+
+
+def _mark_owned_output(path: Path, value: bytes = b"old") -> None:
+    path.mkdir()
+    for name in raw_clean._CLEAN_OUTPUT_FILES:
+        (path / name).write_bytes(value)
+    (path / raw_clean._CLEAN_OUTPUT_MANIFEST).write_text(
+        __import__("json").dumps({"schema_version": 1, "files": sorted(raw_clean._CLEAN_OUTPUT_FILES)}),
+        encoding="utf-8",
+    )
+
+
+def test_clean_publication_rejects_raw_input_overlap_without_touching_sources(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+
+    for output in (raw_dir, data_dir):
+        try:
+            raw_clean._validate_publication_paths(data_dir, output)
+        except ValueError as exc:
+            assert "overlap" in str(exc)
+        else:
+            raise AssertionError(f"unsafe output path was accepted: {output}")
+    assert source.read_bytes() == b"raw sentinel"
+
+
+def test_clean_publication_rejects_symlink_aliases(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(data_dir, target_is_directory=True)
+
+    try:
+        raw_clean._validate_publication_paths(data_dir, alias / "raw" / "clean")
+    except ValueError as exc:
+        assert "symlink" in str(exc)
+    else:
+        raise AssertionError("symlinked output parent was accepted")
+
+
+def test_clean_publication_replaces_only_owned_outputs_and_preserves_raw(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+
+    raw_clean._validate_publication_paths(data_dir, output)
+    raw_clean._write_outputs_atomically(output, _clean_output_frames())
+    raw_clean._write_outputs_atomically(output, _clean_output_frames(b"replacement"))
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert {path.name for path in output.iterdir()} == raw_clean._CLEAN_OUTPUT_FILES | {
+        raw_clean._CLEAN_OUTPUT_MANIFEST
+    }
+    assert all((output / name).read_bytes() == b"replacement" for name in raw_clean._CLEAN_OUTPUT_FILES)
+
+
+def test_clean_publication_rejects_foreign_files_and_keeps_output_and_input(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+    output.mkdir()
+    foreign = output / "keep-me.txt"
+    foreign.write_text("foreign sentinel", encoding="utf-8")
+
+    try:
+        raw_clean._write_outputs_atomically(output, _clean_output_frames())
+    except ValueError as exc:
+        assert "unrecognized" in str(exc)
+    else:
+        raise AssertionError("unrecognized output content was accepted")
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert foreign.read_text(encoding="utf-8") == "foreign sentinel"
+    assert sorted(path.name for path in output.iterdir()) == ["keep-me.txt"]
+
+
+def test_clean_publication_staging_failure_preserves_prior_output(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+    _mark_owned_output(output)
+    previous = {name: (output / name).read_bytes() for name in raw_clean._CLEAN_OUTPUT_FILES}
+
+    class _FailingFixture(_ParquetFixture):
+        def to_parquet(self, path, index=False):
+            raise OSError("synthetic staging failure")
+
+    frames = _clean_output_frames()
+    frames[next(iter(frames))] = _FailingFixture()
+    try:
+        raw_clean._write_outputs_atomically(output, frames)
+    except OSError as exc:
+        assert "synthetic staging failure" in str(exc)
+    else:
+        raise AssertionError("staging failure was not propagated")
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert {name: (output / name).read_bytes() for name in raw_clean._CLEAN_OUTPUT_FILES} == previous
+
+
+def test_clean_order_products_preserves_large_valid_cart_positions():
+    values = pd.DataFrame({"reordered": [0, 1], "add_to_cart_order": [32768, 70000]})
+
+    result = raw_clean.clean_order_products(values)
+
+    assert result["add_to_cart_order"].tolist() == [32768, 70000]
+    assert str(result["add_to_cart_order"].dtype) == "int32"
 
 
 def test_external_merge_orders_limits_and_bounds_chunks(tmp_path):
