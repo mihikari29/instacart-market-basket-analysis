@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+import importlib
 import importlib.util
 import sys
 from types import ModuleType
@@ -10,29 +11,60 @@ import unittest
 from unittest.mock import patch
 
 
-if importlib.util.find_spec("pyspark") is None:
-    # Hybrid ranking and the API read contract are pure Python. Provide only
-    # Spark's import-time type surface; this test never constructs a DataFrame.
-    pyspark = ModuleType("pyspark")
-    pyspark_sql = ModuleType("pyspark.sql")
-    pyspark_sql.DataFrame = type("DataFrame", (), {})
-    pyspark_functions = ModuleType("pyspark.sql.functions")
-    pyspark_types = ModuleType("pyspark.sql.types")
-    pyspark_types.TimestampType = type("TimestampType", (), {})
-    pyspark_sql.functions = pyspark_functions
-    pyspark_sql.types = pyspark_types
-    pyspark.__path__ = []
-    pyspark_sql.__path__ = []
-    sys.modules.update({
-        "pyspark": pyspark,
-        "pyspark.sql": pyspark_sql,
-        "pyspark.sql.functions": pyspark_functions,
-        "pyspark.sql.types": pyspark_types,
-    })
+def _load_hybrid_test_subjects():
+    """Load production modules after adding only the absent Spark import surface."""
+    try:
+        spark_spec = importlib.util.find_spec("pyspark")
+    except (ImportError, ValueError):
+        spark_spec = None
+    if spark_spec is None and "pyspark" not in sys.modules:
+        # Ranking and the API read contract are pure Python. The test never
+        # constructs a DataFrame, so Spark needs only these import-time types.
+        pyspark = ModuleType("pyspark")
+        pyspark_sql = ModuleType("pyspark.sql")
+        pyspark_sql.DataFrame = type("DataFrame", (), {})
+        pyspark_functions = ModuleType("pyspark.sql.functions")
+        pyspark_types = ModuleType("pyspark.sql.types")
+        pyspark_types.TimestampType = type("TimestampType", (), {})
+        pyspark_sql.functions = pyspark_functions
+        pyspark_sql.types = pyspark_types
+        pyspark.__path__ = []
+        pyspark_sql.__path__ = []
+        sys.modules.update({
+            "pyspark": pyspark,
+            "pyspark.sql": pyspark_sql,
+            "pyspark.sql.functions": pyspark_functions,
+            "pyspark.sql.types": pyspark_types,
+        })
 
-from src.module4.config import Config as Module4Config
-from src.module4.dashboard.readers import read_hybrid_snapshot
-from src.module4.hybrid import (
+    config_module = importlib.import_module("src.module4.config")
+    dashboard_readers = importlib.import_module("src.module4.dashboard.readers")
+    hybrid = importlib.import_module("src.module4.hybrid")
+    module4_sink = importlib.import_module("src.module4.sink_mongo")
+    hybrid_sink = importlib.import_module("src.module4.hybrid.sink_mongo")
+    return (
+        config_module.Config,
+        dashboard_readers.read_hybrid_snapshot,
+        hybrid.ALSRecommendation,
+        hybrid.CapturedUserSources,
+        hybrid.HybridPublicationConflictError,
+        hybrid.HybridPublicationPromotionError,
+        hybrid.HybridRankingConfig,
+        hybrid.ProductMetadata,
+        hybrid.TrendRecommendation,
+        hybrid.TrendSnapshotReadResult,
+        hybrid.VerifiedSourceContext,
+        hybrid.prepare_hybrid_snapshot,
+        hybrid.publish_hybrid_recommendations,
+        hybrid.rank_hybrid_recommendations,
+        module4_sink,
+        hybrid_sink.FINAL_RECOMMENDATIONS_COLLECTION,
+    )
+
+
+(
+    Module4Config,
+    read_hybrid_snapshot,
     ALSRecommendation,
     CapturedUserSources,
     HybridPublicationConflictError,
@@ -45,9 +77,9 @@ from src.module4.hybrid import (
     prepare_hybrid_snapshot,
     publish_hybrid_recommendations,
     rank_hybrid_recommendations,
-)
-from src.module4 import sink_mongo as module4_sink
-from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
+    module4_sink,
+    FINAL_RECOMMENDATIONS_COLLECTION,
+) = _load_hybrid_test_subjects()
 
 
 USER_ID = 7
