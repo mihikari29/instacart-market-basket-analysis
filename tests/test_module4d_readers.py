@@ -20,6 +20,10 @@ from src.module4.dashboard.readers import (
     TREND_SELECTION_INDEX_NAME,
     TrendSnapshotIndexUnavailable,
     TrendSnapshotQueryError,
+    ALSModelNotFound,
+    ALSSnapshotChanged,
+    InvalidALSSnapshot,
+    read_als_snapshot,
     read_hybrid_snapshot,
     read_trend_snapshot,
 )
@@ -135,11 +139,16 @@ class Collection:
                 and as_utc(row["window_end"]) <= cutoff_utc
             ]
         else:
-            rows = [
-                deepcopy(row)
-                for row in self.documents
-                if all(row.get(key) == value for key, value in query.items())
-            ]
+            def matches(row):
+                for key, value in query.items():
+                    if isinstance(value, dict) and "$in" in value:
+                        if row.get(key) not in value["$in"]:
+                            return False
+                    elif row.get(key) != value:
+                        return False
+                return True
+
+            rows = [deepcopy(row) for row in self.documents if matches(row)]
         cursor = Cursor(rows)
         self.cursors.append(cursor)
         return cursor
@@ -165,6 +174,89 @@ class Database:
             "final_recommendations": self.recommendations,
             "realtime_trending_windows": self.trends,
         }[name]
+
+
+class ALSDatabase:
+    def __init__(self, *, readiness=True, recommendations=(), products=(), on_readiness=None):
+        pointer = ({
+            "_id": "active", "status": "ready", "ready": True,
+            "run_id": "run-42", "model_version": "als-v42", "graph_version": "graph-v42",
+            "recommendation_published": True, "graph_published": True,
+            "single_writer_policy": "module4_publication_lock",
+        } if readiness else None)
+        self.collections = {
+            "module4_snapshot_readiness": Collection([pointer] if pointer else (), "module4_snapshot_readiness"),
+            "user_recommendations": Collection(recommendations, "user_recommendations"),
+            "product_graph_metrics": Collection(products, "product_graph_metrics"),
+        }
+        self.collections["module4_snapshot_readiness"].find_one_hook = on_readiness
+
+    def __getitem__(self, name):
+        return self.collections[name]
+
+
+def _als_rows():
+    return [
+        {"user_id": 71, "product_id": 502, "als_rank": 2, "als_score": 0.75, "model_version": "als-v42", "run_id": "run-42"},
+        {"user_id": 71, "product_id": 501, "als_rank": 1, "als_score": 0.95, "model_version": "als-v42", "run_id": "run-42"},
+    ]
+
+
+def _als_products():
+    return [
+        {"product_id": 501, "product_name": "Banana", "graph_version": "graph-v42", "run_id": "run-42"},
+        {"product_id": 502, "product_name": "Apple", "graph_version": "graph-v42", "run_id": "run-42"},
+    ]
+
+
+def test_als_reader_selects_active_version_and_returns_ranked_rows_read_only():
+    database = ALSDatabase(recommendations=_als_rows(), products=_als_products())
+
+    result = read_als_snapshot(database, 71, model_version="als-v42", limit=1)
+
+    assert result["status"] == "available"
+    assert result["model_version"] == "als-v42"
+    assert result["has_more"] is True
+    assert result["recommendations"] == [
+        {"product_id": 501, "product_name": "Banana", "als_rank": 1, "als_score": 0.95}
+    ]
+    rows_collection = database.collections["user_recommendations"]
+    assert rows_collection.find_calls[0][0] == {
+        "model_version": "als-v42", "run_id": "run-42", "user_id": 71
+    }
+    assert rows_collection.cursors[0].hint_value == "uq_model_user_rank"
+    assert rows_collection.cursors[0].limit_value == 21
+    assert not any(collection.write_calls for collection in database.collections.values())
+
+
+def test_als_reader_distinguishes_empty_user_result_and_unavailable_model():
+    database = ALSDatabase(recommendations=(), products=())
+    result = read_als_snapshot(database, 909)
+    assert result["status"] == "empty"
+    assert result["recommendation_count"] == 0
+    assert result["recommendations"] == []
+    with pytest.raises(ALSModelNotFound):
+        read_als_snapshot(database, 909, model_version="old-model")
+    with pytest.raises(ALSModelNotFound):
+        read_als_snapshot(ALSDatabase(readiness=False), 909)
+
+
+def test_als_reader_detects_active_pointer_change_and_duplicate_rows():
+    database = ALSDatabase(recommendations=_als_rows(), products=_als_products())
+    readiness = database.collections["module4_snapshot_readiness"]
+
+    def change_pointer(read_count):
+        if read_count == 2:
+            readiness.documents[0]["model_version"] = "als-next"
+
+    readiness.find_one_hook = change_pointer
+    with pytest.raises(ALSSnapshotChanged):
+        read_als_snapshot(database, 71)
+
+    duplicate = _als_rows()
+    duplicate[1]["als_rank"] = duplicate[0]["als_rank"]
+    with pytest.raises(InvalidALSSnapshot):
+        read_als_snapshot(ALSDatabase(recommendations=duplicate, products=_als_products()), 71)
 
 
 def test_reads_top_twenty_exact_user_and_version_with_limit_and_closes_cursor():

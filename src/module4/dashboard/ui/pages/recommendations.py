@@ -1,4 +1,4 @@
-"""Per-user verified Hybrid recommendation view."""
+"""Per-user read-only ALS, trend, and Hybrid recommendation comparison."""
 
 from __future__ import annotations
 
@@ -12,17 +12,74 @@ from src.module4.dashboard.ui.state import fetch
 
 
 ACTIVE_USER_KEY = "_module4d_active_recommendation_user"
-LAST_ERROR_KEY = "_module4d_last_recommendation_error"
 
 
-def _load(st: Any, client: Any, user_id: int, *, refresh: bool):
+def _load_hybrid(st: Any, client: Any, user_id: int, *, refresh: bool):
     with st.spinner(f"Reading verified Hybrid recommendations for user {user_id}…"):
         return fetch(st.session_state, client, "get_recommendations", user_id, refresh=refresh)
 
 
+def _load_als(st: Any, client: Any, user_id: int, model_version: str | None, *, refresh: bool):
+    with st.spinner(f"Reading stored ALS recommendations for user {user_id}…"):
+        return fetch(
+            st.session_state,
+            client,
+            "get_als_recommendations",
+            user_id,
+            model_version,
+            20,
+            refresh=refresh,
+        )
+
+
+def comparison_rows(als_payload: dict[str, Any] | None, hybrid_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Align persisted rows by product ID without filling unavailable scores."""
+    by_product: dict[int, dict[str, Any]] = {}
+    for row in (als_payload or {}).get("recommendations", []):
+        by_product[row["product_id"]] = {
+            "Product ID": row["product_id"],
+            "Product": row["product_name"] or f"Product {row['product_id']}",
+            "ALS rank": row["als_rank"],
+            "ALS score": row["als_score"],
+            "Trend score": None,
+            "Final rank": None,
+            "Final score": None,
+        }
+    for row in (hybrid_payload or {}).get("recommendations", []):
+        item = by_product.setdefault(
+            row["product_id"],
+            {
+                "Product ID": row["product_id"],
+                "Product": row["product_name"],
+                "ALS rank": None,
+                "ALS score": None,
+                "Trend score": None,
+                "Final rank": None,
+                "Final score": None,
+            },
+        )
+        if row.get("product_name"):
+            item["Product"] = row["product_name"]
+        if row.get("from_trend") is True and row.get("trend_score") is not None:
+            item["Trend score"] = row["trend_score"]
+        item["Final rank"] = row["rank"]
+        item["Final score"] = row["final_score"]
+    return sorted(
+        by_product.values(),
+        key=lambda row: (
+            row["Final rank"] if row["Final rank"] is not None else 21,
+            row["ALS rank"] if row["ALS rank"] is not None else 21,
+            row["Product ID"],
+        ),
+    )
+
+
 def render_recommendations(st: Any, client: Any, *, refresh_requested: bool = False) -> None:
-    st.title("Hybrid Recommendations")
-    st.caption("Verified per-user Hybrid snapshot from the serving API. The dashboard does not recompute scores or publish recommendations.")
+    st.title("ALS and Hybrid Recommendations")
+    st.caption(
+        "Reads the active versioned ALS snapshot and the published per-user Hybrid snapshot. "
+        "The dashboard does not compute scores or publish recommendations."
+    )
 
     active_user = st.session_state.get(ACTIVE_USER_KEY)
     initial_value = str(active_user) if isinstance(active_user, int) else "1"
@@ -30,153 +87,149 @@ def render_recommendations(st: Any, client: Any, *, refresh_requested: bool = Fa
         raw_user_id = st.text_input(
             "Positive integer user ID",
             value=initial_value,
-            help="Enter a positive signed 64-bit integer. The API decides whether a published snapshot exists.",
+            help="Enter a positive signed 64-bit integer.",
             key="recommendation_user_id",
         )
+        raw_model_version = st.text_input(
+            "ALS model version (blank uses the active published model)",
+            value="",
+            key="recommendation_als_model_version",
+        )
         submitted = st.form_submit_button(
-            "Load / refresh recommendations", type="primary", key="recommendation_submit"
+            "Load / refresh ALS and Hybrid", type="primary", key="recommendation_submit"
         )
 
-    payload = None
-    error: ApiClientError | None = None
-    cached = False
     user_id: int | None = None
-    if submitted:
+    hybrid_payload = als_payload = None
+    hybrid_error: ApiClientError | None = None
+    als_error: ApiClientError | None = None
+    hybrid_cached = als_cached = False
+    model_version = raw_model_version.strip() or None
+    if submitted or isinstance(active_user, int):
         try:
-            user_id = validate_user_id(raw_user_id)
+            user_id = validate_user_id(raw_user_id if submitted else active_user)
         except ApiClientError as validation_error:
-            error = validation_error
-        else:
-            payload, error, cached = _load(st, client, user_id, refresh=True)
-            if error is None:
-                st.session_state[ACTIVE_USER_KEY] = user_id
-                st.session_state.pop(LAST_ERROR_KEY, None)
-            else:
-                st.session_state[LAST_ERROR_KEY] = {
-                    "user_id": user_id,
-                    "code": error.code,
-                    "status_code": error.status_code,
-                    "request_id": error.request_id,
-                    "message": error.message,
-                }
-    elif st.session_state.get(LAST_ERROR_KEY):
-        last_error = st.session_state[LAST_ERROR_KEY]
-        try:
-            current_user_id = validate_user_id(raw_user_id)
-        except ApiClientError:
-            current_user_id = None
-        if last_error.get("user_id") == current_user_id:
-            error = ApiClientError(
-                last_error["message"],
-                status_code=last_error["status_code"],
-                code=last_error["code"],
-                request_id=last_error["request_id"],
+            hybrid_error = validation_error
+        if user_id is not None:
+            st.session_state[ACTIVE_USER_KEY] = user_id
+            hybrid_payload, hybrid_error, hybrid_cached = _load_hybrid(
+                st, client, user_id, refresh=submitted or refresh_requested
             )
-    if not submitted and error is None and isinstance(active_user, int):
-        user_id = active_user
-        payload, error, cached = _load(st, client, active_user, refresh=refresh_requested)
-
-    if error:
-        render_error(st, error, label="Recommendation snapshot")
-        if error.code == "snapshot_changed":
-            retry_col, note_col = st.columns([1, 3])
-            with retry_col:
-                retry = st.button("Retry this read", key="retry_recommendation_read")
-            with note_col:
-                st.caption("This retries the same user ID once after a new explicit action.")
-            if retry:
-                retry_user = user_id or error_user_id(st.session_state)
-                if retry_user is not None:
-                    payload, error, cached = _load(st, client, retry_user, refresh=True)
-                    if error is None:
-                        st.session_state[ACTIVE_USER_KEY] = retry_user
-                        st.session_state.pop(LAST_ERROR_KEY, None)
-                        user_id = retry_user
-    elif payload is None:
-        st.info("Enter a user ID and submit to query the recommendation API.")
-
-    if error:
-        return
-    if payload is None:
-        return
-
-    source = payload["source"]
-    config = payload["ranking_config"]
-    st.caption(f"Recommendation snapshot user ID: {payload['user_id']}")
-    metrics = st.columns(4, gap="large")
-    metrics[0].metric("Serving version", payload["serving_version"])
-    metrics[1].metric("Recommendation count", payload["recommendation_count"])
-    metrics[2].metric("Mode", payload["mode"])
-    metrics[3].metric("Lambda requested / effective", f"{config['lambda_requested']} / {config['lambda_effective']}")
-    if payload["reason"]:
-        st.info(f"Serving reason: {payload['reason']}")
-
-    st.subheader("Snapshot provenance")
-    provenance_cols = st.columns(3, gap="large")
-    with provenance_cols[0]:
-        st.markdown("**Serving sources**")
-        st.write(f"Source run: {source['source_run_id']}")
-        st.write(f"Model version: {source['model_version']}")
-        st.write(f"Graph version: {source['graph_version']}")
-    with provenance_cols[1]:
-        st.markdown("**Trend input**")
-        st.write(f"Namespace: {source['trend_source_namespace']}")
-        st.write(f"Scope: {source['trend_source_scope'] or 'not recorded'}")
-        st.write(f"Window: {display_time(source['trend_window_start'])} – {display_time(source['trend_window_end'])}")
-        st.write(f"As-of event time: {display_time(source['as_of_event_time'])}")
-    with provenance_cols[2]:
-        st.markdown("**Snapshot times and ranking**")
-        st.write(f"Generated: {display_time(payload['generated_at'])}")
-        st.write(f"Pointer updated: {display_time(source['pointer_updated_at'])}")
-        st.write(f"API observed: {display_time(payload['observed_at'])}")
-        st.write(f"Lambda requested: {config['lambda_requested']} · effective: {config['lambda_effective']}")
-
-    recommendations = payload["recommendations"]
-    if not recommendations:
-        st.info("This is a ready published snapshot with zero recommendations.")
+            als_payload, als_error, als_cached = _load_als(
+                st, client, user_id, model_version, refresh=submitted or refresh_requested
+            )
     else:
-        chart = pd.DataFrame(
-            [{"Rank / product": f"#{row['rank']} · {row['product_name']} ({row['product_id']})", "Final score (0–1)": row["final_score"]} for row in recommendations]
+        st.info("Enter a user ID and submit to query the recommendation API.")
+        return
+
+    if hybrid_error:
+        render_error(st, hybrid_error, label="Hybrid snapshot")
+        if hybrid_error.code == "snapshot_changed":
+            if st.button("Retry both reads", key="retry_recommendation_read") and user_id is not None:
+                hybrid_payload, hybrid_error, hybrid_cached = _load_hybrid(st, client, user_id, refresh=True)
+                als_payload, als_error, als_cached = _load_als(st, client, user_id, model_version, refresh=True)
+                if hybrid_error:
+                    render_error(st, hybrid_error, label="Hybrid snapshot")
+    if als_error:
+        render_error(st, als_error, label="ALS snapshot")
+
+    if als_payload is not None:
+        st.subheader("Stored ALS snapshot")
+        st.caption(
+            f"Model version: {als_payload['model_version']} · run: {als_payload['source']['run_id']} · "
+            f"graph metadata version: {als_payload['source']['graph_version']}"
         )
-        st.bar_chart(
-            chart,
-            x="Rank / product",
-            y="Final score (0–1)",
-            horizontal=True,
-            sort=False,
-            width="stretch",
-            alt="Persisted final Hybrid recommendation score by rank; scores range from zero to one.",
+        if als_payload["status"] == "empty":
+            st.info(
+                "No ALS recommendation rows exist for this user in the selected model. "
+                "This does not establish whether the user exists in the source dataset."
+            )
+        elif als_payload["recommendations"]:
+            st.dataframe(
+                [
+                    {
+                        "ALS rank": row["als_rank"],
+                        "Product": row["product_name"] or f"Product {row['product_id']}",
+                        "Product ID": row["product_id"],
+                        "ALS score": row["als_score"],
+                    }
+                    for row in als_payload["recommendations"]
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+
+    if hybrid_payload is not None:
+        source = hybrid_payload["source"]
+        config = hybrid_payload["ranking_config"]
+        st.subheader("Published Hybrid snapshot")
+        st.caption(f"Recommendation snapshot user ID: {hybrid_payload['user_id']}")
+        metrics = st.columns(4, gap="large")
+        metrics[0].metric("Serving version", hybrid_payload["serving_version"])
+        metrics[1].metric("Recommendation count", hybrid_payload["recommendation_count"])
+        metrics[2].metric("Mode", hybrid_payload["mode"])
+        metrics[3].metric(
+            "Lambda requested / effective",
+            f"{config['lambda_requested']} / {config['lambda_effective']}",
         )
+        if hybrid_payload["reason"]:
+            st.info(f"Serving reason: {hybrid_payload['reason']}")
+
+        st.markdown("**Snapshot provenance**")
+        provenance_cols = st.columns(3, gap="large")
+        with provenance_cols[0]:
+            st.write(f"Source run: {source['source_run_id']}")
+            st.write(f"Model version: {source['model_version']}")
+            st.write(f"Graph version: {source['graph_version']}")
+        with provenance_cols[1]:
+            st.write(f"Trend namespace: {source['trend_source_namespace']}")
+            st.write(f"Trend scope: {source['trend_source_scope'] or 'not recorded'}")
+            st.write(
+                f"Trend window: {display_time(source['trend_window_start'])} – "
+                f"{display_time(source['trend_window_end'])}"
+            )
+        with provenance_cols[2]:
+            st.write(f"Generated: {display_time(hybrid_payload['generated_at'])}")
+            st.write(f"Pointer updated: {display_time(source['pointer_updated_at'])}")
+            st.write(f"API observed: {display_time(hybrid_payload['observed_at'])}")
+
+        if not hybrid_payload["recommendations"]:
+            st.info("This is a ready published Hybrid snapshot with zero recommendations.")
+        else:
+            st.bar_chart(
+                pd.DataFrame(
+                    [
+                        {
+                            "Rank / product": f"#{row['rank']} · {row['product_name']} ({row['product_id']})",
+                            "Final score (0–1)": row["final_score"],
+                        }
+                        for row in hybrid_payload["recommendations"]
+                    ]
+                ),
+                x="Rank / product",
+                y="Final score (0–1)",
+                horizontal=True,
+                sort=False,
+                width="stretch",
+                alt="Persisted final Hybrid recommendation score by rank.",
+            )
+
+    if als_payload is not None or hybrid_payload is not None:
+        if als_payload and hybrid_payload:
+            same_generation = (
+                als_payload["source"]["model_version"] == hybrid_payload["source"]["model_version"]
+                and als_payload["source"]["run_id"] == hybrid_payload["source"]["source_run_id"]
+            )
+            if not same_generation:
+                st.warning("The ALS and Hybrid snapshots refer to different model generations.")
+        st.subheader("ALS, trend, and final score comparison")
         st.dataframe(
-            [
-                {
-                    "Rank": row["rank"],
-                    "Product": row["product_name"],
-                    "Product ID": row["product_id"],
-                    "Raw ALS score": row["als_score"],
-                    "Raw trend score": row["trend_score"],
-                    "Normalized ALS score": row["normalized_als_score"],
-                    "Normalized trend score": row["normalized_trend_score"],
-                    "Final score": row["final_score"],
-                    "From ALS": row["from_als"],
-                    "From trend": row["from_trend"],
-                }
-                for row in recommendations
-            ],
+            comparison_rows(als_payload, hybrid_payload),
             hide_index=True,
             width="stretch",
         )
         st.caption(
-            f"Chart shows only persisted final_score (0–1). Raw ALS/trend values and normalized components are separate table columns; no score is recomputed. "
-            f"Source: final_recommendations · Serving version: {payload['serving_version']} · Snapshot observed: {display_time(payload['observed_at'])}"
+            "ALS score comes from user_recommendations. Trend and final scores come from the stored "
+            "Hybrid snapshot and are blank when that source row is absent. No score is recomputed."
         )
-    show_cached(st, cached)
-    st.info(
-        "Direct ALS-versus-Hybrid comparison is unavailable: the current API exposes verified Hybrid snapshots but no independently verified per-user ALS comparison endpoint. "
-        "A separate backend endpoint and milestone are required."
-    )
-
-
-def error_user_id(session_state: Any) -> int | None:
-    value = session_state.get(LAST_ERROR_KEY, {}).get("user_id")
-    return value if isinstance(value, int) else None
+    show_cached(st, hybrid_cached and als_cached)

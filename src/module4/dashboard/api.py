@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import uuid
+import re
 from typing import Any, Callable, Literal
 
 from fastapi import FastAPI, Path, Query, Request
@@ -43,12 +44,18 @@ from .readers import (
     SnapshotNotFound,
     SnapshotNotReady,
     TrendSnapshotIndexUnavailable,
+    ALSModelNotFound,
+    ALSModelNotReady,
+    ALSSnapshotChanged,
+    InvalidALSSnapshot,
+    read_als_snapshot,
     read_hybrid_snapshot,
     read_trend_snapshot,
 )
 from .schemas import (
     ErrorEnvelope,
     AlsEvaluationResponse,
+    ALSRecommendationResponse,
     BatchDepartmentsResponse,
     BatchProductsResponse,
     EvidenceRegistryResponse,
@@ -164,6 +171,22 @@ def create_app(
     async def database_unavailable(request: Request, _exc: DatabaseReadFailure):
         return _error(request, 503, "service_unavailable", "The data service is temporarily unavailable.")
 
+    @app.exception_handler(ALSModelNotFound)
+    async def als_model_not_found(request: Request, _exc: ALSModelNotFound):
+        return _error(request, 404, "als_model_not_found", "The requested ALS model is not the active published model.")
+
+    @app.exception_handler(ALSModelNotReady)
+    async def als_model_not_ready(request: Request, _exc: ALSModelNotReady):
+        return _error(request, 503, "als_model_not_ready", "The active ALS publication is not ready.")
+
+    @app.exception_handler(ALSSnapshotChanged)
+    async def als_snapshot_changed(request: Request, _exc: ALSSnapshotChanged):
+        return _error(request, 409, "snapshot_changed", "The active model changed during the read; retry the request.")
+
+    @app.exception_handler(InvalidALSSnapshot)
+    async def invalid_als_snapshot(request: Request, _exc: InvalidALSSnapshot):
+        return _error(request, 502, "invalid_source_document", "The stored ALS snapshot failed validation.")
+
     @app.exception_handler(BatchDatabaseFailure)
     async def batch_database_unavailable(request: Request, _exc: BatchDatabaseFailure):
         return _error(request, 503, "service_unavailable", "The data service is temporarily unavailable.")
@@ -240,6 +263,43 @@ def create_app(
     ) -> dict[str, Any]:
         settings: ApiConfig = request.app.state.api_config
         result = read_hybrid_snapshot(request.app.state.database, user_id, max_time_ms=settings.max_time_ms)
+        result["observed_at"] = datetime.now(timezone.utc)
+        return result
+
+    @app.get(
+        "/api/v1/als/recommendations/{user_id}",
+        response_model=ALSRecommendationResponse,
+        responses={
+            404: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            502: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        tags=["recommendations"],
+    )
+    def als_recommendations(
+        request: Request,
+        user_id: int = Path(..., gt=0, le=9_223_372_036_854_775_807),
+        model_version: str | None = Query(None, min_length=1, max_length=80),
+        limit: int = Query(20, ge=1, le=20),
+    ) -> dict[str, Any]:
+        """Return the active version's stored ALS rows; never compute or publish."""
+        settings: ApiConfig = request.app.state.api_config
+        if model_version is not None and (
+            not model_version.strip()
+            or model_version != model_version.strip()
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", model_version)
+            or ".." in model_version
+        ):
+            return _error(request, 422, "invalid_model_version", "model_version has an invalid format.")
+        result = read_als_snapshot(
+            request.app.state.database,
+            user_id,
+            model_version=model_version,
+            limit=limit,
+            max_time_ms=settings.max_time_ms,
+        )
         result["observed_at"] = datetime.now(timezone.utc)
         return result
 

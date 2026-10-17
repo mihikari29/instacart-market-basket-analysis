@@ -14,7 +14,7 @@ import uuid
 from .config import Config
 from .spark import session
 from .data import read_tables, validate, require
-from .analytics import analyze, publish_mongo
+from .analytics import analyze, publish_mongo, tag_user_features
 from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache
 from .eventlog import parse_event_logs, attach_metrics
 
@@ -104,7 +104,10 @@ def main(argv=None):
         if args.command in ("all", "stats"):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
             save(output / "analytics.json", summary)
-            outputs["user_features"].write.mode("overwrite").parquet(config.features())
+            feature_timestamp = report["environment"]["timestamp_utc"]
+            tag_user_features(outputs["user_features"], run_id, feature_timestamp).write.mode(
+                "overwrite"
+            ).parquet(config.features())
             for name in (
                 "batch_product_metrics",
                 "department_metrics",
@@ -120,6 +123,8 @@ def main(argv=None):
                 "summary": "analytics.json",
                 "mongo_published": not args.skip_serving,
                 "user_features": config.features(),
+                "user_features_scope": "prior_only",
+                "user_features_run_id": run_id,
             }
         for command, key, function, argument in (
             ("benchmark-joins", "join_benchmark", benchmark_joins, tables),

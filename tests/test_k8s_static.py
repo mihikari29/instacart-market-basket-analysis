@@ -89,6 +89,26 @@ def _valid_index_metadata() -> dict[str, list[dict]]:
                 "unique": True,
             },
         ],
+        "user_recommendations": [
+            {
+                "name": "uq_model_user_rank",
+                "key": {"model_version": 1, "user_id": 1, "als_rank": 1},
+                "unique": True,
+            },
+            {
+                "name": "uq_model_user_product",
+                "key": {"model_version": 1, "user_id": 1, "product_id": 1},
+                "unique": True,
+            },
+            {"name": "idx_model_user", "key": {"model_version": 1, "user_id": 1}},
+        ],
+        "product_graph_metrics": [
+            {
+                "name": "uq_graph_product",
+                "key": {"graph_version": 1, "product_id": 1},
+                "unique": True,
+            }
+        ],
     }
 
 
@@ -358,6 +378,20 @@ class StaticFoundationTests(unittest.TestCase):
                 ),
                 "uq_serving_user_product": IndexRequirement(
                     (("serving_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+                ),
+            },
+            "user_recommendations": {
+                "uq_model_user_rank": IndexRequirement(
+                    (("model_version", 1), ("user_id", 1), ("als_rank", 1)), unique=True
+                ),
+                "uq_model_user_product": IndexRequirement(
+                    (("model_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+                ),
+                "idx_model_user": IndexRequirement((("model_version", 1), ("user_id", 1))),
+            },
+            "product_graph_metrics": {
+                "uq_graph_product": IndexRequirement(
+                    (("graph_version", 1), ("product_id", 1)), unique=True
                 ),
             },
         }

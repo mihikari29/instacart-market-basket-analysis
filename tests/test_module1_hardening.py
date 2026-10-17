@@ -6,6 +6,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src.module1.config import SyntheticConfig
+from src.module1 import clean as raw_clean
 from src.module1.event_reader import SCHEMA_FIELDS, event_sort_key, iter_ordered_events
 from src.module1.generate import expand_events, finalize, prepare_orders
 from src.module1.producer import main as producer_main, publish_rows
@@ -84,6 +85,103 @@ def _event_rows():
 
 def _write_events(path: Path, rows: list[dict]) -> None:
     pq.write_table(pa.Table.from_pylist(rows).select(SCHEMA_FIELDS), path, row_group_size=2)
+
+
+def _write_raw_fixture(raw_dir: Path, *, reordered: str = "0", bad_train_order: str = "12") -> None:
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    tables = {
+        "orders": (
+            ["order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"],
+            [["11", "1", "prior", "1", "0", "8", ""], ["12", "1", "train", "2", "2", "9", "7"], ["21", "2", "test", "1", "3", "10", ""]],
+        ),
+        "order_products__prior": (
+            ["order_id", "product_id", "add_to_cart_order", "reordered"],
+            [["11", "1", "1", reordered]],
+        ),
+        "order_products__train": (
+            ["order_id", "product_id", "add_to_cart_order", "reordered"],
+            [[bad_train_order, "1", "1", "1"]],
+        ),
+        "products": (["product_id", "product_name", "aisle_id", "department_id"], [["1", "Product one", "10", "2"]]),
+        "aisles": (["aisle_id", "aisle"], [["10", "Aisle one"]]),
+        "departments": (["department_id", "department"], [["2", "Department two"]]),
+    }
+    for table, (headers, rows) in tables.items():
+        pd.DataFrame(rows, columns=headers).to_csv(raw_dir / f"{table}.csv", index=False)
+
+
+def test_raw_preflight_requires_all_six_tables_before_output_creation(tmp_path, monkeypatch, capsys):
+    raw_dir = tmp_path / "data" / "raw"
+    _write_raw_fixture(raw_dir)
+    (raw_dir / "aisles.csv").unlink()
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(tmp_path / "data"), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "aisles.csv: required source file is missing" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw", reordered="2")
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    error = capsys.readouterr().err
+    assert "order_products__prior.csv row 2: reordered must be an integer in [0, 1]" in error
+    assert not output.exists()
+
+
+def test_raw_preflight_rejects_incompatible_foreign_key_before_writing_outputs(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw", bad_train_order="999")
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "order_products__train.csv row 2: order_id does not exist in orders.csv" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_rejects_keys_that_would_alias_after_integer_coercion(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    prior_path = raw_dir / "order_products__prior.csv"
+    prior = pd.read_csv(prior_path, dtype="string", keep_default_na=False)
+    prior.loc[0, "order_id"] = "011"
+    prior.to_csv(prior_path, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "order_products__prior.csv row 2: order_id must be an integer" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_keeps_first_order_null_and_accepts_reordered_columns(tmp_path):
+    raw_dir = tmp_path / "data" / "raw"
+    _write_raw_fixture(raw_dir)
+    path = raw_dir / "orders.csv"
+    frame = pd.read_csv(path, dtype="string", keep_default_na=False)
+    frame = frame[list(reversed(frame.columns))]
+    frame.to_csv(path, index=False)
+
+    tables = raw_clean.load_raw(tmp_path / "data")
+
+    assert len(tables) == 6
+    assert pd.isna(tables["orders"].loc[0, "days_since_prior_order"])
+    assert tables["order_products__prior"].loc[0, "reordered"] == 0
 
 
 def test_external_merge_orders_limits_and_bounds_chunks(tmp_path):

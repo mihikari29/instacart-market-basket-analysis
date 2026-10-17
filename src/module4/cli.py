@@ -35,6 +35,7 @@ from .data import (
     validate_inputs,
     validate_source_receipts,
 )
+from .feature_reader import read_user_features
 from .evaluation import (
     evaluate_at_k,
     global_popularity,
@@ -1025,7 +1026,7 @@ def _save_run_artifacts(output: Path, report: dict):
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["validate", "als", "graph", "all"])
+    parser.add_argument("command", choices=["validate", "als", "graph", "all", "user-features"])
     parser.add_argument("--root")
     parser.add_argument("--master")
     parser.add_argument("--shuffle-partitions", type=int)
@@ -1047,6 +1048,7 @@ def build_parser():
                         default="staged_curated")
     parser.add_argument("--source-receipt", type=Path)
     parser.add_argument("--run-id")
+    parser.add_argument("--user-id", type=int, help="User ID for the descriptive user-features command")
     parser.add_argument("--model-version")
     parser.add_argument("--graph-version")
     parser.add_argument("--skip-serving", action="store_true")
@@ -1080,6 +1082,38 @@ def main(argv=None):
         raise ValueError("pilot_users must be positive")
     if not 1 <= args.max_trials <= 12:
         raise ValueError("max_trials must be between 1 and 12")
+    if args.command == "user-features":
+        if args.user_id is None or args.user_id <= 0:
+            raise ValueError("user-features requires a positive --user-id")
+        inspection_id = args.run_id or (
+            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
+        )
+        inspection_id = _valid_version(inspection_id, "run_id")
+        output = args.output / "user-features" / inspection_id
+        output.mkdir(parents=True, exist_ok=False)
+        started_at = datetime.now(timezone.utc).isoformat()
+        spark = None
+        try:
+            spark = session(config, output / "eventlog")
+            result = read_user_features(spark, config, args.user_id)
+            report = {
+                "inspection_id": inspection_id,
+                "status": result["status"],
+                "scope": result["scope"],
+                "observed_at_utc": started_at,
+                "module2_source": result["source"],
+                "user_id": result["user_id"],
+                "features": result["features"],
+                "model_input": False,
+                "module4_source_code_sha256": source_digest(),
+                "command": ["module4", "user-features", "--user-id", str(args.user_id)],
+            }
+            save_json(output / "user_features.json", report)
+            print(f"[USER FEATURES] {output.resolve()}", flush=True)
+            return 0
+        finally:
+            if spark is not None:
+                spark.stop()
     run_id = _valid_version(
         args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]),
         "run_id",

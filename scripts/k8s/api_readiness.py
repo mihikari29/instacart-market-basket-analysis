@@ -23,7 +23,9 @@ def _index_specs() -> dict[str, dict[str, IndexRequirement]]:
     from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME
     from src.module4.dashboard.batch_readers import PRODUCT_COLLECTION, PRODUCT_INDEXES
     from src.module4.dashboard.readers import (
+        ALS_RECOMMENDATIONS_COLLECTION,
         FINAL_RECOMMENDATIONS_COLLECTION,
+        GRAPH_METRICS_COLLECTION,
         TREND_SELECTION_INDEX_NAME,
     )
 
@@ -48,6 +50,20 @@ def _index_specs() -> dict[str, dict[str, IndexRequirement]]:
             ),
             "uq_serving_user_product": IndexRequirement(
                 (("serving_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+            ),
+        },
+        ALS_RECOMMENDATIONS_COLLECTION: {
+            "uq_model_user_rank": IndexRequirement(
+                (("model_version", 1), ("user_id", 1), ("als_rank", 1)), unique=True
+            ),
+            "uq_model_user_product": IndexRequirement(
+                (("model_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+            ),
+            "idx_model_user": IndexRequirement((("model_version", 1), ("user_id", 1))),
+        },
+        GRAPH_METRICS_COLLECTION: {
+            "uq_graph_product": IndexRequirement(
+                (("graph_version", 1), ("product_id", 1)), unique=True
             ),
         },
     }
