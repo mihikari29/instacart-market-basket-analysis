@@ -16,10 +16,8 @@ from .ownership import (
     RunIdentity,
 )
 from .pipeline import (
-    PIPELINE_IMAGE_ROLES,
     PIPELINE_POLICY_NAMES,
     PIPELINE_STEPS,
-    PipelineError,
     _locked_image,
     _validate_pipeline_lock,
 )

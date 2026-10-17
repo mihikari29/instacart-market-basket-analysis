@@ -11,7 +11,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 from typing import Any, Mapping, Protocol
@@ -19,7 +18,7 @@ from typing import Any, Mapping, Protocol
 import yaml
 
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
-from .runtime import CommandExecutor, containerd_image_inventory_command, kubectl
+from .runtime import containerd_image_inventory_command, kubectl
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]

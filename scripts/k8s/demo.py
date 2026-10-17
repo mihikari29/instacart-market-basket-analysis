@@ -23,7 +23,7 @@ import re
 import shutil
 import sys
 import tempfile
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from .acceptance import ACCEPTANCE_SCENARIOS, AcceptanceError, collect_failure_evidence, run_acceptance
 from .data_receipts import InputReceiptError, inspect_input_directory

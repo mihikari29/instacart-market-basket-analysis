@@ -19,7 +19,7 @@ import shutil
 import subprocess
 from typing import Any, Protocol, Sequence
 
-from .ownership import OwnershipError, RunIdentity
+from .ownership import RunIdentity
 
 
 class RuntimePreflightError(RuntimeError):

@@ -27,7 +27,7 @@ from .receipts import (
     collect_runtime_ownership_receipt,
     receipt_from_document,
 )
-from .runtime import CommandExecutor, _checked, _json_output, kubectl
+from .runtime import _checked, _json_output, kubectl
 
 
 ACCEPTANCE_SCENARIOS = frozenset({

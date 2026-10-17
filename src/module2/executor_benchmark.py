@@ -18,7 +18,6 @@ import re
 import statistics
 import subprocess
 import sys
-import time
 import uuid
 from typing import Any, Callable, Sequence
 

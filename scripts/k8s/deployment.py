@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -19,7 +18,6 @@ from .render import validate_locked_overlay
 from .runtime import (
     CommandExecutor,
     RuntimePreflightError,
-    _checked,
     collect_cluster_identity,
     collect_storage_class_identity,
     collect_toolchain_identity,
