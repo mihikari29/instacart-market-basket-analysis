@@ -40,6 +40,29 @@ def _outputs(module, value=b"published"):
     return {name: _ParquetFixture(value) for name in module._CLEAN_OUTPUT_FILES}
 
 
+class _SeriesFixture:
+    def __init__(self, values, dtype=None):
+        self.values = list(values)
+        self.dtype = dtype
+
+    def astype(self, dtype):
+        return _SeriesFixture(self.values, dtype)
+
+
+class _FrameFixture:
+    def __init__(self, values):
+        self.values = {name: value if isinstance(value, _SeriesFixture) else _SeriesFixture(value) for name, value in values.items()}
+
+    def copy(self):
+        return _FrameFixture({name: series.values for name, series in self.values.items()})
+
+    def __getitem__(self, name):
+        return self.values[name]
+
+    def __setitem__(self, name, value):
+        self.values[name] = value
+
+
 def _mark_owned_output(module, path, value=b"previous"):
     path.mkdir()
     for name in module._CLEAN_OUTPUT_FILES:
@@ -96,6 +119,15 @@ class Module1PublicationSafetyTests(unittest.TestCase):
                 self.clean._CLEAN_OUTPUT_FILES | {self.clean._CLEAN_OUTPUT_MANIFEST},
             )
             self.assertTrue(all((output / name).read_bytes() == b"replacement" for name in self.clean._CLEAN_OUTPUT_FILES))
+
+    def test_cart_positions_use_int32_and_preserve_large_valid_values(self):
+        source = _FrameFixture({"reordered": [0, 1], "add_to_cart_order": [32768, 70000]})
+
+        result = self.clean.clean_order_products(source)
+
+        self.assertEqual(result["add_to_cart_order"].values, [32768, 70000])
+        self.assertEqual(result["add_to_cart_order"].dtype, "int32")
+        self.assertEqual(self.clean.RAW_DATA_TYPES["order_products__prior"]["add_to_cart_order"], "int32")
 
     def test_foreign_output_and_failed_staging_preserve_existing_files(self):
         with tempfile.TemporaryDirectory() as temporary:

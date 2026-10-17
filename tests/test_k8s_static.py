@@ -702,6 +702,20 @@ class StaticFoundationTests(unittest.TestCase):
             self.assertEqual(api["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
             self.assertEqual(ui["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
 
+    def test_browser_assertions_match_recommendation_ui_and_keep_five_chart_gate(self) -> None:
+        browser = (ROOT / "scripts/module4/module4d_browser_e2e.py").read_text(encoding="utf-8")
+        recommendations = (
+            ROOT / "src/module4/dashboard/ui/pages/recommendations.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('st.title("ALS and Hybrid Recommendations")', recommendations)
+        self.assertIn('"Load / refresh ALS and Hybrid"', recommendations)
+        self.assertIn('"ALS and Hybrid Recommendations"', browser)
+        self.assertIn('name="Load / refresh ALS and Hybrid"', browser)
+        for column in ("ALS rank", "ALS score", "Trend score", "Final rank", "Final score"):
+            self.assertIn(column, recommendations)
+            self.assertIn(f'"{column}"', browser)
+        self.assertIn('page, 5, "evaluation page"', browser)
+
 
 if __name__ == "__main__":
     unittest.main()
