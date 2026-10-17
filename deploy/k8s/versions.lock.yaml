@@ -34,6 +34,22 @@ images:
     reference: instacart-module4d-k8s-ui:b1
     immutable_digest: unresolved-until-built-and-inspected
     source: Dockerfile ui target
+  pipeline_application_image:
+    reference: instacart-pipeline-k8s:b3
+    immutable_digest: unresolved-until-built-and-inspected
+    source: Dockerfile pipeline target
+  kafka:
+    reference: apache/kafka:3.7.0
+    immutable_digest: unresolved-until-inspected-on-the-dedicated-profile
+    source: compose.yaml Kafka release selection
+  hdfs_namenode:
+    reference: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    immutable_digest: unresolved-until-inspected-on-the-dedicated-profile
+    source: compose.yaml NameNode release selection
+  hdfs_datanode:
+    reference: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    immutable_digest: unresolved-until-inspected-on-the-dedicated-profile
+    source: compose.yaml DataNode release selection
 image_provenance:
   api_application_image: unresolved-until-built-from-a-clean-commit
   ui_application_image: unresolved-until-built-from-a-clean-commit
@@ -92,3 +108,8 @@ unresolved:
   - kubectl and Docker Engine versions
   - Kubernetes control-plane and Calico image digests
   - default StorageClass identity and persistent-volume behavior
+  - pipeline application image digest and clean-build provenance
+  - Kafka image digest from the locked Kafka 3.7.0 release
+  - HDFS NameNode and DataNode image digests from the selected Hadoop 3.2.1 release
+  - B3 pipeline PVC/PV/StorageClass locality receipts from the dedicated profile
+  - B3 pipeline image runtime and Python dependency inventory

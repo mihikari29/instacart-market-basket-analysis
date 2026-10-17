@@ -1,0 +1,350 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: it4931-pipeline-config
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+data:
+  PIPELINE_RUN_ID: "__RUN_ID__"
+  PIPELINE_MODE: "__MODE__"
+  PIPELINE_HDFS_ROOT: "/instacart/__RUN_ID__"
+  PIPELINE_HDFS_URI: "hdfs://namenode:8020/instacart/__RUN_ID__"
+  PIPELINE_WEBHDFS_URL: "http://namenode:9870"
+  PIPELINE_KAFKA_BOOTSTRAP: "kafka:29092"
+  PIPELINE_TOPIC: "instacart-purchase-events-__RUN_ID__"
+  PIPELINE_TREND_NAMESPACE: "instacart-k8s-demo-v1"
+  PIPELINE_MAX_USERS: "50"
+  PIPELINE_MAX_EVENTS: "5000"
+  PIPELINE_DEMO_USER_ID: "1"
+  PIPELINE_SOURCE_RECEIPT_SHA256: "__SOURCE_RECEIPT_SHA256__"
+  PIPELINE_AS_OF_EVENT_TIME: "__AS_OF_EVENT_TIME__"
+  MODULE2_ROOT: "hdfs://namenode:8020/instacart/__RUN_ID__"
+  MODULE3_ROOT: "hdfs://namenode:8020/instacart/__RUN_ID__"
+  MODULE4_ROOT: "hdfs://namenode:8020/instacart/__RUN_ID__"
+  SPARK_MASTER: "local[2]"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: module4d-pipeline
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it4931-hdfs-namenode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it4931-hdfs-datanode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 16Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it4931-kafka-data
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it4931-pipeline-data
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: it4931-pipeline-checkpoints
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: namenode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: hdfs-namenode
+    it4931.instacart.edu/component: pipeline
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hdfs-namenode
+  ports:
+    - name: rpc
+      port: 8020
+      targetPort: 8020
+    - name: webhdfs
+      port: 9870
+      targetPort: 9870
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datanode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: hdfs-datanode
+    it4931.instacart.edu/component: pipeline
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: hdfs-datanode
+  ports:
+    - name: transfer
+      port: 9866
+      targetPort: 9866
+    - name: web
+      port: 9864
+      targetPort: 9864
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: kafka
+    it4931.instacart.edu/component: pipeline
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kafka
+  ports:
+    - name: broker
+      port: 29092
+      targetPort: 29092
+    - name: controller
+      port: 9093
+      targetPort: 9093
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hdfs-namenode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: hdfs-namenode
+    it4931.instacart.edu/component: pipeline
+spec:
+  serviceName: namenode
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hdfs-namenode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hdfs-namenode
+        it4931.instacart.edu/component: pipeline
+    spec:
+      serviceAccountName: module4d-pipeline
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: namenode
+          image: __HDFS_NAMENODE_IMAGE__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CLUSTER_NAME
+              value: instacart-__RUN_ID__
+            - name: CORE_CONF_fs_defaultFS
+              value: hdfs://namenode:8020
+            - name: HDFS_CONF_dfs_replication
+              value: "1"
+            - name: HDFS_CONF_dfs_namenode_webhdfs_enabled
+              value: "true"
+            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip_hostname_check
+              value: "false"
+            - name: HDFS_CONF_dfs_client_use_datanode_hostname
+              value: "false"
+            - name: HDFS_CONF_dfs_datanode_use_datanode_hostname
+              value: "false"
+          ports:
+            - {name: rpc, containerPort: 8020}
+            - {name: webhdfs, containerPort: 9870}
+          readinessProbe:
+            httpGet: {path: /, port: 9870}
+            periodSeconds: 10
+            failureThreshold: 12
+          resources:
+            requests: {cpu: 250m, memory: 768Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: "1", memory: 1536Mi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /hadoop/dfs/name}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: it4931-hdfs-namenode}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: hdfs-datanode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: hdfs-datanode
+    it4931.instacart.edu/component: pipeline
+spec:
+  serviceName: datanode
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hdfs-datanode
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hdfs-datanode
+        it4931.instacart.edu/component: pipeline
+    spec:
+      serviceAccountName: module4d-pipeline
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: datanode
+          image: __HDFS_DATANODE_IMAGE__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CORE_CONF_fs_defaultFS
+              value: hdfs://namenode:8020
+            - name: HDFS_CONF_dfs_replication
+              value: "1"
+            - name: SERVICE_PRECONDITION
+              value: namenode:9870
+            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip_hostname_check
+              value: "false"
+            - name: HDFS_CONF_dfs_client_use_datanode_hostname
+              value: "false"
+            - name: HDFS_CONF_dfs_datanode_use_datanode_hostname
+              value: "false"
+          ports:
+            - {name: web, containerPort: 9864}
+            - {name: transfer, containerPort: 9866}
+          readinessProbe:
+            httpGet: {path: /, port: 9864}
+            periodSeconds: 10
+            failureThreshold: 12
+          resources:
+            requests: {cpu: 250m, memory: 768Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: "1", memory: 1536Mi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /hadoop/dfs/data}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: it4931-hdfs-datanode}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: kafka
+    it4931.instacart.edu/component: pipeline
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        it4931.instacart.edu/component: pipeline
+    spec:
+      serviceAccountName: module4d-pipeline
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kafka
+          image: __KAFKA_IMAGE__
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: controller,broker}
+            - {name: KAFKA_LISTENERS, value: INTERNAL://:29092,CONTROLLER://:9093}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: INTERNAL://kafka:29092}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: INTERNAL}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: 1@kafka:9093}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true"}
+            - {name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data}
+            - {name: KAFKA_LOG_RETENTION_HOURS, value: "24"}
+            - {name: KAFKA_LOG_RETENTION_BYTES, value: "1073741824"}
+            - {name: KAFKA_LOG_SEGMENT_BYTES, value: "134217728"}
+            - {name: KAFKA_NUM_NETWORK_THREADS, value: "2"}
+            - {name: KAFKA_NUM_IO_THREADS, value: "2"}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xms512m -Xmx512m"}
+          ports:
+            - {name: broker, containerPort: 29092}
+            - {name: controller, containerPort: 9093}
+          readinessProbe:
+            tcpSocket: {port: 29092}
+            periodSeconds: 5
+            failureThreshold: 24
+          resources:
+            requests: {cpu: 250m, memory: 768Mi, ephemeral-storage: 128Mi}
+            limits: {cpu: "1", memory: 1536Mi, ephemeral-storage: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/kafka/data}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: it4931-kafka-data}

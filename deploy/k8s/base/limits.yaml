@@ -7,15 +7,15 @@ metadata:
     app.kubernetes.io/part-of: instacart-k8s-demo
 spec:
   hard:
-    pods: "10"
-    persistentvolumeclaims: "2"
-    requests.cpu: "2"
-    requests.memory: 2Gi
-    requests.storage: 3Gi
-    limits.cpu: "4"
-    limits.memory: 4Gi
-    requests.ephemeral-storage: 512Mi
-    limits.ephemeral-storage: 2Gi
+    pods: "32"
+    persistentvolumeclaims: "6"
+    requests.cpu: "6"
+    requests.memory: 12Gi
+    requests.storage: 40Gi
+    limits.cpu: "10"
+    limits.memory: 16Gi
+    requests.ephemeral-storage: 8Gi
+    limits.ephemeral-storage: 12Gi
 ---
 apiVersion: v1
 kind: LimitRange
@@ -40,5 +40,5 @@ spec:
         memory: 64Mi
       max:
         cpu: "2"
-        memory: 2Gi
-        ephemeral-storage: 1Gi
+        memory: 6Gi
+        ephemeral-storage: 2Gi

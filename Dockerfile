@@ -156,3 +156,43 @@ COPY scripts/k8s/api_readiness.py /workspace/scripts/k8s/api_readiness.py
 USER 10001:10001
 EXPOSE 8000
 CMD ["python3", "-c", "print('Kubernetes runner image; specify an explicit workload command')"]
+
+# B3 Spark pipeline image. It contains the existing module CLIs and the small
+# synthetic six-file fixture. Kubernetes runs Spark in local[2] inside a
+# dedicated Job; it does not create distributed Spark executors.
+FROM spark AS pipeline
+
+ARG MODULE4_COMMIT
+RUN set -eu; \
+    case "$MODULE4_COMMIT" in \
+      ''|*[!0-9a-f]*) echo 'MODULE4_COMMIT must be a full lowercase Git SHA' >&2; exit 1 ;; \
+    esac; \
+    if [ "${#MODULE4_COMMIT}" -ne 40 ]; then \
+      echo 'MODULE4_COMMIT must be exactly 40 characters' >&2; exit 1; \
+    fi; \
+    groupadd --gid 10001 k8spipeline; \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin k8spipeline
+LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \
+      org.opencontainers.image.revision=${MODULE4_COMMIT}
+WORKDIR /workspace
+COPY src/ /workspace/src/
+COPY scripts/ /workspace/scripts/
+COPY pyproject.toml /workspace/pyproject.toml
+COPY Dockerfile /workspace/Dockerfile
+COPY compose.yaml /workspace/compose.yaml
+COPY requirements.txt requirements-dev.txt /workspace/
+COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
+COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
+COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
+COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
+COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python3 /tmp/write-python-environment.py
+ENV PYTHONPATH=/workspace \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    SPARK_LOCAL_DIRS=/tmp/spark \
+    MODULE4_COMMIT=${MODULE4_COMMIT}
+USER 10001:10001
+CMD ["python3", "-c", "print('Kubernetes pipeline image; specify an explicit bounded task')"]

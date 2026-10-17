@@ -151,13 +151,14 @@ def run_stream(
     run_id: str,
     duration_seconds: int | None = None,
     checkpoint_id: str | None = None,
+    checkpoint_root: Path | None = None,
     on_query_started=None,
 ) -> dict:
     """Run until the duration expires, or indefinitely until interrupted."""
     events = from_kafka(spark, config)
     counts = build_window_counts(events, config)
     checkpoint_identity = checkpoint_id or run_id
-    checkpoint = ensure_checkpoint(output_dir.parent, checkpoint_identity)
+    checkpoint = ensure_checkpoint(output_dir.parent, checkpoint_identity, checkpoint_root=checkpoint_root)
     sink_log = output_dir / "sink_batches.jsonl"
 
     def _foreach(batch_df, batch_id):

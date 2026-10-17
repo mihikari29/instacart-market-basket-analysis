@@ -276,7 +276,7 @@ class EventWriter:
             self._gzip_file.close()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -292,7 +292,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--format", dest="fmt", default="parquet", choices=("parquet", "jsonl"))
     parser.add_argument("--list-scenarios", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.list_scenarios:
         print(preset_summary())

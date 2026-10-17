@@ -7,8 +7,9 @@ later process can resume Kafka offsets and aggregation state.
 from pathlib import Path
 
 
-def ensure_checkpoint(output_dir: Path, checkpoint_id: str) -> str:
-    checkpoint = (output_dir / "checkpoint" / checkpoint_id).resolve()
+def ensure_checkpoint(output_dir: Path, checkpoint_id: str, *, checkpoint_root: Path | None = None) -> str:
+    base = checkpoint_root if checkpoint_root is not None else output_dir / "checkpoint"
+    checkpoint = (base / checkpoint_id).resolve()
     checkpoint.mkdir(parents=True, exist_ok=True)
     return checkpoint.as_uri()
 

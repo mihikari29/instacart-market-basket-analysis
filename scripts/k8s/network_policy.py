@@ -7,6 +7,7 @@ from typing import Any
 
 from .ownership import OWNER_LABEL, OWNER_VALUE, RUN_LABEL, RunIdentity
 from .runtime import CommandExecutor, RuntimePreflightError, _json_output, _checked, kubectl
+from .pipeline import PIPELINE_POLICY_NAMES, PipelineError, validate_pipeline_policy_inventory
 
 
 class NetworkPolicyError(ValueError):
@@ -145,7 +146,7 @@ def _require_flow(
 
 
 def collect_network_policy_inventory(
-    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = False
+    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = False, include_pipeline: bool = False
 ) -> dict[str, Any]:
     """Read exact policy objects from the explicit run context without probing flows."""
     if execute is not True:
@@ -160,10 +161,35 @@ def collect_network_policy_inventory(
     items = payload.get("items") if isinstance(payload, Mapping) else None
     if not isinstance(items, list):
         raise NetworkPolicyError("live NetworkPolicy inventory is invalid")
-    validate_network_policy_inventory(items, identity=identity)
+    names = {item.get("metadata", {}).get("name") for item in items if isinstance(item, Mapping)}
+    allowed = REQUIRED_POLICY_NAMES | PIPELINE_POLICY_NAMES
+    if not names.issubset(allowed):
+        raise NetworkPolicyError("live policy inventory contains an unapproved policy")
+    base_items = [item for item in items if item.get("metadata", {}).get("name") in REQUIRED_POLICY_NAMES]
+    validate_network_policy_inventory(base_items, identity=identity)
+    pipeline_items = [item for item in items if item.get("metadata", {}).get("name") in PIPELINE_POLICY_NAMES]
+    if pipeline_items:
+        if not include_pipeline:
+            raise NetworkPolicyError("B3 pipeline policies exist but were not requested in the inventory")
+        for item in pipeline_items:
+            labels = item.get("metadata", {}).get("labels", {})
+            if (
+                item.get("metadata", {}).get("namespace") != identity.namespace
+                or labels.get(OWNER_LABEL) != OWNER_VALUE
+                or labels.get(RUN_LABEL) != identity.run_id
+                or labels.get("it4931.instacart.edu/component") != "pipeline"
+            ):
+                raise NetworkPolicyError("live B3 NetworkPolicy ownership labels do not match")
+        try:
+            validate_pipeline_policy_inventory(pipeline_items)
+        except PipelineError as exc:
+            raise NetworkPolicyError("live B3 pipeline NetworkPolicy contract is invalid") from exc
+    elif include_pipeline:
+        raise NetworkPolicyError("B3 pipeline policies are incomplete")
     return {
         "status": "objects_present",
         "namespace": identity.namespace,
-        "names": sorted(REQUIRED_POLICY_NAMES),
+        "names": sorted(names),
+        "pipeline_policy_inventory": "present" if pipeline_items else "not_requested",
         "enforcement": "not_proven; packet-flow checks belong to B4 runtime acceptance",
     }

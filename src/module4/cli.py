@@ -64,6 +64,8 @@ from .spark import clear_job_group, session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVALUATION_KS = (5, 10, 20)
+_MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
+_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
 def save_json(path: Path, value) -> None:
@@ -114,6 +116,11 @@ def _redact_uri(uri: str) -> str:
         hostname = f"{hostname}:{parsed.port}"
     netloc = f"***@{hostname}" if parsed.username or parsed.password else hostname
     return urlunsplit((parsed.scheme, netloc, parsed.path, "<redacted>" if parsed.query else "", ""))
+
+
+def _redact_sensitive_text(value: str) -> str:
+    redacted = _MONGODB_URI.sub(lambda match: _redact_uri(match.group(0)), value)
+    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", redacted)
 
 
 def _safe_config(config: Config) -> dict:
@@ -1401,8 +1408,8 @@ def main(argv=None):
         report.update(
             status="failed",
             failed_stage=current_stage,
-            error=f"{type(exc).__name__}: {exc}",
-            traceback=traceback.format_exc(),
+            error=f"{type(exc).__name__}: {_redact_sensitive_text(str(exc))}",
+            traceback=_redact_sensitive_text(traceback.format_exc()),
         )
         report["stages"][current_stage] = "failed"
         if als_result is not None and als_result.get("mongo", {}).get("published"):
@@ -1416,7 +1423,7 @@ def main(argv=None):
             ),
             "graph_published": bool(graph_result and graph_result.get("mongo", {}).get("published")),
         }
-        print(f"[FAILED] {current_stage}: {type(exc).__name__}: {exc}", flush=True)
+        print(f"[FAILED] {current_stage}: {type(exc).__name__}: {_redact_sensitive_text(str(exc))}", flush=True)
     finally:
         if "prior" in locals():
             try:

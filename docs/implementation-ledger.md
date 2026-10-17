@@ -29,7 +29,7 @@
 |---|---|---|---|---|
 | 1 Application completeness | Implemented; automated application suite blocked by missing runtime dependencies | Module 1 preflight/atomic publisher; ALS reader/API/schema/client/UI; Module 2 provenance; Module 4 feature reader/CLI; focused tests | Added tests in `test_module1_hardening.py`, `test_module4d_readers.py`, `test_module4d_api.py`, `test_module4d_ui_client.py`, `test_module4d_ui_app.py`, `test_module4_feature_reader.py`, and `test_k8s_static.py`. Executed AST parse for 18 changed Python files, `git diff --check`, and a five-case direct feature-reader smoke. `pytest` suite NOT RUN: pytest and application dependencies are absent. | `05ddd1f` |
 | 2 Kubernetes B2 | Code implemented; runtime evidence and execution pending | Staged strict lock lifecycle; host/toolchain/profile/storage discovery; run-scoped image build/load provenance; Python package inventory; MongoDB bootstrap/indexes and in-memory Secrets; serving deployment/readiness; exact NetworkPolicy inventory; complete live ownership/storage/image receipt and comparison | Added fake/static tests under `test_k8s_runtime.py`, `test_k8s_lock_lifecycle.py`, `test_k8s_image_provenance.py`, `test_k8s_mongo_secrets.py`, `test_k8s_network_policy.py`, `test_k8s_deployment.py`; extended ownership/static suites. Executed 47 focused K8s `unittest` cases (PASS), AST parse for 21 Python files (PASS), YAML parse for 8 lock/manifests (PASS), offline Kustomize rendering as part of the suite (PASS), and `git diff --check` (PASS). Docker/Minikube/Kubernetes/MongoDB were not contacted. | `c728ded` |
-| 3 Kubernetes B3 | Not started | — | — | — |
+| 3 Kubernetes B3 | Code implemented; runtime evidence and execution pending | Run-scoped HDFS/Kafka platform, six-step input/Module 1/2/4/replay/Hybrid pipeline, deterministic bounded fixture, full-data input receipt/transfer, pipeline image target, DataNode/KRaft service and NetworkPolicy contracts, durable task and artifact receipts, strict pipeline ownership/storage/image receipt | Added `test_k8s_pipeline.py`; executed 13 B3 cases and 19 related B2 ownership/network-policy/runtime/lock cases (32 total, PASS), Python bytecode compilation, all `deploy/k8s/**/*.yaml` YAML parsing, and `git diff --check` (PASS). No Docker, services, cluster, or full-data run. | pending |
 | 4 Kubernetes B4 | Not started | — | — | — |
 | 5 Experiments/evaluation | Not started | — | — | — |
 | 6 Final runner | Not started | — | — | — |
@@ -39,6 +39,7 @@
 
 - B3 will target a single isolated Minikube profile and Kubernetes-owned HDFS, Kafka, MongoDB and pipeline storage. Spark will use `local[2]` inside run-scoped Kubernetes Jobs; this is not native Spark-on-Kubernetes executor scaling.
 - No image digest, toolchain identity, cluster UID, runtime metric or successful runtime receipt will be invented. Values that require a later authorized image build or cluster are runtime-discovered lock fields.
+- The complete lock remains a shared B2/B3 identity source. B3 finalization adds exact Kafka/HDFS/pipeline image provenance to the already complete serving and host lock; every selected image identity must be concrete before the common lock can pass complete-lock validation.
 - Runtime deployment, Docker, package installation, full-data execution, existing service access, and teardown are prohibited for this campaign.
 - B2's 47 focused offline K8s tests have run and passed. Milestone 1 application suites remain NOT RUN because the available Python runtime lacks pytest, pandas, PyArrow, FastAPI, PyMongo, Streamlit, and PySpark; no packages were installed.
 
@@ -66,3 +67,11 @@
 - Real HDFS/Kafka/Spark/Mongo/API/UI readiness and acceptance evidence.
 - Full-data acceptance under separately verified capacity/storage guards.
 - Review of the completed code and ledger by the independent Sol 6.1 reviewer.
+
+### Milestone 3 implementation record
+
+- Added dedicated, run-labeled HDFS NameNode/DataNode and Kafka KRaft StatefulSets, isolated PVCs, and eight narrow NetworkPolicies. The manifest validator checks exact service flows, and the Kubernetes receipt binds direct objects, owner chains, PVC/PV identities, and running image/config digests to the lock.
+- Added a private six-step Job plan: input, Module 1 staging, Module 2, Module 4, bounded Kafka replay/Structured Streaming, and a Hybrid read/publish. Fixture inputs are deterministic and capped at 50 users / 5,000 events. Full-data mode accepts exactly six reviewed CSV paths, verifies a SHA-256 input receipt, copies only those files to the run PVC, and checks the uploaded manifest inside the input Job before work proceeds.
+- Module 1 staging now supports an isolated HDFS root and the in-cluster WebHDFS redirect without the legacy Compose hostname rewrite. Jobs are sequential, run-scoped, non-retrying at the Kubernetes layer, and retain their work, checkpoint, logs, and per-step JSON receipts for explicit failure inspection.
+- Kafka uses the selected 3.7.0 KRaft release; the controller port is explicitly exposed and allowed only for Kafka self-traffic. HDFS DataNode WebHDFS and transfer ports are 9864 and 9866, with hostname redirects configured to use pod IPs. These are static image/config assumptions pending an isolated runtime check.
+- Runtime build, component image discovery, profile creation, job execution, service readiness, and final B3 receipt collection were not invoked. Full-data execution was not attempted.

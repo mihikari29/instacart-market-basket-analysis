@@ -187,6 +187,11 @@ def collect_runtime_ownership_receipt(
             object_namespace = metadata.get("namespace")
             if (kind, name) in _SYSTEM_NAMESPACE_OBJECTS:
                 continue
+            if isinstance(labels, Mapping) and labels.get("it4931.instacart.edu/component") == "pipeline":
+                # B2's serving receipt remains a stable subset after the
+                # independently receipted B3 pipeline is added to the same
+                # isolated namespace. B4 teardown must validate both receipts.
+                continue
             if not all(isinstance(value, str) and value for value in (kind, name, uid, object_namespace)):
                 raise ReceiptCollectionError("live Kubernetes kind, name, namespace, or UID is missing")
             if not isinstance(labels, Mapping):
@@ -418,6 +423,39 @@ def validate_collected_receipt(receipt: RuntimeOwnershipReceipt, lock: Mapping[s
         )
     except (KeyError, OwnershipError) as exc:
         raise ReceiptCollectionError("collected runtime receipt failed complete ownership validation") from exc
+
+
+def assert_receipt_matches_lock_and_live(
+    recorded: RuntimeOwnershipReceipt,
+    live: RuntimeOwnershipReceipt,
+    lock: Mapping[str, Any],
+    identity: RunIdentity,
+) -> None:
+    """Validate and compare the B2 serving subset before B3 or a safe resume."""
+    expected_images = {
+        role: (
+            lock["image_provenance"][role]["image_digest"]
+            if role in lock.get("image_provenance", {})
+            else lock["images"][role]["immutable_digest"]
+        )
+        for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES
+    }
+    expected_cluster_images = {
+        **lock["toolchain"]["kubernetes_control_plane_images"],
+        **lock["toolchain"]["calico_images"],
+    }
+    try:
+        from .ownership import assert_receipt_matches_live
+
+        assert_receipt_matches_live(
+            identity, recorded, live,
+            expected_images=expected_images,
+            expected_cluster_images=expected_cluster_images,
+            expected_storage_class=lock["storage"]["default_storage_class"],
+            expected_provisioner=lock["storage"]["provisioner"],
+        )
+    except (KeyError, OwnershipError) as exc:
+        raise ReceiptCollectionError("recorded B2 serving receipt does not match live identities") from exc
 
 
 def receipt_document(receipt: RuntimeOwnershipReceipt) -> dict[str, Any]:
