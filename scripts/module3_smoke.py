@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -205,6 +206,27 @@ def main(argv=None) -> int:
         raise RuntimeError(
             f"Spark input mismatch: expected={receipt['acked_events']} observed={total_input}"
         )
+    sink_batches = [
+        json.loads(line)
+        for line in (artifact / "sink_batches.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    latency_measurements = [
+        batch.get("ingestion_to_output_latency")
+        for batch in sink_batches
+        if isinstance(batch.get("ingestion_to_output_latency"), dict)
+        and batch["ingestion_to_output_latency"].get("status") == "measured"
+    ]
+    if not latency_measurements:
+        raise RuntimeError("Module 3 emitted no measured ingestion-to-output latency sample")
+    for measurement in latency_measurements:
+        latencies = measurement.get("latency_ms", {})
+        if measurement.get("sample_count", 0) < 1 or any(
+            not isinstance(latencies.get(key), (int, float))
+            or not math.isfinite(latencies[key])
+            for key in ("minimum", "mean", "maximum")
+        ):
+            raise RuntimeError(f"Module 3 latency evidence is incomplete: {measurement}")
 
     mongo_code = f"""
 import json
@@ -268,6 +290,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
             "query_id": summary["stream"]["query_id"],
             "total_input_rows": total_input,
             "non_empty_batches": non_empty,
+            "ingestion_to_output_latency": latency_measurements,
         },
         "mongo": mongo,
         "checkpoint_id": checkpoint_id,

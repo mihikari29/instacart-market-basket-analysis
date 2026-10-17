@@ -37,9 +37,14 @@ from .data import (
 )
 from .feature_reader import read_user_features
 from .evaluation import (
+    PRIOR_ONLY_HYBRID_LAMBDAS,
     evaluate_at_k,
     global_popularity,
+    offline_hybrid_recommendations,
     personal_frequency,
+    prior_frequency_trend_products,
+    prior_only_hybrid_evaluation_provenance,
+    prior_trend_only_recommendations,
     ranking_metrics,
     split_truth_by_history,
 )
@@ -515,6 +520,141 @@ def _evaluation_deltas(cohorts):
     return deltas
 
 
+def _evaluate_prior_only_hybrid(
+    interactions,
+    als_recommendations,
+    train_truth,
+    all_users,
+    warm_users,
+    global_baseline,
+    personal_baseline,
+    catalog_size,
+    source_receipt,
+    cold_start_summary,
+    run_id,
+    model_version,
+    source_code_sha256,
+    als_params,
+):
+    """Compare fixed Hybrid lambda values using only prior-derived candidates."""
+    from pyspark import StorageLevel
+
+    provenance = prior_only_hybrid_evaluation_provenance(
+        source_receipt,
+        prior_eval_set="prior",
+        truth_eval_set="train",
+        official_train_used_for_fit=False,
+        official_train_used_for_tuning=False,
+        mixed_module1_event_feed_used=False,
+    )
+    trend_products = prior_frequency_trend_products(interactions, top_m=20).persist(
+        StorageLevel.DISK_ONLY
+    )
+    trend_only = prior_trend_only_recommendations(all_users, trend_products).persist(
+        StorageLevel.DISK_ONLY
+    )
+    cohorts = {
+        "all_official_train_users": (all_users, train_truth),
+        "warm_users_and_all_truth_items": (
+            warm_users,
+            train_truth.join(warm_users, "user_id", "inner"),
+        ),
+    }
+    result = {
+        "status": "evaluated",
+        "run_id": run_id,
+        "model_version": model_version,
+        "source_code_sha256": source_code_sha256,
+        "als_parameters": asdict(als_params),
+        "catalog_size": catalog_size,
+        "provenance": provenance,
+        "candidate_policy": {
+            "als_source": (
+                "prior-only Module 4A recommendations with the established prior-global-popularity "
+                "fallback for users without ALS factors"
+            ),
+            "trend_source": "global prior-frequency Top-20 proxy",
+            "candidate_union": "ALS Top-20 and the same fixed prior-only trend Top-20 for each cohort user",
+            "score_normalization": "per-user min-max ALS and Top-M max-normalized prior product frequency",
+            "output_order": "descending unrounded hybrid score, then ascending product_id",
+            "epsilon": 1e-12,
+            "output_top_k": max(EVALUATION_KS),
+            "lambda_values_preregistered": list(PRIOR_ONLY_HYBRID_LAMBDAS),
+            "lambda_selection": "fixed sweep; official-train truth is not used to select a value",
+        },
+        "cold_start_summary": cold_start_summary,
+        "cohorts": {},
+        "interpretation_boundary": (
+            "Metrics compare held-out official-train truth with prior-only recommendations. "
+            "They do not establish that Hybrid or ALS is superior, and the frequency proxy "
+            "is not equivalent to temporal Module 3 trends."
+        ),
+    }
+    try:
+        baseline_frames = {
+            "als": als_recommendations,
+            "trend_only_prior_frequency": trend_only,
+            "global_popularity": global_baseline,
+            "personal_frequency": personal_baseline,
+        }
+        for cohort_name, (cohort_users, cohort_truth) in cohorts.items():
+            result["cohorts"][cohort_name] = {
+                "users": cohort_users.select("user_id").distinct().count(),
+                "metrics": {
+                    name: evaluate_at_k(
+                        frame.join(cohort_users, "user_id", "inner"),
+                        cohort_truth,
+                        EVALUATION_KS,
+                        catalog_size=catalog_size,
+                    )
+                    for name, frame in baseline_frames.items()
+                },
+            }
+        for lambda_weight in PRIOR_ONLY_HYBRID_LAMBDAS:
+            method_name = f"hybrid_lambda_{lambda_weight:.1f}".replace(".", "_")
+            predictions = offline_hybrid_recommendations(
+                als_recommendations,
+                all_users,
+                trend_products,
+                lambda_weight=lambda_weight,
+                top_k=max(EVALUATION_KS),
+            ).persist(StorageLevel.DISK_ONLY)
+            try:
+                for cohort_name, (cohort_users, cohort_truth) in cohorts.items():
+                    result["cohorts"][cohort_name]["metrics"][method_name] = evaluate_at_k(
+                        predictions.join(cohort_users, "user_id", "inner"),
+                        cohort_truth,
+                        EVALUATION_KS,
+                        catalog_size=catalog_size,
+                    )
+            finally:
+                predictions.unpersist(blocking=False)
+        for cohort in result["cohorts"].values():
+            methods = cohort["metrics"]
+            personal = methods.get("personal_frequency", {})
+            cohort["deltas_vs_personal_frequency"] = {
+                name: {
+                    k: {
+                        metric: (
+                            values.get(k, {}).get(metric) - personal.get(k, {}).get(metric)
+                            if values.get(k, {}).get(metric) is not None
+                            and personal.get(k, {}).get(metric) is not None
+                            else None
+                        )
+                        for metric in ("precision_at_k", "recall_at_k", "map_at_k", "ndcg_at_k")
+                    }
+                    for k in map(str, EVALUATION_KS)
+                }
+                for name, values in methods.items()
+                if name != "personal_frequency"
+            }
+        result["trend_products"] = trend_products.count()
+        return result
+    finally:
+        trend_only.unpersist(blocking=False)
+        trend_products.unpersist(blocking=False)
+
+
 def run_als(
     spark,
     tables,
@@ -743,6 +883,23 @@ def run_als(
             "als_vs_baseline_deltas": _evaluation_deltas(cohort_reports),
             "fallback": "global prior popularity for users without ALS user factors in all-user evaluation only",
         }
+        hybrid_evaluation = _evaluate_prior_only_hybrid(
+            interactions=interactions,
+            als_recommendations=all_als_recommendations,
+            train_truth=train_truth,
+            all_users=truth_users,
+            warm_users=warm_truth_users,
+            global_baseline=all_global,
+            personal_baseline=all_personal,
+            catalog_size=catalog_size,
+            source_receipt=input_receipt,
+            cold_start_summary=all_truth_summary,
+            run_id=run_id,
+            model_version=model_version,
+            source_code_sha256=code_hash,
+            als_params=selected,
+        )
+        save_json(output / "hybrid_evaluation.json", hybrid_evaluation)
         if config.recommendation_k < max(EVALUATION_KS):
             evaluation["publication_k"] = config.recommendation_k
             evaluation["evaluation_k"] = evaluation_k
@@ -753,6 +910,7 @@ def run_als(
             "tuning": tuning,
             "split_summary": split["summary"],
             "evaluation": evaluation,
+            "hybrid_evaluation": hybrid_evaluation,
             "model": model_report,
             "recommendation_validation": publication_validation,
             "mongo": mongo,

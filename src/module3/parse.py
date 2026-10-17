@@ -46,6 +46,11 @@ def parse_json_records(json_df: DataFrame) -> DataFrame:
             F.col("event_time_iso").isNull() | F.col("_event_time_iso").isNull(),
             "event_time_iso",
         ),
+        F.when(
+            F.col("ingestion_time_epoch_ms").isNull()
+            | (F.col("ingestion_time_epoch_ms") <= 0),
+            "ingestion_time_epoch_ms",
+        ),
     ]
     invalid_reason = F.concat_ws(",", *reasons)
     return (

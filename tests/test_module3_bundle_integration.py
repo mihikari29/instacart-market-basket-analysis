@@ -299,6 +299,8 @@ def test_disabled_publisher_keeps_legacy_report_and_never_connects(tmp_path, mon
         "top_k_per_window",
         "replaced_documents",
         "duration_ms",
+        "sink_write_duration_ms",
+        "ingestion_to_output_latency",
         "upserted",
         "modified",
         "matched",
