@@ -29,7 +29,14 @@ from scripts.k8s.ownership import (
     validate_target,
     validate_version_lock,
 )
-from scripts.k8s.receipts import ReceiptCollectionError, _locked_image_digest, receipt_from_document, receipt_json
+from scripts.k8s.pipeline_receipts import PipelineReceiptError, _pv_spec_capacity as _pipeline_pv_spec_capacity
+from scripts.k8s.receipts import (
+    ReceiptCollectionError,
+    _locked_image_digest,
+    _pv_spec_capacity,
+    receipt_from_document,
+    receipt_json,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -330,6 +337,18 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(_locked_image_digest({"reference": "mongo:7.0.16", "immutable_digest": digest}), digest)
         with self.assertRaisesRegex(ReceiptCollectionError, "disagree"):
             _locked_image_digest({"reference": f"mongo:7.0.16@{digest}", "immutable_digest": _DIGEST_B})
+
+    def test_b2_and_b3_receipts_read_capacity_from_pv_spec(self) -> None:
+        volume = {
+            "spec": {"capacity": {"storage": "16Gi"}},
+            "status": {"capacity": {"storage": "999Gi"}},
+        }
+        self.assertEqual(_pv_spec_capacity(volume), "16Gi")
+        self.assertEqual(_pipeline_pv_spec_capacity(volume), "16Gi")
+        with self.assertRaisesRegex(ReceiptCollectionError, "spec"):
+            _pv_spec_capacity({"status": {"capacity": {"storage": "16Gi"}}})
+        with self.assertRaisesRegex(PipelineReceiptError, "spec"):
+            _pipeline_pv_spec_capacity({"status": {"capacity": {"storage": "16Gi"}}})
 
     def test_complete_live_receipt_binds_children_storage_and_running_images(self) -> None:
         identity = RunIdentity("0123456789ab")
