@@ -145,7 +145,7 @@ def _pin_serving_images(base_directory: Path, lock: dict) -> None:
             pod_spec = document.get("spec", {}).get("template", {}).get("spec", {})
             for container_group in ("initContainers", "containers"):
                 containers = pod_spec.get(container_group, [])
-                if not isinstance(containers, list) or not containers:
+                if not isinstance(containers, list) or (container_group == "containers" and not containers):
                     raise ValueError(f"serving workload {key[1]} has no {container_group}")
                 for container in containers:
                     container["image"] = targets[key]
@@ -154,7 +154,13 @@ def _pin_serving_images(base_directory: Path, lock: dict) -> None:
             path.write_text(yaml.safe_dump_all(documents, sort_keys=False), encoding="utf-8")
 
 
-def render_overlay(run_id: str, output: Path, *, version_lock: dict | None = None) -> Path:
+def render_overlay(
+    run_id: str,
+    output: Path,
+    *,
+    version_lock: dict | None = None,
+    trend_source_namespace: str | None = None,
+) -> Path:
     """Copy immutable base files and write unique namespace/config overlays.
 
     The output root is claimed atomically with private permissions. Repository,
@@ -229,20 +235,27 @@ def render_overlay(run_id: str, output: Path, *, version_lock: dict | None = Non
             },
         ],
     }
+    selected_trend_namespace = trend_source_namespace or f"module4d-demo-{identity.run_id}"
+    if not selected_trend_namespace or selected_trend_namespace != selected_trend_namespace.strip():
+        raise ValueError("trend source namespace must be a non-empty exact value")
+    trend_namespaces = [selected_trend_namespace]
+    if trend_source_namespace is not None:
+        trend_namespaces.append(f"{selected_trend_namespace}-b4-{identity.run_id}")
+    configured_trend_namespaces = ",".join(trend_namespaces)
     api_config_patch = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
         "metadata": {"name": "module4d-api-config"},
         "data": {
             "MODULE4D_MONGO_DATABASE": f"module4d_demo_{identity.run_id}",
-            "MODULE4D_TREND_SOURCE_NAMESPACES": f"module4d-demo-{identity.run_id}",
+            "MODULE4D_TREND_SOURCE_NAMESPACES": configured_trend_namespaces,
         },
     }
     ui_config_patch = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
         "metadata": {"name": "module4d-ui-config"},
-        "data": {"MODULE4D_TREND_SOURCE_NAMESPACES": f"module4d-demo-{identity.run_id}"},
+        "data": {"MODULE4D_TREND_SOURCE_NAMESPACES": configured_trend_namespaces},
     }
     mongo_pvc_patch = {
         "apiVersion": "apps/v1",
@@ -269,7 +282,13 @@ def render_overlay(run_id: str, output: Path, *, version_lock: dict | None = Non
     return run_directory
 
 
-def validate_locked_overlay(run_id: str, run_directory: Path, version_lock: dict) -> None:
+def validate_locked_overlay(
+    run_id: str,
+    run_directory: Path,
+    version_lock: dict,
+    *,
+    trend_source_namespace: str | None = None,
+) -> None:
     """Reject a modified or unpinned render before it can be sent to Kubernetes."""
     identity = RunIdentity(run_id)
     validate_static_lock(version_lock)
@@ -288,10 +307,17 @@ def validate_locked_overlay(run_id: str, run_directory: Path, version_lock: dict
     try:
         overlay = json.loads((run_path / "kustomization.yaml").read_text(encoding="utf-8"))
         namespace = json.loads((run_path / "namespace.json").read_text(encoding="utf-8"))
+        api_config_patch = json.loads((run_path / "api-config-patch.json").read_text(encoding="utf-8"))
+        ui_config_patch = json.loads((run_path / "ui-config-patch.json").read_text(encoding="utf-8"))
         mongo_pvc_patch = json.loads((run_path / "mongo-pvc-patch.json").read_text(encoding="utf-8"))
         base_kustomization = json.loads((output_root / "base" / "kustomization.yaml").read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError("locked render metadata could not be read") from exc
+    expected_namespace = trend_source_namespace or f"module4d-demo-{identity.run_id}"
+    configured_namespaces = [expected_namespace]
+    if trend_source_namespace is not None:
+        configured_namespaces.append(f"{expected_namespace}-b4-{identity.run_id}")
+    configured_value = ",".join(configured_namespaces)
     if (
         overlay.get("namespace") != identity.namespace
         or namespace.get("kind") != "Namespace"
@@ -299,6 +325,12 @@ def validate_locked_overlay(run_id: str, run_directory: Path, version_lock: dict
         or namespace.get("metadata", {}).get("labels") != identity.labels
     ):
         raise ValueError("locked render namespace identity does not match the run")
+    if (
+        api_config_patch.get("data", {}).get("MODULE4D_MONGO_DATABASE") != f"module4d_demo_{identity.run_id}"
+        or api_config_patch.get("data", {}).get("MODULE4D_TREND_SOURCE_NAMESPACES") != configured_value
+        or ui_config_patch.get("data", {}).get("MODULE4D_TREND_SOURCE_NAMESPACES") != configured_value
+    ):
+        raise ValueError("locked render serving configuration differs from the run's B3 source contract")
     claim_templates = mongo_pvc_patch.get("spec", {}).get("volumeClaimTemplates", [])
     if (
         len(claim_templates) != 1

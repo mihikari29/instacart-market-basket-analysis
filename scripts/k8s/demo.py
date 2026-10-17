@@ -16,6 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -33,6 +34,7 @@ from .mongo_secrets import build_mongo_secret_bundle
 from .ownership import OwnershipError, RunIdentity, validate_version_lock
 from .pipeline import (
     PipelineError,
+    TREND_SOURCE_NAMESPACE,
     discover_pipeline_component_images,
     execute_pipeline,
     execute_pipeline_image_build,
@@ -41,6 +43,7 @@ from .pipeline import (
     pipeline_image_build_plan,
     plan_pipeline,
     render_pipeline_assets,
+    validate_full_data_storage_budget,
 )
 from .pipeline_receipts import pipeline_receipt_from_document
 from .pipeline_receipts import validate_pipeline_receipt
@@ -81,7 +84,6 @@ SESSION_RECEIPT = "demo-session.json"
 PREPARATION_RECEIPT = "preparation-state.json"
 _RUN_PROFILE = re.compile(r"it4931-k8s-([0-9a-f]{12})\Z")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_FULL_INPUT_MAX_BYTES = 12 * 1024**3
 _STAGE_NAMES = (
     "local_identity", "profile_creation", "application_images", "pipeline_images",
     "lock_finalization", "private_render", "namespace_preflight", "serving", "pipeline", "acceptance",
@@ -380,8 +382,10 @@ def _validate_mode_inputs(
         receipt = inspect_input_directory(input_directory)
     except (RuntimePreflightError, InputReceiptError) as exc:
         raise DemoError(f"full-data preflight stopped: {exc}") from exc
-    if receipt.get("total_bytes", _FULL_INPUT_MAX_BYTES + 1) > _FULL_INPUT_MAX_BYTES:
-        raise DemoError("full-data inputs exceed the 12 GiB source-storage guard for the 16 GiB HDFS DataNode claim")
+    try:
+        validate_full_data_storage_budget(receipt.get("total_bytes"))
+    except PipelineError as exc:
+        raise DemoError(f"full-data storage preflight stopped: {exc}") from exc
     return receipt
 
 
@@ -437,7 +441,7 @@ def preflight_report(
     """Perform local-only checks; this function never starts external tools."""
     capacity = measure_host_capacity(disk_path=disk_path)
     if windows_backing_disk_gib is not None:
-        if isinstance(windows_backing_disk_gib, bool) or windows_backing_disk_gib <= 0:
+        if isinstance(windows_backing_disk_gib, bool) or not math.isfinite(windows_backing_disk_gib) or windows_backing_disk_gib <= 0:
             raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
         capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
         capacity["windows_backing_disk_source"] = "operator-supplied measured value"
@@ -504,8 +508,11 @@ def _require_absent_namespace(executor: CommandExecutor, identity: RunIdentity) 
 
 
 def _acceptance_passed(mode: str, receipt: Mapping[str, Any]) -> bool:
-    expected = "fixture_runtime_pass" if mode == "fixture" else "full_data_runtime_pass"
-    return receipt.get("status") == expected and receipt.get("scope") == f"{mode}_runtime"
+    expected = {
+        "fixture": ("fixture_runtime_pass", "fixture_runtime"),
+        "full": ("full_data_runtime_pass", "full_data_runtime"),
+    }.get(mode)
+    return expected is not None and (receipt.get("status"), receipt.get("scope")) == expected
 
 
 def run_demo(
@@ -526,7 +533,7 @@ def run_demo(
     active_executor = executor or SubprocessExecutor()
     host_capacity = dict(capacity) if capacity is not None else measure_host_capacity()
     if windows_backing_disk_gib is not None:
-        if isinstance(windows_backing_disk_gib, bool) or windows_backing_disk_gib <= 0:
+        if isinstance(windows_backing_disk_gib, bool) or not math.isfinite(windows_backing_disk_gib) or windows_backing_disk_gib <= 0:
             raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
         host_capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
         host_capacity["windows_backing_disk_source"] = "operator-supplied measured value"
@@ -593,7 +600,12 @@ def run_demo(
     plan = _plan_document(identity, mode, host_capacity=host_capacity, source_receipt_sha256=source_sha)
 
     try:
-        render_overlay(identity.run_id, root, version_lock=dict(lock))
+        render_overlay(
+            identity.run_id,
+            root,
+            version_lock=dict(lock),
+            trend_source_namespace=TREND_SOURCE_NAMESPACE,
+        )
         session_path = root / SESSION_RECEIPT
         session: dict[str, Any] = {
             "schema_version": 1,
@@ -628,6 +640,7 @@ def run_demo(
             host_capacity=host_capacity,
             run_directory=root / "run",
             secret_bundle=secret_bundle,
+            trend_source_namespace=TREND_SOURCE_NAMESPACE,
             execute=True,
         )
         serving_receipt = serving_result.get("ownership_receipt")
@@ -645,6 +658,7 @@ def run_demo(
             mode=mode,
             host_capacity=host_capacity,
             source_receipt_sha256=source_sha,
+            input_directory=input_directory,
         )
         session["stage"] = "pipeline"
         _write_private_json(session_path, session, allow_replace=True)
@@ -770,10 +784,13 @@ def verify_run(run_id: str, output_directory: Path | str) -> dict[str, Any]:
         except Exception as exc:
             raise DemoError("saved B2/B3 ownership receipts are malformed or inconsistent") from exc
         acceptance = _read_json(root / artifacts["acceptance_receipt"]["path"])
-        expected_status = "fixture_runtime_pass" if session.get("mode") == "fixture" else "full_data_runtime_pass"
+        expected_status, expected_scope = {
+            "fixture": ("fixture_runtime_pass", "fixture_runtime"),
+            "full": ("full_data_runtime_pass", "full_data_runtime"),
+        }.get(session.get("mode"), (None, None))
         if (
             acceptance.get("status") != expected_status
-            or acceptance.get("scope") != f"{session.get('mode')}_runtime"
+            or acceptance.get("scope") != expected_scope
             or acceptance.get("run_id") != identity.run_id
             or acceptance.get("profile") != identity.profile
             or acceptance.get("namespace") != identity.namespace
@@ -997,6 +1014,7 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--mode", choices=("fixture", "full"), default="fixture")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--input-dir", type=Path)
+    plan.add_argument("--windows-backing-disk-gib", type=float)
 
     run = commands.add_parser("run", help="prepare a fresh dedicated profile and run B2, B3, then B4")
     run.add_argument("--mode", choices=("fixture", "full"), default="fixture")
@@ -1037,6 +1055,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "plan":
             identity = RunIdentity(args.run_id)
             capacity = measure_host_capacity()
+            if args.windows_backing_disk_gib is not None:
+                if (
+                    isinstance(args.windows_backing_disk_gib, bool)
+                    or not math.isfinite(args.windows_backing_disk_gib)
+                    or args.windows_backing_disk_gib <= 0
+                ):
+                    raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
+                capacity["windows_backing_disk_gib"] = args.windows_backing_disk_gib
+                capacity["windows_backing_disk_source"] = "operator-supplied measured value"
             source = _validate_mode_inputs(args.mode, input_directory=args.input_dir, capacity=capacity)
             report = _plan_document(
                 identity, args.mode, host_capacity=capacity,

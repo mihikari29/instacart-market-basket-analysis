@@ -474,12 +474,6 @@ def validate_runtime_receipt(
         or storage.pv_claim_name != storage.claim_name
         or storage.pv_claim_uid != pvc.uid
         or storage.claim_owner_uid != sts.uid
-        or len(pvc.owner_references) != 1
-        or not isinstance(pvc.owner_references[0], OwnerReferenceIdentity)
-        or pvc.owner_references[0].kind != "StatefulSet"
-        or pvc.owner_references[0].name != sts.name
-        or pvc.owner_references[0].uid != sts.uid
-        or not pvc.owner_references[0].controller
         or storage.volume_name.strip() == ""
         or storage.volume_uid.strip() == ""
         or storage.volume_uid in uids

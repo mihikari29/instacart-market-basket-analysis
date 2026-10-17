@@ -153,7 +153,7 @@ def collect_network_policy_inventory(
         raise NetworkPolicyError("live policy discovery requires explicit execute=True authorization")
     try:
         payload = _json_output(
-            _checked(executor, kubectl(identity, "get", "networkpolicy", "-o", "json")),
+            _checked(executor, kubectl(identity, "--namespace", identity.namespace, "get", "networkpolicies", "-o", "json")),
             "NetworkPolicy inventory",
         )
     except RuntimePreflightError:

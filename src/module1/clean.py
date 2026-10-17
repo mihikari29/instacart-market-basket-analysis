@@ -232,19 +232,21 @@ def _coerce_raw_tables(tables: dict[str, pd.DataFrame]) -> dict[str, pd.DataFram
     return tables
 
 
-def _validate_publication_paths(data_dir: Path, output_dir: Path) -> tuple[Path, Path]:
+def _validate_publication_paths(
+    data_dir: Path, output_dir: Path, raw_dir: Path | None = None
+) -> tuple[Path, Path]:
     """Reject aliases and replacement boundaries that can contain raw inputs."""
-    for candidate in (data_dir, output_dir.parent):
+    selected_raw_dir = raw_dir if raw_dir is not None else data_dir / "raw"
+    for candidate in (data_dir, output_dir.parent, selected_raw_dir):
         absolute = candidate.absolute()
         current = Path(absolute.anchor)
         for part in absolute.parts[1:]:
             current = current / part
             if current.is_symlink():
                 raise ValueError("data and output paths must not traverse symlinks")
-    raw_dir = data_dir / "raw"
-    if raw_dir.is_symlink():
+    if selected_raw_dir.is_symlink():
         raise ValueError("raw input directory must not be a symlink")
-    raw_real = raw_dir.resolve(strict=False)
+    raw_real = selected_raw_dir.resolve(strict=False)
     output_real = output_dir.resolve(strict=False)
     if output_dir.is_symlink():
         raise ValueError("output directory must not be a symlink")
@@ -264,7 +266,7 @@ def _validate_publication_paths(data_dir: Path, output_dir: Path) -> tuple[Path,
     # Do not follow symlinked raw files during input validation. Resolve every
     # expected source path as a second defense against a file alias escape.
     for table_name in RAW_COLUMNS:
-        source = raw_dir / f"{table_name}.csv"
+        source = selected_raw_dir / f"{table_name}.csv"
         if source.is_symlink():
             raise ValueError(f"raw input {table_name}.csv must not be a symlink")
         try:
@@ -307,12 +309,12 @@ def _remove_published_output(path: Path) -> None:
     path.rmdir()
 
 
-def load_raw(data_dir: Path) -> dict[str, pd.DataFrame]:
+def load_raw(data_dir: Path, raw_dir: Path | None = None) -> dict[str, pd.DataFrame]:
     dataframes: dict[str, pd.DataFrame] = {}
     diagnostics: list[str] = []
-    raw_dir = data_dir / "raw"
+    raw_dir = raw_dir if raw_dir is not None else data_dir / "raw"
     for table_name, columns in RAW_COLUMNS.items():
-        csv_path = data_dir / "raw" / f"{table_name}.csv"
+        csv_path = raw_dir / f"{table_name}.csv"
         if not csv_path.exists():
             diagnostics.append(f"{table_name}.csv: required source file is missing from {raw_dir}")
             continue
@@ -443,19 +445,21 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     default_data_dir = Path(__file__).resolve().parents[2] / "data"
     parser.add_argument("--data-dir", default=str(default_data_dir))
+    parser.add_argument("--raw-dir", default=None, help="six-file input directory; defaults to <data-dir>/raw")
     parser.add_argument("--output-dir", "--out-dir", dest="output_dir", default=None)
     parser.add_argument("--validate", action="store_true", help="Print data quality audit statistics")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
+    raw_dir = Path(args.raw_dir) if args.raw_dir else None
     output_dir = Path(args.output_dir) if args.output_dir else data_dir / "clean"
     try:
-        _validate_publication_paths(data_dir, output_dir)
+        _validate_publication_paths(data_dir, output_dir, raw_dir)
     except (OSError, ValueError) as exc:
         print(f"unsafe cleaned-output path: {exc}", file=sys.stderr)
         return 2
     try:
-        dataframes = load_raw(data_dir)
+        dataframes = load_raw(data_dir, raw_dir)
     except RawInputValidationError as exc:
         print(str(exc), file=sys.stderr)
         return 2

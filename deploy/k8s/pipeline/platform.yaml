@@ -89,7 +89,7 @@ spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests:
-      storage: 8Gi
+      storage: 16Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -314,10 +314,10 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - {name: KAFKA_NODE_ID, value: "1"}
-            - {name: KAFKA_PROCESS_ROLES, value: controller,broker}
-            - {name: KAFKA_LISTENERS, value: INTERNAL://:29092,CONTROLLER://:9093}
+            - {name: KAFKA_PROCESS_ROLES, value: "controller,broker"}
+            - {name: KAFKA_LISTENERS, value: "INTERNAL://:29092,CONTROLLER://:9093"}
             - {name: KAFKA_ADVERTISED_LISTENERS, value: INTERNAL://kafka:29092}
-            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"}
             - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: INTERNAL}
             - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
             - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: 1@kafka:9093}

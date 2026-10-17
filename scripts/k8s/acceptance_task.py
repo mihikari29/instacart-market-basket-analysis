@@ -10,9 +10,9 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
-import socket
 import time
 from typing import Any
 
@@ -166,6 +166,69 @@ def _check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]
     return {"scope": benchmark["execution_scope"], "arms": summaries, "executor_scaling_claimed": False}
 
 
+def _check_module2_experiments(module2_receipt: dict[str, Any]) -> dict[str, Any]:
+    """Reconcile all three Spark query experiments to their saved performance receipt."""
+    experiment = module2_receipt.get("module2_experiments")
+    if not isinstance(experiment, dict) or experiment.get("status") != "passed":
+        raise TaskError("Module 2 join, partition, and cache experiment receipt is missing")
+    path = Path(str(experiment.get("summary_path", "")))
+    root = RUNTIME_ROOT.resolve()
+    if path.is_symlink() or not path.is_file():
+        raise TaskError("Module 2 performance summary is missing or unsafe")
+    try:
+        path.resolve(strict=True).relative_to(root)
+        raw = path.read_bytes()
+        summary = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise TaskError("Module 2 performance summary failed its path or JSON check") from exc
+    digest = hashlib.sha256(raw).hexdigest()
+    required = {"join_benchmark", "partition_pruning", "cache_benchmark"}
+    if (
+        digest != experiment.get("summary_sha256")
+        or experiment.get("experiments") != sorted(required)
+        or summary.get("status") != "passed"
+        or experiment.get("source_sha256") != summary.get("validation", {}).get("source_receipt", {}).get("source_sha256")
+    ):
+        raise TaskError("Module 2 performance summary does not match the successful source-bound receipt")
+
+    def measured_arms(key: str, arm_names: set[str]) -> dict[str, float]:
+        value = summary.get(key)
+        if not isinstance(value, dict) or set(value).intersection(arm_names) != arm_names:
+            raise TaskError(f"Module 2 {key} is missing required experimental arms")
+        result = {}
+        for name in sorted(arm_names):
+            arm = value[name]
+            runs = arm.get("runs_seconds") if isinstance(arm, dict) else None
+            median = arm.get("median_seconds") if isinstance(arm, dict) else None
+            if (
+                not isinstance(runs, list) or len(runs) < 3
+                or any(type(item) not in (int, float) or not math.isfinite(item) or item <= 0 for item in runs)
+                or type(median) not in (int, float) or not math.isfinite(median) or median <= 0
+            ):
+                raise TaskError(f"Module 2 {key} arm {name} lacks three finite measured timings")
+            result[name] = float(median)
+        return result
+
+    joins = measured_arms("join_benchmark", {"sort_merge", "broadcast_hash"})
+    partitions = measured_arms("partition_pruning", {"full_scan", "date_filter", "partition_filter"})
+    cache = measured_arms("cache_benchmark", {"uncached", "cached_reuse"})
+    if (
+        summary["join_benchmark"].get("outputs_equal") is not True
+        or summary["join_benchmark"].get("operators_verified") is not True
+        or summary["partition_pruning"].get("partition_filters_verified") is not True
+        or summary["partition_pruning"].get("equivalent_filters_equal") is not True
+        or summary["cache_benchmark"].get("outputs_equal") is not True
+    ):
+        raise TaskError("Module 2 experiment output, plan, or partition-pruning verification failed")
+    return {
+        "summary_sha256": digest,
+        "source_sha256": experiment["source_sha256"],
+        "join_medians_seconds": joins,
+        "partition_medians_seconds": partitions,
+        "cache_medians_seconds": cache,
+    }
+
+
 def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
     from kafka import KafkaConsumer, KafkaProducer, TopicPartition
     from kafka.admin import KafkaAdminClient, NewTopic
@@ -191,7 +254,12 @@ def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
         producer.flush(timeout=15)
     finally:
         producer.close(timeout=10)
-    consumer = KafkaConsumer(bootstrap_servers=bootstrap, enable_auto_commit=False, request_timeout_ms=5000)
+    consumer = KafkaConsumer(
+        bootstrap_servers=bootstrap,
+        enable_auto_commit=False,
+        request_timeout_ms=5000,
+        value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),
+    )
     try:
         partition = TopicPartition(topic, 0)
         consumer.assign([partition])
@@ -347,15 +415,19 @@ def _check_als_graph_readback(run_id: str) -> dict[str, Any]:
     return {"model_version": model, "recommendation_documents": recommendation_count, "graph_version": graph, "graph_documents": graph_count}
 
 
-def _check_hybrid_trend_sensitivity() -> dict[str, Any]:
+def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     from pymongo import MongoClient
+    from src.module3.config import Config as StreamConfig
+    from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
     from src.module4.config import Config as Module4Config
-    from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME
-    from src.module4.hybrid.config import HybridRankingConfig, TrendRecommendation, TrendSnapshot
+    from src.module4.hybrid.config import HybridRankingConfig
     from src.module4.hybrid.data import capture_verified_user_sources
-    from src.module4.hybrid.ranking import rank_hybrid_recommendations
+    from src.module4.hybrid.service import serve_hybrid_user
     from src.module4.hybrid.trend_reader import read_verified_trend_snapshot
+    from pyspark.sql.types import DoubleType, IntegerType, LongType, StructField, StructType, TimestampType
+    import requests
 
+    values = _runtime_values()
     user_id = int(os.environ.get("PIPELINE_DEMO_USER_ID", "1"))
     uri = os.environ["MONGODB_URI"]
     database = os.environ["MODULE4D_MONGO_DATABASE"]
@@ -386,29 +458,133 @@ def _check_hybrid_trend_sensitivity() -> dict[str, Any]:
     selected = [row.product_id for row in als[:2]]
     if any(product_id not in catalog for product_id in selected):
         raise TaskError("B4 Hybrid test candidates are missing from the verified graph catalog")
-    ranking_config = HybridRankingConfig(lambda_weight=0.3, output_top_k=2)
-    context = captured.source_context
-    first = TrendSnapshot(available=True, rows=(
-        TrendRecommendation(selected[0], 0.0, 2), TrendRecommendation(selected[1], 1.0, 1),
-    ))
-    changed = TrendSnapshot(available=True, rows=(
-        TrendRecommendation(selected[0], 1.0, 1), TrendRecommendation(selected[1], 0.0, 2),
-    ))
-    before = rank_hybrid_recommendations(user_id, als, first, catalog, context, ranking_config)
-    after = rank_hybrid_recommendations(user_id, als, changed, catalog, context, ranking_config)
-    before_top = before.recommendations[0]
-    after_top = after.recommendations[0]
-    if before_top.product_id == after_top.product_id or before_top.final_score == after_top.final_score:
-        raise TaskError("Hybrid trend change did not change the top product and FinalScore")
+    ranking_config = HybridRankingConfig(lambda_weight=0.5, output_top_k=20)
+    processing_time = datetime.now(timezone.utc).replace(microsecond=(datetime.now(timezone.utc).microsecond // 1000) * 1000)
+    as_of = as_of.replace(microsecond=(as_of.microsecond // 1000) * 1000)
+
+    def read_api_snapshot() -> dict[str, Any]:
+        try:
+            response = requests.get(
+                f"http://module4d-api:8000/api/v1/recommendations/{user_id}",
+                headers={"Cache-Control": "no-cache"}, timeout=15,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            raise TaskError(f"B4 API recommendation readback failed ({type(exc).__name__})") from exc
+        if not isinstance(payload, dict) or payload.get("user_id") != user_id or not payload.get("recommendations"):
+            raise TaskError("B4 API did not return the ready run-scoped user recommendation snapshot")
+        return payload
+
+    baseline_publication = serve_hybrid_user(
+        module4_config,
+        user_id=user_id,
+        source_namespace=source_namespace,
+        as_of_event_time=as_of,
+        ranking_config=ranking_config,
+        processing_time_utc=processing_time,
+    )
+    if baseline_publication.publication_status not in {"published", "already_active"}:
+        raise TaskError("B4 baseline Hybrid publication did not reach a ready state")
+    before = read_api_snapshot()
+
+    changed_namespace = f"{source_namespace}-b4-{values['PIPELINE_RUN_ID']}"
+    changed_rows = [
+        {
+            "window_start": trend_result.window_start,
+            "window_end": trend_result.window_end,
+            "product_id": selected[0],
+            "purchase_count_30m": 0,
+            "purchase_count_120m": 1,
+            "trend_score": 0.0,
+            "trend_rank": 2,
+        },
+        {
+            "window_start": trend_result.window_start,
+            "window_end": trend_result.window_end,
+            "product_id": selected[1],
+            "purchase_count_30m": 1,
+            "purchase_count_120m": 1,
+            "trend_score": 1.0,
+            "trend_rank": 1,
+        },
+    ]
+    schema = StructType([
+        StructField("window_start", TimestampType(), False),
+        StructField("window_end", TimestampType(), False),
+        StructField("product_id", LongType(), False),
+        StructField("purchase_count_30m", LongType(), False),
+        StructField("purchase_count_120m", LongType(), False),
+        StructField("trend_score", DoubleType(), False),
+        StructField("trend_rank", IntegerType(), False),
+    ])
+    controlled = spark.createDataFrame(changed_rows, schema=schema)
+    stream_config = StreamConfig(
+        root=values["PIPELINE_HDFS_URI"], master="local[2]", mongodb_uri=uri,
+        mongo_database=database, mongo_top_k_per_window=20,
+        publish_trend_bundles=True, trend_source_namespace=changed_namespace,
+        trend_source_scope="b4_controlled_trend_sensitivity",
+    )
+    with MongoClient(uri, serverSelectionTimeoutMS=10000) as writer:
+        collection = writer[database][BUNDLE_COLLECTION_NAME]
+        publication = write_trend_bundles(
+            controlled,
+            collection,
+            stream_config,
+            source_namespace=changed_namespace,
+            source_scope="b4_controlled_trend_sensitivity",
+            published_at=processing_time,
+            retention_seconds=86_400,
+        )
+    if publication.bundles_created != 1 or publication.trend_rows_represented != 2:
+        raise TaskError("B4 controlled trend bundle was not published as one two-product immutable snapshot")
+    with MongoClient(uri, serverSelectionTimeoutMS=10000) as reader:
+        changed = read_verified_trend_snapshot(
+            reader[database][BUNDLE_COLLECTION_NAME],
+            source_namespace=changed_namespace,
+            as_of_event_time=as_of,
+            processing_time_utc=processing_time,
+        )
+    if not changed.available or changed.content_sha256 is None:
+        raise TaskError("B4 controlled trend publication failed verified readback")
+    changed_publication = serve_hybrid_user(
+        module4_config,
+        user_id=user_id,
+        source_namespace=changed_namespace,
+        as_of_event_time=as_of,
+        ranking_config=ranking_config,
+        processing_time_utc=processing_time,
+    )
+    if changed_publication.publication_status not in {"published", "already_active"}:
+        raise TaskError("B4 changed-trend Hybrid publication did not reach a ready state")
+    after = read_api_snapshot()
+    if (
+        before.get("source", {}).get("trend_source_namespace") != source_namespace
+        or after.get("source", {}).get("trend_source_namespace") != changed_namespace
+        or after.get("serving_version") != changed_publication.serving_version
+    ):
+        raise TaskError("B4 API did not expose the controlled trend source and its new serving version")
+    before_top = before["recommendations"][0]
+    after_top = after["recommendations"][0]
+    if (
+        before_top["product_id"] == after_top["product_id"]
+        and abs(before_top["final_score"] - after_top["final_score"]) <= 1e-12
+    ):
+        raise TaskError("published trend change did not alter the API-visible ranking or FinalScore")
     return {
-        "before_product_id": before_top.product_id,
-        "before_final_score": before_top.final_score,
-        "after_product_id": after_top.product_id,
-        "after_final_score": after_top.final_score,
+        "before_product_id": before_top["product_id"],
+        "before_final_score": before_top["final_score"],
+        "after_product_id": after_top["product_id"],
+        "after_final_score": after_top["final_score"],
         "verified_trend_content_sha256": trend_result.content_sha256,
+        "controlled_trend_content_sha256": changed.content_sha256,
         "als_model_version": captured.model_version,
         "graph_version": captured.graph_version,
-        "scope": "counterfactual_trend_change_using_run_scoped_als_graph_and_catalog",
+        "source_namespace": changed_namespace,
+        "baseline_serving_version": baseline_publication.serving_version,
+        "changed_serving_version": changed_publication.serving_version,
+        "api_readback_verified": True,
+        "scope": "published_immutable_trend_change_read_back_and_api_visible",
     }
 
 
@@ -439,6 +615,7 @@ def run() -> dict[str, Any]:
     for label, value in (("Module 2", module2_receipt), ("Module 4", module4_receipt)):
         if not isinstance(value.get("artifacts"), list) or not value["artifacts"]:
             raise TaskError(f"{label} did not leave a hashed output artifact inventory")
+    module2_experiments = _check_module2_experiments(module2_receipt)
     executor_benchmark = _check_executor_benchmark(module2_receipt)
     replay_receipt = _load_step("replay")["receipt"]
     producer = replay_receipt.get("producer") if isinstance(replay_receipt, dict) else None
@@ -447,6 +624,9 @@ def run() -> dict[str, Any]:
     hybrid_receipt = _load_step("hybrid")["receipt"]
     if not isinstance(hybrid_receipt, dict) or hybrid_receipt.get("status") not in {"published", "already_active"}:
         raise TaskError("Module 4C Hybrid did not publish a ready run-scoped snapshot")
+    denied_api = module2_receipt.get("network_policy_denied_api_path")
+    if denied_api != {"target": "module4d-api:8000", "connection": "blocked"}:
+        raise TaskError("Module 2 pipeline-role deny-path receipt is missing or invalid")
 
     from src.module3.spark import session
 
@@ -456,6 +636,7 @@ def run() -> dict[str, Any]:
     try:
         late_data_detail = _check_late_data_and_sink(values["PIPELINE_RUN_ID"], base_config, spark)
         checkpoint_detail = _check_checkpoint_recovery(values["PIPELINE_RUN_ID"], base_config, spark)
+        hybrid_trend_detail = _check_hybrid_trend_sensitivity(spark)
     finally:
         spark.stop()
 
@@ -465,35 +646,27 @@ def run() -> dict[str, Any]:
         "kafka_delivery": _check_kafka_round_trip(values["PIPELINE_RUN_ID"]),
         "batch_outputs": {"module2": module2_receipt, "module4": module4_receipt},
         "executor_benchmark": executor_benchmark,
+        "module2_experiments": module2_experiments,
         "late_data": late_data_detail,
         "checkpoint_recovery": checkpoint_detail,
         "mongo_idempotency": _check_mongo_idempotent(values["PIPELINE_RUN_ID"]),
         "als_graph_readback": _check_als_graph_readback(values["PIPELINE_RUN_ID"]),
-        "hybrid_trend_sensitivity": _check_hybrid_trend_sensitivity(),
+        "hybrid_trend_sensitivity": hybrid_trend_detail,
     }
-    denied_host = "module4d-api"
-    try:
-        socket.getaddrinfo(denied_host, 8000, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise TaskError("B4 could not resolve the API for the deny-path policy probe") from exc
-    try:
-        with socket.create_connection((denied_host, 8000), timeout=3):
-            raise TaskError("pipeline-role acceptance Pod unexpectedly reached the API service")
-    except (TimeoutError, ConnectionRefusedError, OSError):
-        pass
 
     checks = [
         _check("input_provenance", details["input_provenance"]),
         _check("hdfs_readback", details["hdfs_readback"]),
         _check("kafka_delivery", details["kafka_delivery"]),
         _check("spark_batch_outputs", details["batch_outputs"]),
+        _check("spark_query_experiments", details["module2_experiments"]),
         _check("spark_executor_benchmark", details["executor_benchmark"]),
         _check("event_time_watermark_late_data", details["late_data"]),
         _check("checkpoint_recovery", details["checkpoint_recovery"]),
         _check("mongo_idempotent_publication", details["mongo_idempotency"]),
         _check("als_graph_readback", details["als_graph_readback"]),
         _check("hybrid_trend_change", details["hybrid_trend_sensitivity"]),
-        _check("network_policy_denied_api_path", {"target": "module4d-api:8000", "connection": "blocked"}),
+        _check("network_policy_denied_api_path", denied_api),
     ]
     return {
         "schema_version": 1,

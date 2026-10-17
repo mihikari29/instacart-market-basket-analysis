@@ -6,6 +6,7 @@ selects the current kubectl context and never deletes a resource.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -13,14 +14,12 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
-import copy
 from typing import Any, Mapping, Protocol
 
 import yaml
 
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
-from .runtime import CommandExecutor, kubectl
+from .runtime import CommandExecutor, containerd_image_inventory_command, kubectl
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -36,17 +35,40 @@ PIPELINE_POLICY_NAMES = frozenset({
     "allow-pipeline-egress", "allow-pipeline-to-hdfs", "allow-pipeline-to-datanode",
     "allow-datanode-to-namenode", "allow-datanode-egress-to-namenode",
     "allow-kafka-controller-self", "allow-pipeline-to-kafka", "allow-pipeline-to-mongo",
+    "allow-acceptance-api-egress", "allow-acceptance-to-api",
 })
 TREND_SOURCE_NAMESPACE = "instacart-k8s-demo-v1"
 PIPELINE_STEPS = ("input", "module1", "module2", "module4", "replay", "hybrid")
 FIXTURE_MAX_USERS = 50
 FIXTURE_MAX_EVENTS = 5_000
 FULL_DATA_RESERVE = {"cpu_cores": 6, "memory_gib": 12, "free_disk_gib": 40}
+FULL_PIPELINE_CLAIM_BYTES = 16 * 1024**3
+FULL_PIPELINE_RESERVE_BYTES = 2 * 1024**3
+FULL_PIPELINE_WORKING_SET_MULTIPLIER = 3
+FULL_INPUT_MAX_BYTES = 4 * 1024**3
 _IMAGE_REFERENCE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._/:@+-]{0,254}\Z")
 
 
 class PipelineError(RuntimeError):
     """Pipeline plan, identity, manifest, or execution failure."""
+
+
+def validate_full_data_storage_budget(input_bytes: int) -> int:
+    """Bound the run PVC peak as input + cleaner output + event-feed output."""
+    if type(input_bytes) is not int or input_bytes <= 0:
+        raise PipelineError("full-data input byte count must be a positive integer")
+    projected = input_bytes * FULL_PIPELINE_WORKING_SET_MULTIPLIER + FULL_PIPELINE_RESERVE_BYTES
+    if input_bytes > FULL_INPUT_MAX_BYTES or projected > FULL_PIPELINE_CLAIM_BYTES:
+        maximum = min(
+            FULL_INPUT_MAX_BYTES,
+            (FULL_PIPELINE_CLAIM_BYTES - FULL_PIPELINE_RESERVE_BYTES)
+            // FULL_PIPELINE_WORKING_SET_MULTIPLIER,
+        )
+        raise PipelineError(
+            f"full-data inputs exceed the run-PVC budget; maximum raw input is {maximum // 1024**3} GiB "
+            "with three working-set copies and 2 GiB reserve"
+        )
+    return projected
 
 
 def validate_pipeline_policy_inventory(policies: list[Mapping[str, Any]]) -> None:
@@ -111,6 +133,16 @@ def validate_pipeline_policy_inventory(policies: list[Mapping[str, Any]]) -> Non
         "allow-pipeline-to-mongo": (
             {"app.kubernetes.io/name": "module4d-mongo"}, "Ingress",
             {("it4931.instacart.edu/role", "pipeline", (27017,))},
+        ),
+        "allow-acceptance-api-egress": (
+            {"it4931.instacart.edu/role": "pipeline", "it4931.instacart.edu/step": "acceptance"},
+            "Egress",
+            {("app.kubernetes.io/name", "module4d-api", (8000,))},
+        ),
+        "allow-acceptance-to-api": (
+            {"app.kubernetes.io/name": "module4d-api"},
+            "Ingress",
+            {("it4931.instacart.edu/step", "acceptance", (8000,))},
         ),
     }
     for name, (selector, direction, flows) in expected.items():
@@ -347,7 +379,7 @@ def load_pipeline_images(
     from .image_provenance import verify_loaded_image_inventory
 
     try:
-        inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout
+        inventory = _checked(executor, containerd_image_inventory_command(identity), "pipeline image inventory", timeout).stdout
         return verify_loaded_image_inventory(inventory, expected)
     except Exception as exc:
         raise PipelineError("B3 loaded image identities do not match the finalized lock") from exc
@@ -550,6 +582,61 @@ def validate_pipeline_manifest_sources(manifest_directory: Path | str = PIPELINE
     }
     if claims != expected_claims:
         raise PipelineError("B3 pipeline storage claims do not match the isolated storage contract")
+    claim_requests = {
+        item.get("metadata", {}).get("name"): item.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
+        for item in platform if item.get("kind") == "PersistentVolumeClaim"
+    }
+    if claim_requests != {
+        "it4931-hdfs-namenode": "1Gi",
+        "it4931-hdfs-datanode": "16Gi",
+        "it4931-kafka-data": "2Gi",
+        "it4931-pipeline-data": "16Gi",
+        "it4931-pipeline-checkpoints": "2Gi",
+    }:
+        raise PipelineError("B3 PVC requests do not match the 39 GiB run storage budget")
+    kafka = next(
+        item for item in platform
+        if item.get("kind") == "StatefulSet" and item.get("metadata", {}).get("name") == "kafka"
+    )
+    kafka_containers = kafka.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    kafka_container = next((item for item in kafka_containers if item.get("name") == "kafka"), None)
+    kafka_env = kafka_container.get("env", []) if isinstance(kafka_container, Mapping) else None
+    if not isinstance(kafka_env, list):
+        raise PipelineError("Kafka environment must be an explicit list")
+    kafka_values = {}
+    for item in kafka_env:
+        if (
+            not isinstance(item, Mapping)
+            or not isinstance(item.get("name"), str)
+            or not isinstance(item.get("value"), str)
+            or item["name"] in kafka_values
+        ):
+            raise PipelineError("Kafka environment names and values must be unique strings")
+        kafka_values[item["name"]] = item["value"]
+    expected_kafka_values = {
+        "KAFKA_NODE_ID": "1",
+        "KAFKA_PROCESS_ROLES": "controller,broker",
+        "KAFKA_LISTENERS": "INTERNAL://:29092,CONTROLLER://:9093",
+        "KAFKA_ADVERTISED_LISTENERS": "INTERNAL://kafka:29092",
+        "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT",
+        "KAFKA_INTER_BROKER_LISTENER_NAME": "INTERNAL",
+        "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@kafka:9093",
+        "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
+        "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+        "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
+        "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS": "0",
+        "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true",
+        "KAFKA_LOG_DIRS": "/var/lib/kafka/data",
+        "KAFKA_LOG_RETENTION_HOURS": "24",
+        "KAFKA_LOG_RETENTION_BYTES": "1073741824",
+        "KAFKA_LOG_SEGMENT_BYTES": "134217728",
+        "KAFKA_NUM_NETWORK_THREADS": "2",
+        "KAFKA_NUM_IO_THREADS": "2",
+        "KAFKA_HEAP_OPTS": "-Xms512m -Xmx512m",
+    }
+    if kafka_values != expected_kafka_values:
+        raise PipelineError("Kafka environment does not match the one-broker KRaft contract")
     services = {item.get("metadata", {}).get("name"): item for item in platform if item.get("kind") == "Service"}
     expected_ports = {
         "namenode": {"rpc": (8020, 8020), "webhdfs": (9870, 9870)},
@@ -603,6 +690,7 @@ def render_pipeline_assets(
     mode: str,
     host_capacity: Mapping[str, Any] | None = None,
     source_receipt_sha256: str | None = None,
+    input_directory: Path | str | None = None,
 ) -> Path:
     """Write digest-pinned B3 manifests beneath an existing private B2 render."""
     validate_pipeline_manifest_sources()
@@ -619,7 +707,6 @@ def render_pipeline_assets(
     output.mkdir(mode=0o700, exist_ok=False)
     for source_name in ("platform.yaml", "network-policies.yaml"):
         documents = _load_yaml(PIPELINE_MANIFESTS / source_name)
-        content = yaml.safe_dump_all(documents, sort_keys=False)
         replacements = {
             "__K8S_RENDER_REQUIRED__": identity.namespace,
             "__RUN_ID__": identity.run_id,
@@ -628,12 +715,11 @@ def render_pipeline_assets(
             "__AS_OF_EVENT_TIME__": as_of_event_time,
             **{placeholder: images[role] for role, placeholder in PIPELINE_IMAGE_ROLES.items()},
         }
-        for token, value in replacements.items():
-            content = content.replace(token, value)
-        if "__" in content:
-            unresolved = re.findall(r"__[A-Z0-9_]+__", content)
-            if unresolved:
-                raise PipelineError(f"B3 manifest has unresolved render fields: {', '.join(sorted(set(unresolved)))}")
+        documents = _replace_manifest_tokens(documents, replacements)
+        content = yaml.safe_dump_all(documents, sort_keys=False)
+        unresolved = re.findall(r"__[A-Z0-9_]+__", content)
+        if unresolved:
+            raise PipelineError(f"B3 manifest has unresolved render fields: {', '.join(sorted(set(unresolved)))}")
         (output / source_name).write_text(content, encoding="utf-8")
         (output / source_name).chmod(0o600)
 
@@ -656,22 +742,6 @@ def render_pipeline_assets(
         _dump_yaml(output / name, documents)
 
     database = f"module4d_demo_{identity.run_id}"
-    api_config = {
-        "apiVersion": "v1", "kind": "ConfigMap",
-        "metadata": {
-            "name": "module4d-api-config", "namespace": identity.namespace,
-            "labels": {
-                "app.kubernetes.io/name": "module4d-api",
-                **owner_labels,
-            },
-        },
-        "data": {
-            "MODULE4D_MONGO_DATABASE": database,
-            "MODULE4D_TREND_SOURCE_NAMESPACES": plan.trend_source_namespace,
-            "MODULE4D_APP_ROOT": "/workspace",
-        },
-    }
-    _dump_yaml(output / "api-config.yaml", [api_config])
 
     template = _load_yaml(PIPELINE_MANIFESTS / "job.yaml")[0]
     for step in plan.steps:
@@ -680,15 +750,12 @@ def render_pipeline_assets(
             "__K8S_RENDER_REQUIRED__": identity.namespace,
             "__RUN_ID__": identity.run_id,
             "__STEP__": step.name,
-            "__BACKOFF_LIMIT__": str(step.backoff_limit),
-            "__DEADLINE_SECONDS__": str(step.timeout_seconds),
+            "__BACKOFF_LIMIT__": step.backoff_limit,
+            "__DEADLINE_SECONDS__": step.timeout_seconds,
             "__PIPELINE_IMAGE__": images["pipeline_application_image"],
             "__DATABASE__": database,
         }
-        encoded = json.dumps(document)
-        for token, value in substitutions.items():
-            encoded = encoded.replace(token, value)
-        document = json.loads(encoded)
+        document = _replace_manifest_tokens(document, substitutions)
         if step.name in {"input", "module1"}:
             document["spec"]["template"]["spec"]["containers"][0]["env"] = [
                 variable for variable in document["spec"]["template"]["spec"]["containers"][0]["env"]
@@ -714,7 +781,7 @@ def render_pipeline_assets(
     image_records["pipeline_component_image_provenance"] = lock["pipeline_component_image_provenance"]
     manifest_digests = {
         name: hashlib.sha256((output / name).read_bytes()).hexdigest()
-        for name in ("platform.yaml", "network-policies.yaml", "api-config.yaml", *(f"job-{step.name}.yaml" for step in plan.steps))
+        for name in ("platform.yaml", "network-policies.yaml", *(f"job-{step.name}.yaml" for step in plan.steps))
     }
     manifest = {
         "schema_version": 1,
@@ -725,6 +792,8 @@ def render_pipeline_assets(
         "hdfs_root": plan.hdfs_root,
         "topic": plan.topic,
         "trend_source_namespace": plan.trend_source_namespace,
+        "fixture_max_users": plan.fixture_max_users,
+        "fixture_max_events": plan.fixture_max_events,
         "as_of_event_time": as_of_event_time,
         "execution_model": plan.execution_model,
         "source_receipt_sha256": source_receipt_sha256,
@@ -734,16 +803,45 @@ def render_pipeline_assets(
     }
     (output / "plan.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (output / "plan.json").chmod(0o600)
+    validate_pipeline_plan(
+        output,
+        identity,
+        lock,
+        host_capacity=host_capacity,
+        source_receipt_sha256=source_receipt_sha256,
+        input_directory=input_directory,
+    )
     return output
 
 
-def _checked(executor: PipelineCommandExecutor, command: list[str], description: str, timeout: int) -> None:
+def _replace_manifest_tokens(value: Any, substitutions: Mapping[str, Any]) -> Any:
+    if isinstance(value, str):
+        if value in substitutions:
+            return substitutions[value]
+        replaced = value
+        for token, replacement in substitutions.items():
+            if token in replaced:
+                if not isinstance(replacement, str):
+                    raise PipelineError(f"typed manifest field {token} must occupy a complete YAML scalar")
+                replaced = replaced.replace(token, replacement)
+        if re.search(r"__[A-Z0-9_]+__", replaced):
+            raise PipelineError("B3 Job manifest contains an unresolved render field")
+        return replaced
+    if isinstance(value, list):
+        return [_replace_manifest_tokens(item, substitutions) for item in value]
+    if isinstance(value, dict):
+        return {key: _replace_manifest_tokens(item, substitutions) for key, item in value.items()}
+    return value
+
+
+def _checked(executor: PipelineCommandExecutor, command: list[str], description: str, timeout: int) -> Any:
     try:
         result = executor.run(command, timeout=timeout)
     except Exception as exc:
         raise PipelineError(f"{description} failed ({type(exc).__name__}); resources are retained") from exc
     if getattr(result, "returncode", 1) != 0:
         raise PipelineError(f"{description} failed with exit status {result.returncode}; resources are retained")
+    return result
 
 
 def _require_pipeline_namespace_clear(executor: PipelineCommandExecutor, identity: RunIdentity) -> None:
@@ -778,6 +876,109 @@ def _require_pipeline_namespace_clear(executor: PipelineCommandExecutor, identit
                 observed.add(key)
     if observed:
         raise PipelineError("B3 reserved resource names already exist in the run namespace; no resources were applied")
+
+
+def validate_pipeline_plan(
+    pipeline_directory: Path | str,
+    identity: RunIdentity,
+    lock: Mapping[str, Any],
+    *,
+    host_capacity: Mapping[str, Any] | None,
+    source_receipt_sha256: str | None,
+    input_directory: Path | str | None,
+) -> dict[str, Any]:
+    """Validate the private rendered plan using the same contract as execution."""
+    _validate_pipeline_lock(lock)
+    directory = Path(pipeline_directory).resolve(strict=True)
+    render_root = directory.parent
+    _validate_render_root(render_root, identity)
+    if directory != render_root / "pipeline":
+        raise PipelineError("B3 plan must be beneath the matching private B2 render")
+    try:
+        plan = json.loads((directory / "plan.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise PipelineError("private B3 pipeline plan is missing or invalid") from exc
+    if (
+        plan.get("run_id") != identity.run_id
+        or plan.get("namespace") != identity.namespace
+        or plan.get("profile") != identity.profile
+    ):
+        raise PipelineError("private B3 plan does not match the requested profile, context, and namespace")
+    if plan.get("mode") not in {"fixture", "full"}:
+        raise PipelineError("private B3 plan has an unsupported mode")
+    as_of_event_time = plan.get("as_of_event_time")
+    if not isinstance(as_of_event_time, str):
+        raise PipelineError("private B3 plan publication time must remain a YAML/JSON string")
+    try:
+        parsed_as_of = datetime.fromisoformat(as_of_event_time.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise PipelineError("private B3 plan has no valid stable UTC publication time") from exc
+    if parsed_as_of.tzinfo is None or parsed_as_of.utcoffset() != timezone.utc.utcoffset(parsed_as_of):
+        raise PipelineError("private B3 publication time must be a stable UTC timestamp")
+    platform_docs = _load_yaml(directory / "platform.yaml")
+    pipeline_config = next(
+        (
+            item for item in platform_docs
+            if item.get("kind") == "ConfigMap"
+            and item.get("metadata", {}).get("name") == "it4931-pipeline-config"
+        ),
+        None,
+    )
+    if pipeline_config is None or pipeline_config.get("data", {}).get("PIPELINE_AS_OF_EVENT_TIME") != as_of_event_time:
+        raise PipelineError("B3 task configuration does not match the stable reviewed publication time")
+    if plan["mode"] == "full" and source_receipt_sha256 != plan.get("source_receipt_sha256"):
+        raise PipelineError("full-data execution must repeat the preflight source receipt SHA-256")
+    if plan["mode"] == "full":
+        if input_directory is None:
+            raise PipelineError("full-data plan validation requires the exact six-file input directory")
+        from .data_receipts import InputReceiptError, inspect_input_directory
+
+        try:
+            input_receipt = inspect_input_directory(input_directory)
+        except InputReceiptError as exc:
+            raise PipelineError("full-data source directory failed its six-file preflight") from exc
+        if input_receipt["manifest_sha256"] != source_receipt_sha256:
+            raise PipelineError("full-data input bytes differ from the reviewed source receipt SHA-256")
+        validate_full_data_storage_budget(input_receipt["total_bytes"])
+    elif input_directory is not None:
+        raise PipelineError("fixture mode creates its deterministic input inside the run-scoped PVC")
+    expected_plan = plan_pipeline(
+        identity,
+        mode=plan["mode"],
+        host_capacity=host_capacity or lock.get("host_capacity"),
+        source_receipt_sha256=(source_receipt_sha256 if plan["mode"] == "full" else None),
+    )
+    for field in (
+        "hdfs_root", "topic", "trend_source_namespace", "fixture_max_users",
+        "fixture_max_events", "execution_model",
+    ):
+        if plan.get(field) != getattr(expected_plan, field):
+            raise PipelineError(f"private B3 {field} does not match the validated run plan")
+    expected_steps = [asdict(step) for step in _step_specs(identity)]
+    if plan.get("steps") != expected_steps:
+        raise PipelineError("private B3 dependency order or retry policy differs from the reviewed plan")
+    locked_images = {role: lock["images"][role] for role in PIPELINE_IMAGE_ROLES}
+    locked_images["pipeline_image_provenance"] = lock["pipeline_image_provenance"]
+    locked_images["pipeline_component_image_provenance"] = lock["pipeline_component_image_provenance"]
+    lock_digest = hashlib.sha256(json.dumps(locked_images, sort_keys=True).encode()).hexdigest()
+    if plan.get("pipeline_lock_sha256") != lock_digest:
+        raise PipelineError("private B3 image references do not match the finalized lock")
+    digests = plan.get("manifest_sha256")
+    expected_names = {
+        "platform.yaml", "network-policies.yaml",
+        *(f"job-{step}.yaml" for step in PIPELINE_STEPS),
+    }
+    if not isinstance(digests, Mapping) or set(digests) != expected_names:
+        raise PipelineError("private B3 plan does not contain the exact manifest inventory")
+    for name, expected in digests.items():
+        path = directory / name
+        try:
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise PipelineError("private B3 manifest is missing") from exc
+        if actual != expected:
+            raise PipelineError(f"private B3 manifest {name} differs from its reviewed digest")
+    return plan
 
 
 def _direct_pipeline_resources(identity: RunIdentity) -> set[tuple[str, str]]:
@@ -819,69 +1020,15 @@ def execute_pipeline(
     _validate_render_root(render_root, identity)
     if directory != render_root / "pipeline":
         raise PipelineError("B3 execution must use the pipeline directory in the private B2 render")
-    try:
-        plan = json.loads((directory / "plan.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise PipelineError("private B3 pipeline plan is missing or invalid") from exc
-    if plan.get("run_id") != identity.run_id or plan.get("namespace") != identity.namespace or plan.get("profile") != identity.profile:
-        raise PipelineError("private B3 plan does not match the requested profile, context, and namespace")
-    if plan.get("mode") not in {"fixture", "full"}:
-        raise PipelineError("private B3 plan has an unsupported mode")
-    as_of_event_time = plan.get("as_of_event_time")
-    try:
-        parsed_as_of = datetime.fromisoformat(str(as_of_event_time).replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise PipelineError("private B3 plan has no valid stable UTC publication time") from exc
-    if parsed_as_of.tzinfo is None or parsed_as_of.utcoffset() != timezone.utc.utcoffset(parsed_as_of):
-        raise PipelineError("private B3 publication time must be a stable UTC timestamp")
-    platform_docs = _load_yaml(directory / "platform.yaml")
-    pipeline_config = next((item for item in platform_docs if item.get("kind") == "ConfigMap" and item.get("metadata", {}).get("name") == "it4931-pipeline-config"), None)
-    if pipeline_config is None or pipeline_config.get("data", {}).get("PIPELINE_AS_OF_EVENT_TIME") != as_of_event_time:
-        raise PipelineError("B3 task configuration does not match the stable reviewed publication time")
-    if plan["mode"] == "full" and source_receipt_sha256 != plan.get("source_receipt_sha256"):
-        raise PipelineError("full-data execution must repeat the preflight source receipt SHA-256")
-    if plan["mode"] == "full":
-        if input_directory is None:
-            raise PipelineError("full-data execution requires the exact six-file input directory")
-        from .data_receipts import InputReceiptError, inspect_input_directory
-
-        try:
-            input_receipt = inspect_input_directory(input_directory)
-        except InputReceiptError as exc:
-            raise PipelineError("full-data source directory failed its six-file preflight") from exc
-        if input_receipt["manifest_sha256"] != source_receipt_sha256:
-            raise PipelineError("full-data input bytes differ from the reviewed source receipt SHA-256")
-    elif input_directory is not None:
-        raise PipelineError("fixture mode creates its deterministic input inside the run-scoped PVC")
-    expected_plan = plan_pipeline(
+    plan = validate_pipeline_plan(
+        directory,
         identity,
-        mode=plan["mode"],
-        host_capacity=host_capacity or lock.get("host_capacity"),
-        source_receipt_sha256=(source_receipt_sha256 if plan["mode"] == "full" else None),
+        lock,
+        host_capacity=host_capacity,
+        source_receipt_sha256=source_receipt_sha256,
+        input_directory=input_directory,
     )
-    for field in ("hdfs_root", "topic", "trend_source_namespace", "fixture_max_users", "fixture_max_events", "execution_model"):
-        if plan.get(field) != getattr(expected_plan, field):
-            raise PipelineError(f"private B3 {field} does not match the validated run plan")
-    expected_steps = [asdict(step) for step in _step_specs(identity)]
-    if plan.get("steps") != expected_steps:
-        raise PipelineError("private B3 dependency order or retry policy differs from the reviewed plan")
-    locked_images = {role: lock["images"][role] for role in PIPELINE_IMAGE_ROLES}
-    locked_images["pipeline_image_provenance"] = lock["pipeline_image_provenance"]
-    locked_images["pipeline_component_image_provenance"] = lock["pipeline_component_image_provenance"]
-    lock_digest = hashlib.sha256(json.dumps(locked_images, sort_keys=True).encode()).hexdigest()
-    if plan.get("pipeline_lock_sha256") != lock_digest:
-        raise PipelineError("private B3 image references do not match the finalized lock")
-    digests = plan.get("manifest_sha256")
-    if not isinstance(digests, Mapping):
-        raise PipelineError("private B3 plan does not contain manifest digests")
-    for name, expected in digests.items():
-        path = directory / name
-        try:
-            actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        except OSError as exc:
-            raise PipelineError("private B3 manifest is missing") from exc
-        if actual != expected:
-            raise PipelineError(f"private B3 manifest {name} differs from its reviewed digest")
+    as_of_event_time = plan["as_of_event_time"]
 
     serving_path = Path(serving_receipt_path)
     if serving_path.is_symlink() or serving_path.resolve() != render_root / "b2-ownership-receipt.json":
@@ -908,6 +1055,10 @@ def execute_pipeline(
     except Exception as exc:
         raise PipelineError("B2 deny-first policy inventory failed before B3; no pipeline resources were applied") from exc
     _require_pipeline_namespace_clear(executor, identity)
+    try:
+        load_pipeline_images(executor, identity, lock, execute=True)
+    except PipelineError as exc:
+        raise PipelineError("B3 pipeline images failed identity verification before workload apply") from exc
 
     receipt: dict[str, Any] = {
         "schema_version": 1, "run_id": identity.run_id, "profile": identity.profile,
@@ -917,9 +1068,6 @@ def execute_pipeline(
     execution_receipt_path = directory / "execution-receipt.json"
     _checked(executor, kubectl(identity, "apply", "-f", str(directory / "platform.yaml")), "pipeline platform apply", 120)
     _checked(executor, kubectl(identity, "apply", "-f", str(directory / "network-policies.yaml")), "pipeline network-policy apply", 120)
-    _checked(executor, kubectl(identity, "apply", "-f", str(directory / "api-config.yaml")), "API trend namespace update", 120)
-    _checked(executor, kubectl(identity, "--namespace", identity.namespace, "rollout", "restart", "deployment/module4d-api"), "API configuration reload", 120)
-    _checked(executor, kubectl(identity, "--namespace", identity.namespace, "rollout", "status", "deployment/module4d-api", "--timeout=600s"), "API readiness after configuration update", 620)
     for claim in ("it4931-hdfs-namenode", "it4931-hdfs-datanode", "it4931-kafka-data", "it4931-pipeline-data", "it4931-pipeline-checkpoints"):
         _checked(
             executor,

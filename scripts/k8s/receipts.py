@@ -37,6 +37,19 @@ class ReceiptCollectionError(RuntimeError):
     """Live ownership evidence could not be collected completely."""
 
 
+def _locked_image_digest(image: Mapping[str, Any]) -> str:
+    """Read a digest from either accepted lock representation and reject conflicts."""
+    immutable = image.get("immutable_digest")
+    reference = image.get("reference")
+    referenced = reference.rsplit("@", 1)[1] if isinstance(reference, str) and "@" in reference else None
+    if immutable is not None and referenced is not None and immutable != referenced:
+        raise ReceiptCollectionError("locked image reference and immutable digest disagree")
+    digest = immutable or referenced
+    if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+        raise ReceiptCollectionError("locked image has no immutable SHA-256 digest")
+    return digest
+
+
 _NAMESPACED_RESOURCE_TYPES = (
     "resourcequotas",
     "limitranges",
@@ -269,12 +282,16 @@ def collect_runtime_ownership_receipt(
         kubectl(identity, "get", "storageclass", storage_class_name, "-o", "json"),
         "bound StorageClass",
     )
-    pv_metadata, pv_spec, pv_status = pv.get("metadata", {}), pv.get("spec", {}), pv.get("status", {})
+    pv_metadata, pv_spec = pv.get("metadata", {}), pv.get("spec", {})
     sc_metadata = storage_class.get("metadata", {})
     provisioner = storage_class.get("provisioner")
-    owner_refs = _owner_references(pvc_metadata)
-    if len(owner_refs) != 1 or owner_refs[0].kind != "StatefulSet":
-        raise ReceiptCollectionError("Mongo PVC does not have one StatefulSet owner reference")
+    if not isinstance(pvc_metadata.get("labels"), Mapping) or any(
+        pvc_metadata["labels"].get(key) != value for key, value in identity.labels.items()
+    ):
+        raise ReceiptCollectionError("Mongo PVC ownership labels do not match the run")
+    mongo_statefulset = by_key.get(("StatefulSet", "module4d-mongo"))
+    if mongo_statefulset is None:
+        raise ReceiptCollectionError("Mongo StatefulSet is missing from the live inventory")
     host_path = pv_spec.get("hostPath")
     local = pv_spec.get("local")
     if isinstance(host_path, Mapping):
@@ -309,12 +326,15 @@ def collect_runtime_ownership_receipt(
         storage_class_uid=sc_metadata.get("uid", ""),
         provisioner=provisioner or "",
         requested_storage=pvc_spec.get("resources", {}).get("requests", {}).get("storage", ""),
-        capacity=pv_status.get("capacity", {}).get("storage", ""),
+        capacity=pv_spec.get("capacity", {}).get("storage", ""),
         access_mode=(pvc_spec.get("accessModes") or [""])[0],
         profile_local=provisioner == lock["storage"].get("provisioner") and locality_kind == "hostPath",
         locality_kind=locality_kind,
         locality_path=locality_path,
-        claim_owner_uid=owner_refs[0].uid,
+        # StatefulSet volumeClaimTemplates retain claims by default and do not
+        # attach a deletion owner reference. Bind the claim to its template by
+        # exact generated name, run labels, and the observed parent UID.
+        claim_owner_uid=mongo_statefulset.get("metadata", {}).get("uid", ""),
         locality_node_name=node_metadata.get("name", ""),
         locality_node_uid=node_metadata.get("uid", ""),
     )
@@ -347,7 +367,11 @@ def collect_runtime_ownership_receipt(
         runtime_image_id = status[0].get("imageID")
         image_lock = lock["images"].get(role, {})
         role_provenance = provenance.get(role, {})
-        digest = role_provenance.get("image_digest") or image_lock.get("immutable_digest")
+        locked_digest = _locked_image_digest(image_lock)
+        provenance_digest = role_provenance.get("image_digest")
+        if provenance_digest is not None and provenance_digest != locked_digest:
+            raise ReceiptCollectionError(f"image provenance digest conflicts with the lock for {role}")
+        digest = provenance_digest or locked_digest
         if not isinstance(reference, str) or not isinstance(digest, str):
             raise ReceiptCollectionError(f"locked image identity is incomplete for {role}")
         if role == "mongo":

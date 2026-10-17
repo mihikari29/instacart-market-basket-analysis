@@ -179,10 +179,10 @@ def run() -> dict[str, Any]:
             page, 4, "analytics page", "trend, batch, and two order charts"
         )
 
-        _navigate(page, "Hybrid Recommendations", "Hybrid Recommendations")
+        _navigate(page, "Hybrid Recommendations", "ALS and Hybrid Recommendations")
         user_input = page.get_by_label("Positive integer user ID", exact=True)
         user_input.fill(str(WARM_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text(recommendation["serving_version"], exact=False).first).to_be_visible(timeout=15_000)
         warm_text = _all_text(page)
         warm_grid = _collect_grid_text(page)
@@ -192,10 +192,10 @@ def run() -> dict[str, Any]:
             "Source run: module4d-demo-source-001",
             "Model version: module4d-demo-als-v1",
             "Graph version: module4d-demo-graph-v1",
-            "Raw ALS score",
-            "Raw trend score",
-            "Normalized ALS score",
-            "Normalized trend score",
+            "ALS rank",
+            "ALS score",
+            "Trend score",
+            "Final rank",
             "Final score",
         ):
             if value.lower() not in warm_visible.lower():
@@ -208,16 +208,16 @@ def run() -> dict[str, Any]:
             raise RuntimeError("Hybrid grid did not render the source-derived persisted final score")
 
         user_input.fill(str(FALLBACK_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text("als_fallback_trend_unavailable", exact=False)).to_be_visible(timeout=15_000)
         if fallback["mode"] != "als_fallback_trend_unavailable":
             raise RuntimeError("fallback browser source and API response differ")
 
         user_input.fill(str(UNKNOWN_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text("recommendation_snapshot_not_found", exact=False)).to_be_visible(timeout=15_000)
         user_input.fill(str(WARM_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text(recommendation["serving_version"], exact=False).first).to_be_visible(timeout=15_000)
 
         _navigate(page, "Evaluation & Performance", "Evaluation & Performance")

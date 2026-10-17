@@ -39,7 +39,7 @@ _CLAIMS = {
     "it4931-hdfs-namenode": "1Gi",
     "it4931-hdfs-datanode": "16Gi",
     "it4931-kafka-data": "2Gi",
-    "it4931-pipeline-data": "8Gi",
+    "it4931-pipeline-data": "16Gi",
     "it4931-pipeline-checkpoints": "2Gi",
 }
 _DIRECT_OBJECTS = {
@@ -305,7 +305,7 @@ def collect_pipeline_receipt(
             raise PipelineReceiptError(f"B3 PVC {claim_name} request differs from the manifest")
         pv = _query_json(executor, kubectl(identity, "get", "pv", volume_name, "-o", "json"), f"PV for {claim_name}")
         storage_class_doc = _query_json(executor, kubectl(identity, "get", "storageclass", storage_class, "-o", "json"), f"StorageClass for {claim_name}")
-        pv_metadata, pv_spec, pv_status = pv.get("metadata", {}), pv.get("spec", {}), pv.get("status", {})
+        pv_metadata, pv_spec = pv.get("metadata", {}), pv.get("spec", {})
         claim_ref = pv_spec.get("claimRef", {})
         if (
             claim_ref.get("namespace") != identity.namespace
@@ -316,7 +316,7 @@ def collect_pipeline_receipt(
         local = pv_spec.get("hostPath") or pv_spec.get("local")
         locality_kind = "hostPath" if isinstance(pv_spec.get("hostPath"), Mapping) else "local" if isinstance(pv_spec.get("local"), Mapping) else "unknown"
         locality_path = local.get("path", "") if isinstance(local, Mapping) else ""
-        capacity = pv_status.get("capacity", {}).get("storage", "")
+        capacity = pv_spec.get("capacity", {}).get("storage", "")
         if (
             _quantity(capacity) < _quantity(requested)
             or locality_kind != "hostPath"

@@ -27,6 +27,16 @@ tests/test_k8s_*.py
 !scripts/module4_cross_module_smoke.py
 # The API readiness command is packaged in the new k8s-runner target.
 !scripts/k8s/api_readiness.py
+!scripts/
+!scripts/k8s/
+!scripts/k8s/__init__.py
+!scripts/k8s/pipeline.py
+!scripts/k8s/pipeline_task.py
+!scripts/k8s/acceptance_task.py
+!scripts/k8s/data_receipts.py
+!scripts/k8s/fixture_data.py
+!scripts/k8s/runtime.py
+!scripts/k8s/ownership.py
 !scripts/k8s/write_python_environment.py
 !docs/evidence/full/analytics.json
 !docs/evidence/full/current-hardening-2026-10-03.json

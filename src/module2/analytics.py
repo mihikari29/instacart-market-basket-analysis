@@ -208,6 +208,12 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
                     batch.clear()
             if batch:
                 collection.insert_many(batch)
-            collection.create_index("purchase_count")
-            collection.create_index("reorder_rate")
+            collection.create_index(
+                [("purchase_count", -1), ("product_id", 1)],
+                name="idx_batch_product_purchase_count_desc_product_id_asc",
+            )
+            collection.create_index(
+                [("reorder_rate", -1), ("product_id", 1)],
+                name="idx_batch_product_reorder_rate_desc_product_id_asc",
+            )
             collection.rename(name, dropTarget=True)

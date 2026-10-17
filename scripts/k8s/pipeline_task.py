@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -18,7 +18,12 @@ from typing import Any
 
 from .data_receipts import inspect_input_directory
 from .fixture_data import write_fixture
-from .pipeline import FIXTURE_MAX_EVENTS, FIXTURE_MAX_USERS, TREND_SOURCE_NAMESPACE
+from .pipeline import (
+    FIXTURE_MAX_EVENTS,
+    FIXTURE_MAX_USERS,
+    TREND_SOURCE_NAMESPACE,
+    validate_full_data_storage_budget,
+)
 
 
 WORKSPACE = Path("/workspace")
@@ -132,6 +137,8 @@ def input_stage() -> dict:
         if not marker.is_file():
             raise TaskError("full-data input transfer did not complete within 900 seconds")
     input_manifest = inspect_input_directory(INPUT_ROOT)
+    if values["PIPELINE_MODE"] == "full":
+        validate_full_data_storage_budget(input_manifest["total_bytes"])
     expected_digest = os.environ.get("PIPELINE_SOURCE_RECEIPT_SHA256")
     if values["PIPELINE_MODE"] == "full" and input_manifest["manifest_sha256"] != expected_digest:
         raise TaskError("uploaded six-file input does not match the reviewed preflight source receipt")
@@ -181,15 +188,13 @@ def module1() -> dict:
         raise TaskError("Module 1 source receipt does not match this run's six input files")
 
     work_root = RUNTIME_ROOT / "work" / os.environ.get("POD_NAME", "module1")
-    raw_dir = work_root / "raw"
     clean_dir = work_root / "clean"
     feed_dir = work_root / "feed"
-    if raw_dir.exists():
+    if work_root.exists():
         raise TaskError("this Pod's Module 1 work path already exists; refusing to overwrite it")
-    shutil.copytree(INPUT_ROOT, raw_dir)
     env = dict(os.environ)
     _subprocess(
-        [sys.executable, "-m", "src.module1.clean", "--data-dir", str(raw_dir), "--output-dir", str(clean_dir), "--validate"],
+        [sys.executable, "-m", "src.module1.clean", "--data-dir", str(work_root), "--raw-dir", str(INPUT_ROOT), "--output-dir", str(clean_dir), "--validate"],
         env=env, log_path=work_root / "clean.log", timeout=1800,
     )
     generate = [
@@ -209,7 +214,7 @@ def module1() -> dict:
         [
             sys.executable, "-m", "src.module1.stage_hdfs", "--feed", str(feed_dir),
             "--webhdfs", os.environ.get("PIPELINE_WEBHDFS_URL", ""),
-            "--hdfs-root", values["PIPELINE_HDFS_ROOT"], "--raw-dir", str(raw_dir),
+            "--hdfs-root", values["PIPELINE_HDFS_ROOT"], "--raw-dir", str(INPUT_ROOT),
             "--clean-dir", str(clean_dir), "--no-rewrite-datanode-to-localhost",
         ],
         env=env, log_path=work_root / "stage.log", timeout=3600,
@@ -232,6 +237,19 @@ def _result_root(module: str) -> Path:
     return RUNTIME_ROOT / "results" / os.environ.get("POD_NAME", "pipeline") / module
 
 
+def _verify_api_egress_is_blocked() -> dict[str, Any]:
+    host, port = "module4d-api", 8000
+    try:
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise TaskError("pipeline-role API deny-path probe could not resolve the in-profile API") from exc
+    try:
+        with socket.create_connection((host, port), timeout=3):
+            raise TaskError("pipeline-role workload unexpectedly reached the API service")
+    except OSError:
+        return {"target": f"{host}:{port}", "connection": "blocked"}
+
+
 def module2() -> dict:
     values = _runtime_values()
     uri = os.environ.get("MONGODB_URI")
@@ -239,12 +257,27 @@ def module2() -> dict:
         raise TaskError("Module 2 requires the dedicated Mongo publisher Secret")
     env = dict(os.environ, MODULE2_ROOT=values["PIPELINE_HDFS_URI"], SPARK_MASTER="local[2]", MONGODB_URI=uri)
     _subprocess(
-        [sys.executable, "-m", "src.module2.cli", "stats", "--root", values["PIPELINE_HDFS_URI"],
+        [sys.executable, "-m", "src.module2.cli", "all", "--root", values["PIPELINE_HDFS_URI"],
          "--master", "local[2]", "--output", str(_result_root("module2")),
          "--run-id", f"k8s-{values['PIPELINE_RUN_ID']}", "--min-support", "1"],
         env=env, log_path=_result_root("module2") / "orchestrator.log", timeout=3600,
     )
     output = _result_root("module2")
+    experiment_path = output / f"k8s-{values['PIPELINE_RUN_ID']}" / "summary.json"
+    try:
+        experiment_summary = json.loads(experiment_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise TaskError("Module 2 join, partition, and cache performance receipt is missing") from exc
+    experiment_fields = {"join_benchmark", "partition_pruning", "cache_benchmark"}
+    if experiment_summary.get("status") != "passed" or not experiment_fields.issubset(experiment_summary):
+        raise TaskError("Module 2 did not complete all required join, partition, and cache experiments")
+    experiment_receipt = {
+        "status": "passed",
+        "summary_path": str(experiment_path),
+        "summary_sha256": hashlib.sha256(experiment_path.read_bytes()).hexdigest(),
+        "experiments": sorted(experiment_fields),
+        "source_sha256": experiment_summary.get("validation", {}).get("source_receipt", {}).get("source_sha256"),
+    }
     from src.module2.executor_benchmark import build_plan, execute_plan
 
     benchmark_plan = build_plan(
@@ -258,9 +291,12 @@ def module2() -> dict:
     )
     benchmark_result = execute_plan(benchmark_plan)
     benchmark_output = Path(benchmark_plan["output_directory"])
+    denied_api = _verify_api_egress_is_blocked()
     return {
         "status": "completed", "run_id": values["PIPELINE_RUN_ID"],
         "module2_output": str(output), "artifacts": _artifact_inventory(output),
+        "module2_experiments": experiment_receipt,
+        "network_policy_denied_api_path": denied_api,
         "executor_benchmark": benchmark_result,
         "executor_benchmark_artifacts": _artifact_inventory(benchmark_output),
     }
@@ -285,7 +321,16 @@ def module4() -> dict:
         args += ["--pilot-users", str(FIXTURE_MAX_USERS), "--max-trials", "3"]
     else:
         args += ["--pilot-users", "5000", "--max-trials", "12", "--source-receipt", str(source_receipt)]
-    env = dict(os.environ, MODULE4_ROOT=values["PIPELINE_HDFS_URI"], SPARK_MASTER="local[2]", MONGODB_URI=uri)
+    database = os.environ.get("MODULE4D_MONGO_DATABASE", "")
+    if database != f"module4d_demo_{values['PIPELINE_RUN_ID']}":
+        raise TaskError("Module 4 requires the exact run-scoped Mongo database")
+    env = dict(
+        os.environ,
+        MODULE4_ROOT=values["PIPELINE_HDFS_URI"],
+        SPARK_MASTER="local[2]",
+        MONGODB_URI=uri,
+        MODULE4_MONGO_DATABASE=database,
+    )
     _subprocess(args, env=env, log_path=output / "orchestrator.log", timeout=7200)
     return {
         "status": "completed", "run_id": values["PIPELINE_RUN_ID"],

@@ -85,6 +85,7 @@ def deploy_serving(
     host_capacity: Mapping[str, Any],
     run_directory: Path | str,
     secret_bundle: MongoSecretBundle,
+    trend_source_namespace: str | None = None,
     execute: bool = False,
 ) -> dict[str, Any]:
     """Load locked images, apply namespaced serving resources, and record live proof.
@@ -107,7 +108,12 @@ def deploy_serving(
         raise DeploymentError("measured host capacity does not pass the B2 reserve") from exc
     run_path = Path(run_directory)
     try:
-        validate_locked_overlay(identity.run_id, run_path, dict(lock))
+        validate_locked_overlay(
+            identity.run_id,
+            run_path,
+            dict(lock),
+            trend_source_namespace=trend_source_namespace,
+        )
         _validate_base_network_policies(run_path)
     except (OSError, ValueError) as exc:
         raise DeploymentError("private render does not match the complete lock and run identity") from exc
