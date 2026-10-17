@@ -15,7 +15,7 @@ from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 from src.module4.dashboard import readers
 from tests.module4d_helpers import BASE_TIME, NAMESPACE, make_snapshot
-from tests.test_module4d_readers import Database
+from tests.test_module4d_readers import ALSDatabase, Database, _als_products, _als_rows
 
 
 def _config():
@@ -96,6 +96,29 @@ def test_trend_api_does_not_fall_back_after_newest_noncanonical_id_is_selected()
 
     assert response.status_code == 502
     assert response.json()["error"]["code"] == "invalid_source_document"
+
+
+def test_als_api_reads_the_active_model_and_returns_a_clear_empty_state():
+    database = ALSDatabase(recommendations=_als_rows(), products=_als_products())
+    with TestClient(_app(database)) as client:
+        response = client.get(
+            "/api/v1/als/recommendations/71", params={"model_version": "als-v42", "limit": 1}
+        )
+        empty = client.get("/api/v1/als/recommendations/909")
+        missing_model = client.get(
+            "/api/v1/als/recommendations/71", params={"model_version": "old-model"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["recommendations"][0] == {
+        "product_id": 501, "product_name": "Banana", "als_rank": 1, "als_score": 0.95
+    }
+    assert response.json()["has_more"] is True
+    assert empty.status_code == 200
+    assert empty.json()["status"] == "empty"
+    assert empty.json()["recommendations"] == []
+    assert missing_model.status_code == 404
+    assert missing_model.json()["error"]["code"] == "als_model_not_found"
 
 
 def test_health_is_liveness_only_and_does_not_touch_mongo():
@@ -331,7 +354,10 @@ def test_openapi_is_get_only_for_d1a_and_has_no_wildcard_cors():
     with TestClient(_app(Database())) as client:
         schema = client.get("/openapi.json").json()
         health = client.get("/health")
-    assert set(schema["paths"]) == {"/health", "/api/v1/recommendations/{user_id}", "/api/v1/trends"}
+    assert set(schema["paths"]) == {
+        "/health", "/api/v1/recommendations/{user_id}",
+        "/api/v1/als/recommendations/{user_id}", "/api/v1/trends",
+    }
     assert all(set(item) == {"get"} for item in schema["paths"].values())
     assert "Access-Control-Allow-Origin" not in health.headers
 

@@ -55,8 +55,9 @@ train events.
 labels invalid rows, and exposes input/valid/invalid counts as `record_quality`
 progress metrics. It rejects a missing or blank `event_id`; missing or
 nonpositive `order_id`, `user_id`, `product_id`, or `add_to_cart_order`; weekday
-outside 0–6; hour outside 0–23; invalid/nonpositive epoch time; and an invalid
-ISO timestamp. Invalid rows are excluded before stateful aggregation.
+outside 0–6; hour outside 0–23; invalid/nonpositive event or ingestion epoch;
+and an invalid ISO timestamp. Invalid rows are excluded before stateful
+aggregation.
 
 Kafka `failOnDataLoss` defaults to `true` in
 [`config.py`](../src/module3/config.py). If a requested offset is unavailable,
@@ -123,15 +124,17 @@ different questions.
 
 ## Checkpoints, retries, and failure boundaries
 
-[`stream.py`](../src/module3/stream.py) stores a checkpoint under the
-configured output base's `checkpoint/<checkpoint-id>` directory. The default ID
-is the run ID; `--checkpoint-id` allows a later process to reuse one
-deliberately. Recovery requires that the same checkpoint directory remains
-available, along with the same Kafka cluster/topic and compatible query
-configuration. Keep the checkpoint with its corresponding stream state. Use a
-new identity for a genuinely new query; do not delete a checkpoint to repair a
-query without first deciding that resetting offsets and aggregation state is
-intended.
+[`stream.py`](../src/module3/stream.py) stores the current state contract under
+the configured output base's
+`checkpoint/<checkpoint-id>/ingestion-latency-v1` directory. The default ID is
+the run ID; `--checkpoint-id` allows a later process to reuse that versioned
+checkpoint deliberately. The version marker prevents restoring an older
+unversioned state schema after adding the ingestion timestamp aggregate; such a
+checkpoint fails closed and remains untouched. Recovery requires the same
+versioned directory, Kafka cluster/topic, and compatible query configuration.
+Keep the checkpoint with its corresponding stream state. Use a new identity
+for a genuinely new query; do not delete a checkpoint to repair a query without
+first deciding that resetting offsets and aggregation state is intended.
 
 The legacy Mongo replacement is retry-convergent but can be observed empty or
 partial between delete and upsert. Each microbatch runs the legacy writer first;
@@ -163,11 +166,19 @@ bounds, and hash, and fails on a corrupt newest result rather than falling back
 to an older one. Module 4A/4B readiness is also required for Hybrid serving.
 Module 4D's API has its own exact namespace allowlist.
 
-No current Module 3 metric establishes Kafka-to-serving or ingestion-to-output
-latency. The progress log records Spark input/processed rates,
-trigger/addBatch duration, and sink timing; those are separate measurements.
-C8B's acknowledgement-to-bundle-visible interval is a bounded synthetic
-boundary measurement, not a general latency result.
+Each successful `sink_batches.jsonl` row also records
+`ingestion_to_output_latency`: minimum, mean, and maximum milliseconds from the
+producer's wall-clock `ingestion_time_epoch_ms` to output completion after the
+enabled Mongo publishers finish. A sample is the latest contributing event
+timestamp for one finalized product/window row, reduced with constant memory.
+The producer timestamp is taken immediately before Kafka send, not at broker
+append or acknowledgement. The producer and output host clocks are not
+independently synchronized; a future timestamp is reported as possible clock
+skew and can yield a negative measurement. This is distinct from Kafka
+acknowledgement latency, Spark input/processed rates, trigger/addBatch duration,
+and Mongo sink duration. It also includes the configured event-time watermark
+wait for finalized windows. C8B's acknowledgement-to-bundle-visible interval
+remains a separate bounded synthetic boundary measurement.
 
 ## Source, tests, and evidence
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 from src.module4.dashboard.ui.api_client import ApiClientError
+from src.module4.dashboard.ui.pages.recommendations import comparison_rows
 from src.module4.dashboard.ui.state import fetch
 
 
@@ -65,6 +66,27 @@ def _recommendation(user_id):
                 "final_score": 0.95,
             }
         ],
+        "observed_at": _time("2026-10-14T10:02:00Z"),
+    }
+
+
+def _als_recommendation(user_id, *, available=True):
+    return {
+        "user_id": user_id,
+        "model_version": "als-2026-10",
+        "status": "available" if available else "empty",
+        "reason": None if available else "no_als_rows_for_user_in_selected_model",
+        "recommendation_count": 1 if available else 0,
+        "requested_limit": 20,
+        "has_more": False,
+        "source": {
+            "run_id": "source-run-42",
+            "model_version": "als-2026-10",
+            "graph_version": "graph-2026-10",
+        },
+        "recommendations": [
+            {"product_id": 24852, "product_name": "Banana", "als_rank": 1, "als_score": 0.84}
+        ] if available else [],
         "observed_at": _time("2026-10-14T10:02:00Z"),
     }
 
@@ -184,9 +206,11 @@ class FakeApi:
         self.calls = []
         self.trend_available = True
         self.recommendation_errors = []
+        self.als_errors = []
         self.trend_error = None
         self.product_error = None
         self.empty_recommendations = False
+        self.empty_als = False
 
     def get_health(self):
         self.calls.append(("health", ()))
@@ -203,6 +227,12 @@ class FakeApi:
             payload["mode"] = "trend_only"
             payload["reason"] = "no_candidates"
         return payload
+
+    def get_als_recommendations(self, user_id, model_version=None, limit=20):
+        self.calls.append(("als_recommendations", (user_id, model_version, limit)))
+        if self.als_errors:
+            raise self.als_errors.pop(0)
+        return _als_recommendation(user_id, available=not self.empty_als)
 
     def get_trends(self, source_namespace, as_of_event_time, max_event_age_seconds=None):
         self.calls.append(("trends", (source_namespace, as_of_event_time, max_event_age_seconds)))
@@ -346,19 +376,58 @@ def test_no_product_or_department_names_are_invented_and_trends_remain_single_wi
     assert len(_trend_response()["items"]) == 1
 
 
-def test_recommendation_page_shows_verified_hybrid_rows_and_separate_score_components(monkeypatch):
+def test_recommendation_page_shows_verified_als_hybrid_and_real_score_sources(monkeypatch):
     app, _ = _app(monkeypatch, page="Hybrid Recommendations")
     app = _submit(app, "recommendation_submit", "recommendation_user_id", "71")
     assert not app.exception
-    rendered = _texts(app.title) + _texts(app.metric) + _texts(app.info) + _texts(app.caption)
+    rendered = _texts(app.title) + _texts(app.subheader) + _texts(app.metric) + _texts(app.info) + _texts(app.caption)
     assert "Serving version" in rendered
     assert "hybrid-run-user-71" in rendered
-    assert "Direct ALS-versus-Hybrid comparison is unavailable" in rendered
-    assert "persisted final_score (0–1)" in rendered
-    # Dataframe headers carry each score on its own field; these labels are not collapsed into a chart.
+    assert "ALS, trend, and final score comparison" in rendered
+    assert "ALS score comes from user_recommendations" in rendered
+    assert "stored Hybrid snapshot" in rendered
+    # Dataframe headers carry each score on its own field; unavailable sources stay blank.
     recommendation_page = (ROOT / "src/module4/dashboard/ui/pages/recommendations.py").read_text()
-    for label in ("Raw ALS score", "Raw trend score", "Normalized ALS score", "Normalized trend score", "Final score"):
+    for label in ("ALS rank", "ALS score", "Trend score", "Final score"):
         assert label in recommendation_page
+
+
+def test_comparison_rows_leave_scores_empty_when_their_source_has_no_matching_row():
+    rows = comparison_rows(
+        _als_recommendation(71),
+        {
+            "recommendations": [
+                {
+                    "product_id": 999,
+                    "product_name": "New product",
+                    "rank": 1,
+                    "from_als": False,
+                    "from_trend": True,
+                    "als_score": None,
+                    "trend_score": 0.72,
+                    "normalized_als_score": 0.0,
+                    "normalized_trend_score": 1.0,
+                    "final_score": 0.72,
+                }
+            ]
+        },
+    )
+    by_id = {row["Product ID"]: row for row in rows}
+    assert by_id[24852]["ALS score"] == 0.84
+    assert by_id[24852]["Trend score"] is None
+    assert by_id[24852]["Final score"] is None
+    assert by_id[999]["ALS score"] is None
+    assert by_id[999]["Trend score"] == 0.72
+    assert by_id[999]["Final score"] == 0.72
+
+
+def test_empty_als_snapshot_is_not_described_as_a_missing_dataset_user(monkeypatch):
+    api = FakeApi()
+    api.empty_als = True
+    app, _ = _app(monkeypatch, api, page="Hybrid Recommendations")
+    app = _submit(app, "recommendation_submit", "recommendation_user_id", "71")
+    assert not app.exception
+    assert "does not establish whether the user exists in the source dataset" in _texts(app.info)
 
 
 def test_unknown_recommendation_snapshot_has_not_found_semantics(monkeypatch):

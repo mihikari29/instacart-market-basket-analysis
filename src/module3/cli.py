@@ -18,8 +18,10 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import subprocess
 import uuid
+from urllib.parse import urlsplit, urlunsplit
 
 from .config import Config, parse_bool
 from .spark import session
@@ -47,6 +49,23 @@ def code_digest():
     return digest.hexdigest()
 
 
+def _redact_mongodb_uri(uri: str) -> str:
+    """Keep the Mongo host and database visible without recording credentials."""
+    try:
+        parsed = urlsplit(uri)
+        if not parsed.scheme:
+            return "<redacted>"
+        hostname = parsed.hostname or ""
+        if ":" in hostname and not hostname.startswith("["):
+            hostname = f"[{hostname}]"
+        if parsed.port:
+            hostname = f"{hostname}:{parsed.port}"
+        authority = f"***@{hostname}" if parsed.username or parsed.password else hostname
+        return urlunsplit((parsed.scheme, authority, parsed.path, "<redacted>" if parsed.query else "", ""))
+    except (TypeError, ValueError):
+        return "<redacted>"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -66,6 +85,7 @@ def main(argv=None):
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--output", type=Path, default=Path("results/module3"))
+    parser.add_argument("--run-id", help="Stable caller-supplied evidence identity for an isolated orchestration run")
 
     # Kafka
     parser.add_argument("--bootstrap-servers", default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", Config.bootstrap_servers))
@@ -158,6 +178,12 @@ def main(argv=None):
         help="Stable checkpoint identity to reuse across separate run processes (default: run_id).",
     )
     parser.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        default=None,
+        help="Optional isolated checkpoint volume root; defaults beneath the run output directory.",
+    )
+    parser.add_argument(
         "--feed",
         type=Path,
         default=Path("data/synthesized/module3_dev"),
@@ -204,7 +230,9 @@ def main(argv=None):
         trend_source_scope=args.trend_source_scope,
     )
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    run_id = args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
+        parser.error("--run-id must be a 1-80 character path-safe identifier")
     output = args.output / run_id
     output.mkdir(parents=True, exist_ok=False)
     report = {
@@ -213,7 +241,10 @@ def main(argv=None):
         "environment": {
             **revision(),
             "source_code_sha256": code_digest(),
-            "config": asdict(config),
+            "config": {
+                **asdict(config),
+                "mongodb_uri": _redact_mongodb_uri(config.mongodb_uri),
+            },
             "python": platform.python_version(),
             "platform": platform.platform(),
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -260,6 +291,7 @@ def main(argv=None):
                 run_id,
                 duration_seconds=duration,
                 checkpoint_id=args.checkpoint_id,
+                checkpoint_root=args.checkpoint_root,
             )
             report["status"] = "passed"
             spark.stop()

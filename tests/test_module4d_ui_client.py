@@ -183,6 +183,34 @@ def test_recommendation_path_accepts_only_positive_signed_64_bit_user_ids():
     assert session.calls == []
 
 
+def test_als_client_sends_explicit_version_and_validates_bounded_ranked_response():
+    payload = {
+        "user_id": 71,
+        "model_version": "als-v42",
+        "status": "available",
+        "reason": None,
+        "recommendation_count": 1,
+        "requested_limit": 1,
+        "has_more": True,
+        "source": {"run_id": "run-42", "model_version": "als-v42", "graph_version": "graph-v42"},
+        "recommendations": [
+            {"product_id": 501, "product_name": "Banana", "als_rank": 1, "als_score": 0.95}
+        ],
+        "observed_at": "2026-10-14T10:00:00Z",
+    }
+    session = FakeSession(FakeResponse(payload))
+    client = ApiClient("http://localhost:8000", session=session)
+    assert client.get_als_recommendations("71", "als-v42", limit=1) == payload
+    url, kwargs = session.calls[0]
+    assert url == "http://localhost:8000/api/v1/als/recommendations/71"
+    assert kwargs["params"] == {"limit": 1, "model_version": "als-v42"}
+
+    for version in (" bad", "bad/route", "..", "x" * 81):
+        with pytest.raises(ApiClientError) as caught:
+            client.get_als_recommendations(71, version)
+        assert caught.value.code == "invalid_model_version"
+
+
 def test_trend_namespace_must_be_a_configured_scalar_without_whitespace_or_nul():
     assert validate_trend_namespace("module3/replay", ("module3/replay",)) == "module3/replay"
     for namespace in ("", " module3/replay", "module3/replay ", "module3\x00/replay", "unlisted"):

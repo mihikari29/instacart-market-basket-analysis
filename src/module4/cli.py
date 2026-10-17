@@ -35,10 +35,16 @@ from .data import (
     validate_inputs,
     validate_source_receipts,
 )
+from .feature_reader import read_user_features
 from .evaluation import (
+    PRIOR_ONLY_HYBRID_LAMBDAS,
     evaluate_at_k,
     global_popularity,
+    offline_hybrid_recommendations,
     personal_frequency,
+    prior_frequency_trend_products,
+    prior_only_hybrid_evaluation_provenance,
+    prior_trend_only_recommendations,
     ranking_metrics,
     split_truth_by_history,
 )
@@ -63,6 +69,8 @@ from .spark import clear_job_group, session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EVALUATION_KS = (5, 10, 20)
+_MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
+_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
 def save_json(path: Path, value) -> None:
@@ -113,6 +121,11 @@ def _redact_uri(uri: str) -> str:
         hostname = f"{hostname}:{parsed.port}"
     netloc = f"***@{hostname}" if parsed.username or parsed.password else hostname
     return urlunsplit((parsed.scheme, netloc, parsed.path, "<redacted>" if parsed.query else "", ""))
+
+
+def _redact_sensitive_text(value: str) -> str:
+    redacted = _MONGODB_URI.sub(lambda match: _redact_uri(match.group(0)), value)
+    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", redacted)
 
 
 def _safe_config(config: Config) -> dict:
@@ -507,6 +520,141 @@ def _evaluation_deltas(cohorts):
     return deltas
 
 
+def _evaluate_prior_only_hybrid(
+    interactions,
+    als_recommendations,
+    train_truth,
+    all_users,
+    warm_users,
+    global_baseline,
+    personal_baseline,
+    catalog_size,
+    source_receipt,
+    cold_start_summary,
+    run_id,
+    model_version,
+    source_code_sha256,
+    als_params,
+):
+    """Compare fixed Hybrid lambda values using only prior-derived candidates."""
+    from pyspark import StorageLevel
+
+    provenance = prior_only_hybrid_evaluation_provenance(
+        source_receipt,
+        prior_eval_set="prior",
+        truth_eval_set="train",
+        official_train_used_for_fit=False,
+        official_train_used_for_tuning=False,
+        mixed_module1_event_feed_used=False,
+    )
+    trend_products = prior_frequency_trend_products(interactions, top_m=20).persist(
+        StorageLevel.DISK_ONLY
+    )
+    trend_only = prior_trend_only_recommendations(all_users, trend_products).persist(
+        StorageLevel.DISK_ONLY
+    )
+    cohorts = {
+        "all_official_train_users": (all_users, train_truth),
+        "warm_users_and_all_truth_items": (
+            warm_users,
+            train_truth.join(warm_users, "user_id", "inner"),
+        ),
+    }
+    result = {
+        "status": "evaluated",
+        "run_id": run_id,
+        "model_version": model_version,
+        "source_code_sha256": source_code_sha256,
+        "als_parameters": asdict(als_params),
+        "catalog_size": catalog_size,
+        "provenance": provenance,
+        "candidate_policy": {
+            "als_source": (
+                "prior-only Module 4A recommendations with the established prior-global-popularity "
+                "fallback for users without ALS factors"
+            ),
+            "trend_source": "global prior-frequency Top-20 proxy",
+            "candidate_union": "ALS Top-20 and the same fixed prior-only trend Top-20 for each cohort user",
+            "score_normalization": "per-user min-max ALS and Top-M max-normalized prior product frequency",
+            "output_order": "descending unrounded hybrid score, then ascending product_id",
+            "epsilon": 1e-12,
+            "output_top_k": max(EVALUATION_KS),
+            "lambda_values_preregistered": list(PRIOR_ONLY_HYBRID_LAMBDAS),
+            "lambda_selection": "fixed sweep; official-train truth is not used to select a value",
+        },
+        "cold_start_summary": cold_start_summary,
+        "cohorts": {},
+        "interpretation_boundary": (
+            "Metrics compare held-out official-train truth with prior-only recommendations. "
+            "They do not establish that Hybrid or ALS is superior, and the frequency proxy "
+            "is not equivalent to temporal Module 3 trends."
+        ),
+    }
+    try:
+        baseline_frames = {
+            "als": als_recommendations,
+            "trend_only_prior_frequency": trend_only,
+            "global_popularity": global_baseline,
+            "personal_frequency": personal_baseline,
+        }
+        for cohort_name, (cohort_users, cohort_truth) in cohorts.items():
+            result["cohorts"][cohort_name] = {
+                "users": cohort_users.select("user_id").distinct().count(),
+                "metrics": {
+                    name: evaluate_at_k(
+                        frame.join(cohort_users, "user_id", "inner"),
+                        cohort_truth,
+                        EVALUATION_KS,
+                        catalog_size=catalog_size,
+                    )
+                    for name, frame in baseline_frames.items()
+                },
+            }
+        for lambda_weight in PRIOR_ONLY_HYBRID_LAMBDAS:
+            method_name = f"hybrid_lambda_{lambda_weight:.1f}".replace(".", "_")
+            predictions = offline_hybrid_recommendations(
+                als_recommendations,
+                all_users,
+                trend_products,
+                lambda_weight=lambda_weight,
+                top_k=max(EVALUATION_KS),
+            ).persist(StorageLevel.DISK_ONLY)
+            try:
+                for cohort_name, (cohort_users, cohort_truth) in cohorts.items():
+                    result["cohorts"][cohort_name]["metrics"][method_name] = evaluate_at_k(
+                        predictions.join(cohort_users, "user_id", "inner"),
+                        cohort_truth,
+                        EVALUATION_KS,
+                        catalog_size=catalog_size,
+                    )
+            finally:
+                predictions.unpersist(blocking=False)
+        for cohort in result["cohorts"].values():
+            methods = cohort["metrics"]
+            personal = methods.get("personal_frequency", {})
+            cohort["deltas_vs_personal_frequency"] = {
+                name: {
+                    k: {
+                        metric: (
+                            values.get(k, {}).get(metric) - personal.get(k, {}).get(metric)
+                            if values.get(k, {}).get(metric) is not None
+                            and personal.get(k, {}).get(metric) is not None
+                            else None
+                        )
+                        for metric in ("precision_at_k", "recall_at_k", "map_at_k", "ndcg_at_k")
+                    }
+                    for k in map(str, EVALUATION_KS)
+                }
+                for name, values in methods.items()
+                if name != "personal_frequency"
+            }
+        result["trend_products"] = trend_products.count()
+        return result
+    finally:
+        trend_only.unpersist(blocking=False)
+        trend_products.unpersist(blocking=False)
+
+
 def run_als(
     spark,
     tables,
@@ -735,6 +883,23 @@ def run_als(
             "als_vs_baseline_deltas": _evaluation_deltas(cohort_reports),
             "fallback": "global prior popularity for users without ALS user factors in all-user evaluation only",
         }
+        hybrid_evaluation = _evaluate_prior_only_hybrid(
+            interactions=interactions,
+            als_recommendations=all_als_recommendations,
+            train_truth=train_truth,
+            all_users=truth_users,
+            warm_users=warm_truth_users,
+            global_baseline=all_global,
+            personal_baseline=all_personal,
+            catalog_size=catalog_size,
+            source_receipt=input_receipt,
+            cold_start_summary=all_truth_summary,
+            run_id=run_id,
+            model_version=model_version,
+            source_code_sha256=code_hash,
+            als_params=selected,
+        )
+        save_json(output / "hybrid_evaluation.json", hybrid_evaluation)
         if config.recommendation_k < max(EVALUATION_KS):
             evaluation["publication_k"] = config.recommendation_k
             evaluation["evaluation_k"] = evaluation_k
@@ -745,6 +910,7 @@ def run_als(
             "tuning": tuning,
             "split_summary": split["summary"],
             "evaluation": evaluation,
+            "hybrid_evaluation": hybrid_evaluation,
             "model": model_report,
             "recommendation_validation": publication_validation,
             "mongo": mongo,
@@ -1025,7 +1191,7 @@ def _save_run_artifacts(output: Path, report: dict):
 
 def build_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["validate", "als", "graph", "all"])
+    parser.add_argument("command", choices=["validate", "als", "graph", "all", "user-features"])
     parser.add_argument("--root")
     parser.add_argument("--master")
     parser.add_argument("--shuffle-partitions", type=int)
@@ -1047,6 +1213,7 @@ def build_parser():
                         default="staged_curated")
     parser.add_argument("--source-receipt", type=Path)
     parser.add_argument("--run-id")
+    parser.add_argument("--user-id", type=int, help="User ID for the descriptive user-features command")
     parser.add_argument("--model-version")
     parser.add_argument("--graph-version")
     parser.add_argument("--skip-serving", action="store_true")
@@ -1080,6 +1247,38 @@ def main(argv=None):
         raise ValueError("pilot_users must be positive")
     if not 1 <= args.max_trials <= 12:
         raise ValueError("max_trials must be between 1 and 12")
+    if args.command == "user-features":
+        if args.user_id is None or args.user_id <= 0:
+            raise ValueError("user-features requires a positive --user-id")
+        inspection_id = args.run_id or (
+            datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
+        )
+        inspection_id = _valid_version(inspection_id, "run_id")
+        output = args.output / "user-features" / inspection_id
+        output.mkdir(parents=True, exist_ok=False)
+        started_at = datetime.now(timezone.utc).isoformat()
+        spark = None
+        try:
+            spark = session(config, output / "eventlog")
+            result = read_user_features(spark, config, args.user_id)
+            report = {
+                "inspection_id": inspection_id,
+                "status": result["status"],
+                "scope": result["scope"],
+                "observed_at_utc": started_at,
+                "module2_source": result["source"],
+                "user_id": result["user_id"],
+                "features": result["features"],
+                "model_input": False,
+                "module4_source_code_sha256": source_digest(),
+                "command": ["module4", "user-features", "--user-id", str(args.user_id)],
+            }
+            save_json(output / "user_features.json", report)
+            print(f"[USER FEATURES] {output.resolve()}", flush=True)
+            return 0
+        finally:
+            if spark is not None:
+                spark.stop()
     run_id = _valid_version(
         args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]),
         "run_id",
@@ -1367,8 +1566,8 @@ def main(argv=None):
         report.update(
             status="failed",
             failed_stage=current_stage,
-            error=f"{type(exc).__name__}: {exc}",
-            traceback=traceback.format_exc(),
+            error=f"{type(exc).__name__}: {_redact_sensitive_text(str(exc))}",
+            traceback=_redact_sensitive_text(traceback.format_exc()),
         )
         report["stages"][current_stage] = "failed"
         if als_result is not None and als_result.get("mongo", {}).get("published"):
@@ -1382,7 +1581,7 @@ def main(argv=None):
             ),
             "graph_published": bool(graph_result and graph_result.get("mongo", {}).get("published")),
         }
-        print(f"[FAILED] {current_stage}: {type(exc).__name__}: {exc}", flush=True)
+        print(f"[FAILED] {current_stage}: {type(exc).__name__}: {_redact_sensitive_text(str(exc))}", flush=True)
     finally:
         if "prior" in locals():
             try:

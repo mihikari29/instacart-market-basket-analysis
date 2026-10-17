@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: __K8S_RENDER_REQUIRED__
+  name: module4d-mongo-bootstrap
+  labels:
+    app.kubernetes.io/name: module4d-mongo
+    app.kubernetes.io/component: database-bootstrap
+data:
+  20-users-and-indexes.js: |
+    const databaseName = process.env.MODULE4D_MONGO_DATABASE;
+    const readUsername = process.env.MODULE4D_MONGO_READ_USERNAME;
+    const readPassword = process.env.MODULE4D_MONGO_READ_PASSWORD;
+    const publisherUsername = process.env.MODULE4D_MONGO_PUBLISHER_USERNAME;
+    const publisherPassword = process.env.MODULE4D_MONGO_PUBLISHER_PASSWORD;
+    if (![databaseName, readUsername, readPassword, publisherUsername, publisherPassword].every(value => typeof value === "string" && value.length > 0)) {
+      throw new Error("Mongo bootstrap inputs are incomplete");
+    }
+    const appDb = db.getSiblingDB(databaseName);
+    appDb.createUser({user: readUsername, pwd: readPassword, roles: [{role: "read", db: databaseName}]});
+    appDb.createUser({user: publisherUsername, pwd: publisherPassword, roles: [{role: "readWrite", db: databaseName}]});
+    appDb.batch_product_metrics.createIndex({purchase_count: -1, product_id: 1}, {name: "idx_batch_product_purchase_count_desc_product_id_asc"});
+    appDb.batch_product_metrics.createIndex({reorder_rate: -1, product_id: 1}, {name: "idx_batch_product_reorder_rate_desc_product_id_asc"});
+    appDb.realtime_trending_windows.createIndex({source_namespace: 1, window_end: -1}, {name: "idx_source_namespace_window_end_desc"});
+    appDb.user_recommendations.createIndex({model_version: 1, user_id: 1, product_id: 1}, {name: "uq_model_user_product", unique: true});
+    appDb.user_recommendations.createIndex({model_version: 1, user_id: 1, als_rank: 1}, {name: "uq_model_user_rank", unique: true});
+    appDb.user_recommendations.createIndex({model_version: 1, user_id: 1}, {name: "idx_model_user"});
+    appDb.product_graph_metrics.createIndex({graph_version: 1, product_id: 1}, {name: "uq_graph_product", unique: true});
+    appDb.product_graph_metrics.createIndex({graph_version: 1, pagerank: -1}, {name: "idx_graph_pagerank"});
+    appDb.product_graph_metrics.createIndex({graph_version: 1, weighted_degree: -1}, {name: "idx_graph_weighted_degree"});
+    appDb.final_recommendations.createIndex({serving_version: 1, user_id: 1, rank: 1}, {name: "uq_serving_user_rank", unique: true});
+    appDb.final_recommendations.createIndex({serving_version: 1, user_id: 1, product_id: 1}, {name: "uq_serving_user_product", unique: true});
+    print("Mongo scoped users and read indexes initialized.");

@@ -140,6 +140,7 @@ def test_domain_validation_labels_poison_reasons(spark_session):
         valid | {"event_id": "bad-dow", "order_dow": 7},
         valid | {"event_id": "bad-hour", "order_hour_of_day": 24},
         valid | {"event_id": "bad-iso", "event_time_iso": "not-a-time"},
+        valid | {"event_id": "bad-ingestion", "ingestion_time_epoch_ms": 0},
     ]
     payloads = [json.dumps(valid), *map(json.dumps, invalid), "not-json"]
     raw = spark_session.createDataFrame(
@@ -152,6 +153,7 @@ def test_domain_validation_labels_poison_reasons(spark_session):
     assert {
         "event_id", "user_id", "order_id", "product_id", "add_to_cart_order",
         "order_dow", "order_hour_of_day", "event_time_epoch_ms", "event_time_iso",
+        "ingestion_time_epoch_ms",
     } <= reasons
 
 

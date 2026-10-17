@@ -2,49 +2,46 @@
 
 ## Status and relationship to the Proposal
 
-**DESIGNED:** the final target is a bounded Lambda demonstration in one
-dedicated local Minikube profile. It will own its HDFS, Kafka, MongoDB, Spark,
-API, and dashboard resources and storage. Spark will run in local mode inside
-Kubernetes-managed workloads. This is a single-node course demonstration, not
-a high-availability or production-capacity design.
+**CODE COMPLETE — RUNTIME ACCEPTANCE PENDING:** the implementation targets a
+bounded Lambda demonstration in one dedicated local Minikube profile. It owns
+its HDFS, Kafka, MongoDB, Spark, API, dashboard resources, and storage. Spark
+runs in local mode inside Kubernetes-managed Jobs. This is a single-node course
+demonstration, not a high-availability or production-capacity design.
 
 The approved [Proposal](Proposal.md) remains the requirements baseline. Its
-§§3.1, 36.2, 39, and 45 require a real Kubernetes demonstration and describe
-the expected pipeline walk-through. Proposal §36.2 permits HDFS to remain in
-Compose if Kubernetes is too resource-intensive, provided the actual topology
-is documented. This runbook describes a staged plan; it does not close that
-requirement.
+§§3.1, 36.2, 39, 42, and 45 define the demonstration, acceptance, and
+deliverables. This implementation follows the fully isolated topology. A real
+runtime demonstration is still required to close the Proposal requirements.
 
-**STATICALLY VALIDATED:** K8S-B1 adds a private per-run render path and the
-serving-only foundation in `deploy/k8s/base/`. It defines isolated MongoDB,
-read-only FastAPI, Streamlit, bounded storage/resources, and network boundaries.
-It contains no working HDFS, Kafka, Spark, streaming, Hybrid, or pipeline Job
-resources. There is no per-user ALS endpoint in this change.
+The implementation includes B1 private rendering, B2 serving and ownership
+proof, B3 isolated HDFS/Kafka/Spark Jobs, B4 runtime acceptance and guarded
+teardown, and the M6 `scripts.k8s.demo` coordinator. It also includes the
+per-user ALS API/dashboard view and the prior-only Hybrid evaluation harness.
 
-**RUNTIME NOT VERIFIED:** no image was built or loaded, and no Minikube profile,
-namespace, Pod, Service, PVC, Secret, Mongo user, NetworkPolicy, or application
-request was created or tested for this change. A rendered manifest is not an
-executed Kubernetes demonstration.
+**RUNTIME NOT VERIFIED:** this campaign did not build or pull an image, start
+Minikube, contact Kubernetes, create a namespace/Pod/PVC/Secret/Mongo user, run a
+pipeline, probe the dashboard, or execute teardown. Offline receipts and tests
+are not Kubernetes runtime acceptance.
 
-## Planned implementation phases
+## Implemented phases
 
 - **B1 — static foundation:** serving manifests, identity contract, image
   packaging target, version lock, runbook, and pure/static checks.
-- **B2 — serving validation:** complete the version lock, confirm host
-  capacity, create a dedicated profile and namespace, build and load immutable
-  images, provision private credentials, bootstrap MongoDB and indexes, then
-  verify API/UI behavior and isolation. Mongo credential bootstrap and all
-  service behavior remain unverified.
-- **B3 — bounded Lambda integration:** add isolated HDFS, Kafka, controlled
-  Spark batch and stream workloads, ALS/graph and Hybrid publication, and
-  bounded fixture receipts. This requires separate review and application
-  dependency decisions.
-- **B4 — acceptance:** prove replay, late-data behavior, checkpoint recovery,
-  API/UI acceptance, network-policy enforcement, evidence capture, and scoped
-  teardown in fresh runs.
+- **B2 — serving implementation:** staged lock completion, host/toolchain/profile/storage checks,
+  run-scoped image builds and loading, private credentials, Mongo bootstrap/indexes,
+  explicit workload apply/readiness, and complete live receipts are implemented.
+- **B3 — bounded Lambda integration:** isolated HDFS, Kafka, batch/replay/streaming,
+  Module 1/2/4, and Hybrid Jobs use run-specific PVCs, names, manifests, and receipts.
+- **B4 — acceptance and teardown:** the runtime scenario collector, sanitized
+  failure evidence, and separately gated exact-profile/namespace teardown are implemented.
+- **M6 — one-session coordinator:** `python3 -m scripts.k8s.demo run --mode fixture
+  --execute` can discover a fresh run identity, create the dedicated profile,
+  build and inspect images, finalize the lock, deploy B2/B3, run B4, and retain
+  evidence. `preflight`, `plan`, `verify`, `collect`, and `teardown` are separate
+  commands; only execution-bearing commands contact runtime services.
 
-The per-user ALS recommendation endpoint and dashboard view remain a separate
-application review and are not part of B1 or B2.
+The per-user ALS recommendation endpoint and dashboard view are implemented in
+the application work; Kubernetes B2 remains a serving-only deployment layer.
 
 ## Run identity and ownership
 
@@ -56,10 +53,12 @@ run-ID, and manager labels are attached by the private render overlay. The
 renderer requires a new output root beneath an existing, non-symlinked parent
 outside the repository and all registered Git worktrees. It atomically claims
 that root with mode `0700`, refuses nested managed outputs, and preserves partial
-output if rendering fails. It never creates credentials or contacts a
-Kubernetes context. B1 can validate the ID's shape,
-but only a live B2 preflight can establish that the profile and namespace are
-unused; it must reject collisions before creating anything.
+output if rendering fails. Rendering itself never creates credentials or
+contacts Kubernetes. The demo runner checks local profile/context collisions
+before creating the fresh profile; every later `kubectl` command supplies that
+run's explicit context. Runtime identity discovery validates the profile,
+Kubernetes version, single-node architecture, runtime, and CNI before lock
+finalization.
 Raw base resources carry an invalid `__K8S_RENDER_REQUIRED__` namespace and
 have no committed Kustomize root. The renderer creates that root in the private
 output and replaces the sentinel with the unique namespace, so an unrendered
@@ -79,16 +78,13 @@ database name `module4d_demo_<run-id>` and trend namespace
 does not contact a cluster. The example ID is illustrative and must not be
 reused for an actual run.
 
-After a real namespace is created, a future execution receipt must record the
-exact Minikube profile and Kubernetes context, actual cluster identity, observed
-namespace UID, direct resource inventory and UIDs, owner labels, controller
-owner references and child UIDs, PVC/PV binding metadata and provisioner, and
-the resources created by controllers. The B1 validator checks receipt structure;
-a nonempty recorded UID does not prove live ownership. Before any destructive
-operation, B2/B4 must compare every recorded identity with live observations and
-reject missing, incomplete, or mismatched receipts. B1 implements pure structural
-validation only; it has no `kubectl apply`,
-namespace deletion, profile deletion, or cleanup command.
+After a real namespace is created, the B2 collector records the exact Minikube
+profile and Kubernetes context, cluster marker, namespace UID, direct resource
+inventory and UIDs, controller owner references and child UIDs, PVC/PV claim
+binding, StorageClass UID/provisioner/local path/node, and runtime image IDs.
+The pure validator also compares a recorded receipt with a fresh live receipt.
+B4 provides a separate `teardown` command/API that rechecks live receipts and
+requires captured failure evidence. No cleanup runs automatically.
 
 ## Serving boundary and credentials
 
@@ -98,23 +94,28 @@ FastAPI uses `module4d-api:8000`, and Streamlit calls the exact API hostname
 MongoDB credential or database URI. No Ingress, NodePort, LoadBalancer,
 hostNetwork, hostPath, Docker socket, or existing Compose volume is used.
 
-The MongoDB StatefulSet requires the externally provisioned Secret
-`module4d-mongo-admin` with nonempty `username` and `password` keys. A non-root
+The MongoDB StatefulSet requires the run-scoped Secret
+`module4d-mongo-admin` with nonempty `username` and `password` keys. The B2
+helper generates four opaque Secrets in memory and sends them only through
+explicit-context `kubectl` stdin: admin credentials, separate database account
+credentials, API read URI, and publisher URI. Secret payloads are not written to
+the render tree or receipt and are omitted from logs and exceptions. A non-root
 init-container check rejects empty values without printing either value, and
 `mongod` receives `--auth` explicitly. Its root credential
 is used only to initialize and administer this isolated MongoDB instance. The
 API requires `module4d-api-readonly` with a single `mongodb-uri` key for a
-database-scoped account granted MongoDB's `read` role. A future B3 publisher
-must use a distinct `module4d-mongo-publisher` credential with only the write
-rights its collections require. B1 commits no Kubernetes Secret object and no
-credential value. Secret creation and Mongo account bootstrap are B2 work.
+database-scoped account granted MongoDB's `read` role. A separate
+`module4d-mongo-publisher` URI is generated for data publishers and is scoped to
+the run-specific application database. The bootstrap grants MongoDB's
+database-scoped `readWrite` role; B3 should narrow it if the actual write
+contracts can use a smaller custom role. Git contains no Kubernetes Secret
+object or credential value. Secret creation and Mongo account bootstrap are
+implemented but remain unexecuted.
 The API URI must authenticate against the generated `module4d_demo_<run-id>`
 database (`authSource` set to that same database); URL-encode credentials when
 they are not generated from URI-safe characters. Its service host is
 `module4d-mongo:27017`.
-The minimum publisher role remains unresolved: B3 must check the actual
-publication operations and grant only the database-scoped privileges they
-require. Root credentials must not be reused by the publisher or API.
+Root credentials must not be reused by the publisher or API.
 
 The API expects a read account with collection reads and `listIndexes` access.
 At readiness it requires a URI with explicit credentials, a matching database
@@ -141,30 +142,40 @@ disabled and no Kubernetes API permissions. NetworkPolicies start with
 namespace-wide ingress and egress denial, allow DNS to the `kube-system` CoreDNS
 Pods, permit only API-to-Mongo on TCP/27017, and permit only UI-to-API on
 TCP/8000. These policies express intended boundaries; enforcement depends on a
-NetworkPolicy-capable CNI and has not been tested. Minikube is planned with
-Calico; a future live check must verify allowed and denied connections,
-including loopback-only port-forward behavior.
+NetworkPolicy-capable CNI and has not been tested. The B2 static/live inventory
+validator checks the exact policy set and labels but does not claim packet-flow
+enforcement. The selected profile uses Calico; B4 must verify allowed and denied
+connections, including loopback-only port-forward behavior.
 
 ## Storage and resource bounds
 
 MongoDB has one StatefulSet replica and one isolated 2 GiB ReadWriteOnce PVC
 for `/data/db`; config and temporary files use bounded ephemeral volumes. The
-manifest relies on the profile's default dynamic StorageClass. B2 must confirm
-that a StorageClass exists, that it provisions a profile-local volume, and that
-the actual PVC/PV binding and capacity match the run receipt. B1 defines no
-shared volume, no reuse of Compose data, and no pipeline checkpoints.
+manifest relies on the profile's default dynamic StorageClass. B2's runtime
+checks require a StorageClass that provisions a profile-local volume and verify
+that the actual PVC/PV binding and capacity match the run receipt. B3 adds isolated
+1 GiB NameNode, 16 GiB DataNode, 2 GiB Kafka, 16 GiB pipeline, and 2 GiB
+checkpoint claims. Together with Mongo, the run requests 39 GiB of profile-local
+storage, within the 40 GiB namespace quota. No Compose volume or checkpoint path
+is reused.
 
 The serving Pods request 400 millicores and 896 MiB in total; their combined
 limits are 1.75 CPU and 1.75 GiB. Namespace quota caps the phase at 2 CPU,
 2 GiB requested memory, 4 CPU, 4 GiB memory, 3 GiB PVC requests, and 2 GiB
 ephemeral-storage. These are initial planning values, not measurements.
 
-Reserve at least 4 host CPU cores, 6 GiB RAM, and 20 GiB free disk for a B2
-serving rehearsal and image build. The later B3 pipeline target is approximately
-6 CPU cores, 12 GiB RAM, and 30–40 GiB free disk for images and bounded
-artifacts. Check the machine's actual capacity and leave headroom for existing
-Compose services before running Minikube. These planning figures have not been
-validated on the user's host.
+The runner fails closed below 6 physical CPU cores, 12 GiB available RAM, and
+40 GiB free disk for B3 and the image builds. The B2 serving reserve alone is 4
+CPU, 6 GiB RAM, and 20 GiB disk. Full-data mode also requires exactly six
+reviewed CSV inputs and applies the 40 GiB host reserve. On WSL, the operator
+must provide a measured Windows backing-disk value with
+`--windows-backing-disk-gib` to `preflight`, `plan`, or `run`; guest free space is
+not accepted as evidence of Windows capacity. Full-data mode caps the six raw
+files at 4 GiB, streams them directly from the run PVC input directory without a
+second raw copy, reserves 2 GiB for filesystem and metadata overhead, and
+budgets up to three times the raw byte count for raw, cleaned, and generated feed
+working sets (14 GiB maximum against the 16 GiB pipeline claim). The measured
+values below show this machine does not meet the B3 reserve.
 
 ## Images and version lock
 
@@ -183,49 +194,46 @@ SHA before creating its user. The API's existing source
 digest meaning is preserved by placing every file it hashes at its original
 repository-relative path. The runner inherits current `requirements.txt` and
 `requirements-dev.txt` resolution through the Spark stage. The API and UI
-manifests pin their declared packages, but the complete resolved
-Spark-derived Python runtime and UI transitive closure are not yet locked.
+manifests pin their declared packages. A deterministic package inventory is
+embedded in each application image so later runtime discovery can record the
+exact Python version and transitive package closure. Those values are not
+present until authorized image builds occur.
 MongoDB's pinned official 7.0.16 image uses UID 999, which is the StatefulSet's
 non-root account ([image metadata](https://hub.docker.com/layers/library/mongo/7.0.16-jammy/)).
 Later acceptance must compare each built OCI image identity with the image loaded
 into the dedicated profile, the digest rendered in the workload, and the actual
-running container image ID. It must use the verified digest in the rendered
-workload configuration; the `:b1` tags are local staging names, not immutable
-acceptance identities. A valid digest string alone is not evidence of provenance.
+running container image ID. The B2 renderer pins complete-lock digests, while
+the build plan uses run-scoped local tags. A valid digest string alone is not
+evidence of provenance.
 Because `.git` is excluded from the image context, builds must come from a
 clean checkout and the supplied SHA must be recorded externally; inside the
 image the revision is available, while the dirty-state value remains unknown.
 
-After the lock is complete, B2 will build the exact manifest image names with
-the full source SHA and load those images into that run's dedicated profile.
-These are planned commands and were not run for B1:
+`scripts.k8s.image_operations.image_build_plan` creates the API/UI BuildKit
+commands from a clean full Git SHA, run ID, and one target platform. The plan
+collects BuildKit metadata, checks each local image's revision label and config
+digest, reads the embedded Python inventory from a stopped container, then
+loads and verifies images against the selected Minikube profile. Build and load
+functions require explicit `execute=True`; none was invoked during this coding
+campaign. `scripts.k8s.deployment.deploy_serving` requires a complete lock and
+verified host/toolchain/cluster/storage/image evidence before applying the
+namespace, Secrets, or serving overlay.
 
-```bash
-docker build -f Dockerfile --target k8s-runner \
-  --build-arg MODULE4_COMMIT=<full-lowercase-git-sha> \
-  --tag instacart-module4d-k8s-api:b1 .
-docker build -f Dockerfile --target ui \
-  --tag instacart-module4d-k8s-ui:b1 .
-minikube image load -p <it4931-k8s-run-id> instacart-module4d-k8s-api:b1
-minikube image load -p <it4931-k8s-run-id> instacart-module4d-k8s-ui:b1
-```
-
-The B1 version lock is incomplete, so these commands do not authorize a
-cluster run. An accepted deployment must render the actual image digests and
-verify the loaded image identities before scheduling Pods.
-
-`deploy/k8s/versions.lock.yaml` records Minikube v1.39.0, Kubernetes v1.37.1,
+`deploy/k8s/versions.lock.yaml` selects Minikube v1.39.0, Kubernetes v1.37.1,
 and Calico v3.33.0 as selected release versions. Calico 3.33 documents testing
 on Kubernetes 1.35–1.37; this release-level compatibility reference does not
 verify the installed CNI or policy enforcement. B2 must inspect and record the
 actual Kubernetes and Calico image digests used by the profile. The repository's
 Spark and Mongo base image digests are retained from the locked Dockerfile and
-Compose file. The lock remains **incomplete**, and the pure validator rejects it
-until measured host capacity, supported host architecture, Minikube checksum,
-kubectl and Docker Engine versions, control-plane and Calico image roles, app
-image identities, resolved Python environment digests/runtime versions, and the
-default StorageClass/provisioner/profile-local behavior are recorded. No
-executable deployment preflight or cluster operation is included in B1.
+Compose file. The committed template remains **incomplete**. Strict validation
+rejects it until measured host capacity, supported host architecture,
+cluster/profile UID, Minikube checksum, kubectl and Docker Engine versions,
+control-plane and Calico image roles, app image identities/build provenance,
+resolved Python environment digests/runtime versions, and default
+StorageClass/provisioner/profile-local behavior are recorded. The one-session
+runner discovers these values, builds the images, and writes finalized B2/B3
+locks only after their evidence validates. No runtime preflight or cluster
+operation was executed in this campaign.
 
 Sources: [Minikube v1.39.0 release](https://github.com/kubernetes/minikube/releases/tag/v1.39.0),
 [Kubernetes 1.37 release status](https://kubernetes.io/releases/1.37/), and
@@ -235,10 +243,12 @@ Profile-specific image loading follows the [Minikube image-loading guide](https:
 
 ## Verification and remaining runtime checks
 
-**STATICALLY VALIDATED** checks for this change are limited to Python unit
-tests, Python/YAML syntax and Kustomize offline rendering, manifest and
-Dockerfile inspection, secret-pattern scanning, Markdown link checks, and
-`git diff --check`. Each executed result is recorded in the implementation PR.
+**OFFLINE VALIDATION:** 79 focused Kubernetes tests and 4 Module 2 executor
+benchmark tests passed in the isolated worktree, including fake-executor demo
+state checks, synthetic receipt rejection, local Kustomize rendering, and
+Mongo Secret/index contracts. Python compilation and `git diff --check` pass.
+These checks do not exercise Docker, Minikube, Kubernetes, MongoDB, or
+application runtime behavior.
 
 The following remain **RUNTIME NOT VERIFIED**: image builds and image loading;
 Minikube scheduling and DNS; PVC/PV behavior; MongoDB initialization with
@@ -256,8 +266,13 @@ identity, phase commands and exit codes, Pod events/current and previous logs,
 Mongo readback/index and permission checks, API/UI receipts, and a teardown
 receipt. Secrets and raw Mongo URIs must never enter these records.
 
-Failure evidence must be collected before any teardown. Teardown must target
-only the exact dedicated profile and namespace after validating the complete
-ownership receipt and storage ownership; never use a global prune or delete
-resources selected only by a name. B1 provides no cleanup recipe because no
-live resources are created here.
+Run evidence is private under the selected output root; build metadata and the
+finalized lock are kept in the sibling preparation directory. Failure evidence
+must be collected with `demo collect --failure --execute` and reviewed before
+teardown. `demo teardown` first prints the exact namespace/profile deletion
+plan; adding `--execute` is a separate authorization and the implementation
+rechecks B2/B3/B4 receipts and live UIDs. No global prune or name-only deletion
+is supported.
+
+The complete command reference, acceptance matrix, demo script, and limitations
+are in the [Kubernetes demo runbook](kubernetes-demo-runbook.md).

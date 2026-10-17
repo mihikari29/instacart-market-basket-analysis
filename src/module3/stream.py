@@ -18,9 +18,11 @@ from .sink_mongo import write_mongo
 from .trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
 from .trending import build_window_counts, rank_trending_batch, select_top_k
 from .checkpoint import ensure_checkpoint
+from .latency import summarize_ingestion_to_output
 
 
 PROGRESS_LOG_NAME = "streaming_progress.jsonl"
+CHECKPOINT_STATE_VERSION = "ingestion-latency-v1"
 
 
 def _publish_finalized_batch(batch_df, batch_id, config: Config) -> dict:
@@ -30,7 +32,14 @@ def _publish_finalized_batch(batch_df, batch_id, config: Config) -> dict:
 
     # Keep the established row sink first. If it raises, bundles are not attempted.
     result = write_mongo(top_k, batch_id, config)
+    result["sink_write_duration_ms"] = result.get("duration_ms")
+    timestamp_stats = result.pop(
+        "ingestion_timestamp_stats", {"count": 0, "sum": 0, "min": None, "max": None}
+    )
     if not config.publish_trend_bundles:
+        result["ingestion_to_output_latency"] = summarize_ingestion_to_output(
+            timestamp_stats, time.time_ns() // 1_000_000
+        )
         return result
 
     if not config.trend_source_namespace:
@@ -62,6 +71,9 @@ def _publish_finalized_batch(batch_df, batch_id, config: Config) -> dict:
         **asdict(bundle_report),
         "publication_duration_ms": round((time.perf_counter() - started) * 1000, 3),
     }
+    result["ingestion_to_output_latency"] = summarize_ingestion_to_output(
+        timestamp_stats, time.time_ns() // 1_000_000
+    )
     return result
 
 
@@ -151,13 +163,19 @@ def run_stream(
     run_id: str,
     duration_seconds: int | None = None,
     checkpoint_id: str | None = None,
+    checkpoint_root: Path | None = None,
     on_query_started=None,
 ) -> dict:
     """Run until the duration expires, or indefinitely until interrupted."""
     events = from_kafka(spark, config)
     counts = build_window_counts(events, config)
     checkpoint_identity = checkpoint_id or run_id
-    checkpoint = ensure_checkpoint(output_dir.parent, checkpoint_identity)
+    checkpoint = ensure_checkpoint(
+        output_dir.parent,
+        checkpoint_identity,
+        checkpoint_root=checkpoint_root,
+        state_version=CHECKPOINT_STATE_VERSION,
+    )
     sink_log = output_dir / "sink_batches.jsonl"
 
     def _foreach(batch_df, batch_id):
@@ -182,6 +200,7 @@ def run_stream(
         "query_name": query.name,
         "checkpoint_location": checkpoint,
         "checkpoint_id": checkpoint_identity,
+        "checkpoint_state_version": CHECKPOINT_STATE_VERSION,
         "trigger_interval": config.trigger_interval,
         "window_short": config.window_short,
         "window_long": config.window_long,

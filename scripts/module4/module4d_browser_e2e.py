@@ -84,6 +84,28 @@ def _select_option(page: Page, label: str, option: str) -> None:
     expect(selector).to_have_value(option, timeout=5_000)
 
 
+def _wait_for_chart_minimum(page: Page, minimum: int, section: str, expected: str) -> int:
+    """Wait for the last required chart before applying the unchanged count gate."""
+    charts = page.locator('[data-testid="stVegaLiteChart"]')
+    try:
+        expect(charts.nth(minimum - 1)).to_be_visible(timeout=20_000)
+    except Exception as exc:
+        visible_headings = page.locator("h1, h2, h3").all_text_contents()
+        raise RuntimeError(
+            f"{section} did not render its required charts; minimum={minimum}, "
+            f"observed={charts.count()}, expected={expected}, "
+            f"visible_headings={visible_headings}"
+        ) from exc
+    chart_count = charts.count()
+    if chart_count < minimum:
+        visible_headings = page.locator("h1, h2, h3").all_text_contents()
+        raise RuntimeError(
+            f"{section} rendered only {chart_count} charts; expected at least {minimum}: {expected}; "
+            f"visible_headings={visible_headings}"
+        )
+    return chart_count
+
+
 def run() -> dict[str, Any]:
     if not UI_URL.startswith("http://127.0.0.1:") or not API_URL.startswith("http://127.0.0.1:"):
         raise RuntimeError("browser E2E requires API and UI URLs bound to host loopback")
@@ -153,14 +175,14 @@ def run() -> dict[str, Any]:
             raise RuntimeError("analytics page omitted fixture batch products")
         if orders["scope"] != "all orders" or "all-order" not in analytics_visible.lower() and "all orders" not in analytics_visible.lower():
             raise RuntimeError("analytics page did not separate archived all-order distributions from prior-only metrics")
-        chart_count = page.locator('[data-testid="stVegaLiteChart"]').count()
-        if chart_count < 4:
-            raise RuntimeError(f"analytics page rendered only {chart_count} charts; expected trend, batch, and two order charts")
+        chart_count = _wait_for_chart_minimum(
+            page, 4, "analytics page", "trend, batch, and two order charts"
+        )
 
-        _navigate(page, "Hybrid Recommendations", "Hybrid Recommendations")
+        _navigate(page, "Hybrid Recommendations", "ALS and Hybrid Recommendations")
         user_input = page.get_by_label("Positive integer user ID", exact=True)
         user_input.fill(str(WARM_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text(recommendation["serving_version"], exact=False).first).to_be_visible(timeout=15_000)
         warm_text = _all_text(page)
         warm_grid = _collect_grid_text(page)
@@ -170,10 +192,10 @@ def run() -> dict[str, Any]:
             "Source run: module4d-demo-source-001",
             "Model version: module4d-demo-als-v1",
             "Graph version: module4d-demo-graph-v1",
-            "Raw ALS score",
-            "Raw trend score",
-            "Normalized ALS score",
-            "Normalized trend score",
+            "ALS rank",
+            "ALS score",
+            "Trend score",
+            "Final rank",
             "Final score",
         ):
             if value.lower() not in warm_visible.lower():
@@ -186,16 +208,16 @@ def run() -> dict[str, Any]:
             raise RuntimeError("Hybrid grid did not render the source-derived persisted final score")
 
         user_input.fill(str(FALLBACK_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text("als_fallback_trend_unavailable", exact=False)).to_be_visible(timeout=15_000)
         if fallback["mode"] != "als_fallback_trend_unavailable":
             raise RuntimeError("fallback browser source and API response differ")
 
         user_input.fill(str(UNKNOWN_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text("recommendation_snapshot_not_found", exact=False)).to_be_visible(timeout=15_000)
         user_input.fill(str(WARM_USER_ID))
-        page.get_by_role("button", name="Load / refresh recommendations", exact=True).click()
+        page.get_by_role("button", name="Load / refresh ALS and Hybrid", exact=True).click()
         expect(page.get_by_text(recommendation["serving_version"], exact=False).first).to_be_visible(timeout=15_000)
 
         _navigate(page, "Evaluation & Performance", "Evaluation & Performance")
@@ -256,11 +278,9 @@ def run() -> dict[str, Any]:
         _select_option(page, "Recorded method", "ALS")
         _select_option(page, "K", "10")
         expect(page.get_by_role("heading", name="Recall@K at K=10", exact=True)).to_be_visible(timeout=15_000)
-        evaluation_chart_count = page.locator('[data-testid="stVegaLiteChart"]').count()
-        if evaluation_chart_count < 5:
-            raise RuntimeError(
-                f"evaluation page rendered only {evaluation_chart_count} charts; expected ALS, three Spark, and C8B charts"
-            )
+        evaluation_chart_count = _wait_for_chart_minimum(
+            page, 5, "evaluation page", "ALS, three Spark, and C8B charts"
+        )
         page.get_by_role("button", name="Refresh evaluation and evidence", exact=True).click()
         expect(page.get_by_role("heading", name="Evaluation & Performance", exact=True)).to_be_visible()
         rendered = _all_text(page)

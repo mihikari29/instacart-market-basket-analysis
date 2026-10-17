@@ -858,16 +858,24 @@ checkpoint restart and does not establish production throughput or
 recommendation quality. See the immutable [C8 receipts](evidence/module4c/README.md)
 and archived [C8B procedure and observations](evidence/module4c/c8b-streaming-demo.md).
 
-A future quality evaluation must first establish leakage-safe chronology and a
-cutoff from source order sequence and timestamp reconstruction. The ordinary
-Module 1 event feed combines prior and train events without retaining
-`eval_set`; it cannot by itself establish prior-only trend provenance. Freeze
-the cutoff-specific model, graph, catalog, trend windows, cohort, and candidate
-eligibility; ensure no official-train truth contributes to any of them. Compare
-ALS-only, Trend-only, preregistered Hybrid lambda values, PersonalFrequency,
-and GlobalPopularity at K=5/10/20 using the existing `evaluation.py` metric
-definitions. Report warm and all-nonempty-truth cohorts plus cold-start
-coverage. If a valid cutoff cannot be proven, report evaluation as infeasible.
+The reproducible offline Hybrid evaluation now uses the official Instacart
+`eval_set` boundary: ALS fit and tuning use only `order_products_prior`, the
+trend candidate proxy is a fixed Top-20 global product-frequency ranking from
+prior-only interactions, and `order_products_train` is read only as held-out
+truth. It records both curated source hashes, compares the preregistered lambda
+sweep `(0.0, 0.5, 0.7, 0.9, 1.0)` with ALS, Trend-only, PersonalFrequency, and
+GlobalPopularity at K=5/10/20, and reports all official-train users plus the
+warm-user/all-truth-items cohort. The full-data verifier checks the split
+provenance and required cohort/method metrics. The fixed frequency proxy is not
+equivalent to Module 3's temporal trend windows and does not support a claim
+that Hybrid or ALS is superior.
+
+A future evaluation of actual Module 3 trend windows still needs a valid
+chronology and cutoff from source order sequence and timestamp reconstruction.
+The ordinary Module 1 event feed combines prior and train events without
+retaining `eval_set`, so it cannot establish prior-only trend provenance. If a
+valid cutoff cannot be proven for that temporal stream, report that evaluation
+as infeasible rather than using the mixed feed.
 
 <a id="module4d-spec"></a>
 
