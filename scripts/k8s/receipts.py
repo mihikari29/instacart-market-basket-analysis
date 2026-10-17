@@ -11,6 +11,7 @@ from .image_provenance import collect_cluster_component_images, verify_running_i
 from .lock_lifecycle import validate_static_lock
 from .ownership import (
     IMAGE_DIGEST_PATTERN,
+    IMAGE_NAME_TAG_PATTERN,
     OwnershipError,
     OwnerReferenceIdentity,
     REQUIRED_SERVING_RUNTIME_IMAGE_ROLES,
@@ -23,7 +24,6 @@ from .ownership import (
 )
 from .runtime import (
     CommandExecutor,
-    RuntimePreflightError,
     _checked,
     _json_output,
     collect_cluster_identity,
@@ -37,6 +37,9 @@ class ReceiptCollectionError(RuntimeError):
     """Live ownership evidence could not be collected completely."""
 
 
+_OWNERSHIP_RECEIPT_SCHEMA_VERSION = 2
+
+
 def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
     spec = pv.get("spec")
     capacity = spec.get("capacity") if isinstance(spec, Mapping) else None
@@ -47,16 +50,88 @@ def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
 
 
 def _locked_image_digest(image: Mapping[str, Any]) -> str:
-    """Read a digest from either accepted lock representation and reject conflicts."""
+    """Resolve one strict digest from either accepted lock representation."""
+    if not isinstance(image, Mapping):
+        raise ReceiptCollectionError("locked image record is malformed")
     immutable = image.get("immutable_digest")
     reference = image.get("reference")
-    referenced = reference.rsplit("@", 1)[1] if isinstance(reference, str) and "@" in reference else None
+    referenced = None
+    if reference is not None:
+        if not isinstance(reference, str):
+            raise ReceiptCollectionError("locked image reference is malformed")
+        parts = reference.split("@")
+        if len(parts) == 2:
+            if not IMAGE_NAME_TAG_PATTERN.fullmatch(parts[0]) or not IMAGE_DIGEST_PATTERN.fullmatch(parts[1]):
+                raise ReceiptCollectionError("locked image reference or digest is malformed")
+            referenced = parts[1]
+        elif len(parts) != 1 or not IMAGE_NAME_TAG_PATTERN.fullmatch(reference):
+            raise ReceiptCollectionError("locked image reference is malformed")
+    if immutable is not None and (
+        not isinstance(immutable, str) or not IMAGE_DIGEST_PATTERN.fullmatch(immutable)
+    ):
+        raise ReceiptCollectionError("locked immutable image digest is malformed")
     if immutable is not None and referenced is not None and immutable != referenced:
         raise ReceiptCollectionError("locked image reference and immutable digest disagree")
-    digest = immutable or referenced
+    digest = immutable if immutable is not None else referenced
     if not isinstance(digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
         raise ReceiptCollectionError("locked image has no immutable SHA-256 digest")
     return digest
+
+
+def _locked_role_digest(lock: Mapping[str, Any], role: str) -> str:
+    try:
+        digest = _locked_image_digest(lock["images"][role])
+    except (KeyError, TypeError) as exc:
+        raise ReceiptCollectionError(f"lock is missing the image digest for {role}") from exc
+    provenance = lock.get("image_provenance", {})
+    if not isinstance(provenance, Mapping):
+        raise ReceiptCollectionError("image provenance is malformed")
+    role_provenance = provenance.get(role, {})
+    if not isinstance(role_provenance, Mapping):
+        raise ReceiptCollectionError(f"image provenance is malformed for {role}")
+    provenance_digest = role_provenance.get("image_digest")
+    if provenance_digest is not None and (
+        not isinstance(provenance_digest, str)
+        or not IMAGE_DIGEST_PATTERN.fullmatch(provenance_digest)
+        or provenance_digest != digest
+    ):
+        raise ReceiptCollectionError(f"image provenance digest conflicts with the lock for {role}")
+    return digest
+
+
+def _validate_mongo_claim_template(
+    statefulset: Mapping[str, Any], observed_pvc_labels: Any,
+) -> None:
+    """Verify the exact Retain PVC template that justifies an ownerless claim."""
+    spec = statefulset.get("spec")
+    templates = spec.get("volumeClaimTemplates") if isinstance(spec, Mapping) else None
+    if not isinstance(templates, list) or len(templates) != 1 or not isinstance(templates[0], Mapping):
+        raise ReceiptCollectionError("Mongo StatefulSet claim template inventory is invalid")
+    template = templates[0]
+    metadata, claim_spec = template.get("metadata"), template.get("spec")
+    labels = metadata.get("labels") if isinstance(metadata, Mapping) else None
+    retention = spec.get("persistentVolumeClaimRetentionPolicy", {})
+    resources = claim_spec.get("resources") if isinstance(claim_spec, Mapping) else None
+    requests = resources.get("requests") if isinstance(resources, Mapping) else None
+    if not isinstance(retention, Mapping):
+        raise ReceiptCollectionError("Mongo StatefulSet claim retention policy is invalid")
+    # Kubernetes defaults both StatefulSet PVC retention actions to Retain.
+    if (
+        not isinstance(metadata, Mapping)
+        or metadata.get("name") != "data"
+        or not isinstance(labels, Mapping)
+        or labels.get("app.kubernetes.io/name") != "module4d-mongo"
+        or labels.get("app.kubernetes.io/component") != "database"
+        or not isinstance(observed_pvc_labels, Mapping)
+        or dict(labels) != dict(observed_pvc_labels)
+        or not isinstance(claim_spec, Mapping)
+        or claim_spec.get("accessModes") != ["ReadWriteOnce"]
+        or not isinstance(requests, Mapping)
+        or requests.get("storage") != "2Gi"
+        or retention.get("whenDeleted", "Retain") != "Retain"
+        or retention.get("whenScaled", "Retain") != "Retain"
+    ):
+        raise ReceiptCollectionError("Mongo StatefulSet claim template or Retain policy differs from the B2 contract")
 
 
 _NAMESPACED_RESOURCE_TYPES = (
@@ -301,6 +376,20 @@ def collect_runtime_ownership_receipt(
     mongo_statefulset = by_key.get(("StatefulSet", "module4d-mongo"))
     if mongo_statefulset is None:
         raise ReceiptCollectionError("Mongo StatefulSet is missing from the live inventory")
+    _validate_mongo_claim_template(mongo_statefulset, pvc_metadata.get("labels"))
+    resources = pvc_spec.get("resources")
+    requests = resources.get("requests") if isinstance(resources, Mapping) else None
+    pvc_labels = pvc_metadata.get("labels")
+    if (
+        not isinstance(pvc_spec.get("accessModes"), list)
+        or pvc_spec["accessModes"] != ["ReadWriteOnce"]
+        or not isinstance(requests, Mapping)
+        or requests.get("storage") != "2Gi"
+        or not isinstance(pvc_labels, Mapping)
+        or pvc_labels.get("app.kubernetes.io/name") != "module4d-mongo"
+        or pvc_labels.get("app.kubernetes.io/component") != "database"
+    ):
+        raise ReceiptCollectionError("Mongo PVC does not match the verified StatefulSet claim template")
     host_path = pv_spec.get("hostPath")
     local = pv_spec.get("local")
     if isinstance(host_path, Mapping):
@@ -346,6 +435,9 @@ def collect_runtime_ownership_receipt(
         claim_owner_uid=mongo_statefulset.get("metadata", {}).get("uid", ""),
         locality_node_name=node_metadata.get("name", ""),
         locality_node_uid=node_metadata.get("uid", ""),
+        claim_template_name="data",
+        retention_when_deleted="Retain",
+        retention_when_scaled="Retain",
     )
 
     cri_inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
@@ -374,12 +466,9 @@ def collect_runtime_ownership_receipt(
             raise ReceiptCollectionError(f"running container identity is incomplete for {role}")
         reference = declared[0].get("image")
         runtime_image_id = status[0].get("imageID")
-        image_lock = lock["images"].get(role, {})
         role_provenance = provenance.get(role, {})
-        locked_digest = _locked_image_digest(image_lock)
+        locked_digest = _locked_role_digest(lock, role)
         provenance_digest = role_provenance.get("image_digest")
-        if provenance_digest is not None and provenance_digest != locked_digest:
-            raise ReceiptCollectionError(f"image provenance digest conflicts with the lock for {role}")
         digest = provenance_digest or locked_digest
         if not isinstance(reference, str) or not isinstance(digest, str):
             raise ReceiptCollectionError(f"locked image identity is incomplete for {role}")
@@ -425,14 +514,7 @@ def collect_runtime_ownership_receipt(
 
 def validate_collected_receipt(receipt: RuntimeOwnershipReceipt, lock: Mapping[str, Any]) -> None:
     """Apply full receipt checks using only identities in the finalized lock."""
-    expected_images = {
-        role: (
-            lock["image_provenance"][role]["image_digest"]
-            if role in lock.get("image_provenance", {})
-            else lock["images"][role]["immutable_digest"]
-        )
-        for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES
-    }
+    expected_images = {role: _locked_role_digest(lock, role) for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES}
     from .ownership import validate_runtime_receipt
 
     try:
@@ -465,14 +547,7 @@ def assert_receipt_matches_lock_and_live(
     identity: RunIdentity,
 ) -> None:
     """Validate and compare the B2 serving subset before B3 or a safe resume."""
-    expected_images = {
-        role: (
-            lock["image_provenance"][role]["image_digest"]
-            if role in lock.get("image_provenance", {})
-            else lock["images"][role]["immutable_digest"]
-        )
-        for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES
-    }
+    expected_images = {role: _locked_role_digest(lock, role) for role in REQUIRED_SERVING_RUNTIME_IMAGE_ROLES}
     expected_cluster_images = {
         **lock["toolchain"]["kubernetes_control_plane_images"],
         **lock["toolchain"]["calico_images"],
@@ -493,7 +568,7 @@ def assert_receipt_matches_lock_and_live(
 
 def receipt_document(receipt: RuntimeOwnershipReceipt) -> dict[str, Any]:
     """Return only identity metadata; Secret contents are never part of the model."""
-    return {"schema_version": 1, **asdict(receipt)}
+    return {"schema_version": _OWNERSHIP_RECEIPT_SCHEMA_VERSION, **asdict(receipt)}
 
 
 def receipt_json(receipt: RuntimeOwnershipReceipt) -> str:
@@ -506,7 +581,7 @@ def receipt_from_document(value: Mapping[str, Any]) -> RuntimeOwnershipReceipt:
     if (
         not isinstance(value, Mapping)
         or type(value.get("schema_version")) is not int
-        or value.get("schema_version") != 1
+        or value.get("schema_version") != _OWNERSHIP_RECEIPT_SCHEMA_VERSION
     ):
         raise ReceiptCollectionError("ownership receipt schema is unsupported")
     expected_top = {

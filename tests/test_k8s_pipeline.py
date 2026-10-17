@@ -162,7 +162,7 @@ def _valid_pipeline_receipt(identity, lock):
     return PipelineOwnershipReceipt(
         schema_version=1, profile=identity.profile, context=identity.profile,
         cluster_uid=lock["cluster"]["cluster_uid"], namespace=identity.namespace,
-        namespace_uid="namespace-uid", namespace_labels=identity.labels,
+        namespace_uid="b2-namespace-uid", namespace_labels=identity.labels,
         objects=tuple(objects), job_status=job_status, storage=tuple(storage), images=tuple(images),
     )
 

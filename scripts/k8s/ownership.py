@@ -178,6 +178,9 @@ class RuntimeStorageIdentity:
     claim_owner_uid: str
     locality_node_name: str
     locality_node_uid: str
+    claim_template_name: str
+    retention_when_deleted: str
+    retention_when_scaled: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -460,20 +463,42 @@ def validate_runtime_receipt(
         storage.claim_owner_uid,
         storage.locality_node_name,
         storage.locality_node_uid,
+        storage.claim_template_name,
+        storage.retention_when_deleted,
+        storage.retention_when_scaled,
     )
     if not all(isinstance(value, str) and value.strip() for value in storage_strings):
         raise OwnershipError("live PVC/PV/StorageClass identity fields are incomplete")
     pvc = observed.get(("PersistentVolumeClaim", storage.claim_name))
     sts = observed.get(("StatefulSet", "module4d-mongo"))
+    pvc_owners = pvc.owner_references if pvc is not None else ()
+    pvc_owner_matches = (
+        not pvc_owners
+        or (
+            len(pvc_owners) == 1
+            and isinstance(pvc_owners[0], OwnerReferenceIdentity)
+            and pvc_owners[0].kind == "StatefulSet"
+            and pvc_owners[0].name == "module4d-mongo"
+            and sts is not None
+            and pvc_owners[0].uid == sts.uid
+            and pvc_owners[0].controller is True
+        )
+    )
     if (
         pvc is None
         or sts is None
+        or not pvc_owner_matches
+        or pvc.labels.get("app.kubernetes.io/name") != "module4d-mongo"
+        or pvc.labels.get("app.kubernetes.io/component") != "database"
         or storage.claim_name != "data-module4d-mongo-0"
         or storage.claim_uid != pvc.uid
         or storage.pv_claim_namespace != identity.namespace
         or storage.pv_claim_name != storage.claim_name
         or storage.pv_claim_uid != pvc.uid
         or storage.claim_owner_uid != sts.uid
+        or storage.claim_template_name != "data"
+        or storage.retention_when_deleted != "Retain"
+        or storage.retention_when_scaled != "Retain"
         or storage.volume_name.strip() == ""
         or storage.volume_uid.strip() == ""
         or storage.volume_uid in uids

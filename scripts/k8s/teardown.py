@@ -157,10 +157,13 @@ def _validate_complete_profile_inventory(
             live[key] = item
 
     derived: set[tuple[str, str]] = set()
-    allowed_service_names = {name for kind, name in expected if kind == "Service"}
+    approved_services = {
+        name: record for (kind, name), record in expected.items() if kind == "Service"
+    }
     authorized_uids = {record[0] for record in expected.values()} | {
         namespace_metadata["uid"],
-        *(storage.locality_node_uid for storage in (b2_receipt.storage, *b3_receipt.storage)),
+        *(storage.locality_node_uid for storage in (b2_receipt.storage,)),
+        *(storage.node_uid for storage in b3_receipt.storage),
     }
     for key, item in live.items():
         kind, name = key
@@ -189,14 +192,46 @@ def _validate_complete_profile_inventory(
                 raise TeardownError("ControllerRevision owner chain differs from an authorized StatefulSet")
             derived.add(key)
             continue
-        if kind == "Endpoints" and name in allowed_service_names:
-            derived.add(key)
-            continue
-        if kind == "EndpointSlice":
+        if kind in {"Endpoints", "EndpointSlice"}:
             object_labels = metadata.get("labels", {})
-            service_name = object_labels.get("kubernetes.io/service-name") if isinstance(object_labels, Mapping) else None
-            if service_name in allowed_service_names:
-                derived.add(key)
+            service_name = (
+                name if kind == "Endpoints"
+                else object_labels.get("kubernetes.io/service-name")
+                if isinstance(object_labels, Mapping)
+                else None
+            )
+            service_identity = approved_services.get(service_name) if isinstance(service_name, str) else None
+            service_item = live.get(("Service", service_name)) if isinstance(service_name, str) else None
+            if (
+                service_identity is None
+                or service_item is None
+                or service_item["metadata"].get("uid") != service_identity[0]
+                or service_item["metadata"].get("labels") != service_identity[1]
+            ):
+                raise TeardownError(f"{kind}/{name} does not resolve to an approved live Service")
+            owners = metadata.get("ownerReferences", [])
+            if not isinstance(owners, list) or any(not isinstance(owner, Mapping) for owner in owners):
+                raise TeardownError(f"{kind}/{name} has malformed Service owner references")
+            if kind == "EndpointSlice" and (
+                not isinstance(object_labels, Mapping)
+                or object_labels.get("kubernetes.io/service-name") != service_name
+            ):
+                raise TeardownError(f"EndpointSlice/{name} has no verifiable Service label")
+            # Core Endpoints may legitimately have no ownerReferences; its
+            # same-name Service in the exact namespace is the API identity
+            # association. EndpointSlices are always controller-owned.
+            if owners:
+                if (
+                    len(owners) != 1
+                    or owners[0].get("kind") != "Service"
+                    or owners[0].get("name") != service_name
+                    or owners[0].get("uid") != service_identity[0]
+                    or owners[0].get("controller") is not True
+                ):
+                    raise TeardownError(f"{kind}/{name} owner chain differs from its approved Service")
+            elif kind == "EndpointSlice":
+                raise TeardownError(f"EndpointSlice/{name} has no controller Service owner")
+            derived.add(key)
 
     if acceptance_pod_uid is not None:
         matches = [
