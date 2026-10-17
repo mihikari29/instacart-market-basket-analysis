@@ -186,10 +186,16 @@ start a new run only after the old run is separately handled.
 Secrets are generated in memory and sent to the explicit context through
 `kubectl` stdin. Receipts omit Secret contents, URI values, and command output.
 Mongo admin, API read, and publisher accounts are distinct. The UI receives
-only API configuration. NetworkPolicies deny by default and allow the declared
-DNS, API-to-Mongo, UI-to-API, pipeline-to-HDFS/Kafka/Mongo, and narrow HDFS/Kafka
-peer traffic. Static policy checks are not proof of packet-flow enforcement;
-B4 must pass the real allowed/denied probes.
+only API configuration. The publisher's built-in `readWrite` role is limited to
+the run-specific database; it has no admin or cross-database privileges.
+Current Module 2/3/4 writers create run-owned staging collections, indexes, and
+replacement snapshots, so the role is broad within that isolated database. A
+collection-specific role would require changing those publication contracts
+and validating the result against the real runtime. NetworkPolicies deny by
+default and allow the declared DNS, API-to-Mongo, UI-to-API,
+pipeline-to-HDFS/Kafka/Mongo, and narrow HDFS/Kafka peer traffic. Static policy
+checks are not proof of packet-flow enforcement; B4 must pass the real
+allowed/denied probes.
 
 HDFS, Kafka, Mongo, and Spark use run-owned PVCs and paths. The run never uses
 existing Compose volumes or checkpoints. Every command passes
@@ -245,7 +251,7 @@ runtime acceptance. The test matrix and evidence scope are recorded in
 
 - No image build, profile creation, workload, runtime acceptance, browser demo,
   or teardown was executed during offline implementation.
-- The closing local preflight is blocked: 5.264 GiB available RAM is below the
+- The closing local preflight is blocked: 5.285 GiB available RAM is below the
   12 GiB B3 reserve; Minikube is not installed; WSL backing-disk capacity is
   unknown.
 - WSL backing disk is operator-supplied evidence and is not independently
