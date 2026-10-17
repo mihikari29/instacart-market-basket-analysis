@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import yaml
 
@@ -332,6 +333,45 @@ class AcceptanceContractTests(unittest.TestCase):
                     executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
             self.assertFalse(any("delete" in call for call in executor.calls))
+
+    def test_teardown_orchestration_stops_at_foreign_inventory_before_delete(self):
+        executor = InertExecutor()
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "teardown.json"
+            with (
+                patch("scripts.k8s.teardown._validate_pipeline_lock"),
+                patch("scripts.k8s.teardown._read_receipt", side_effect=[({}, "a" * 64), ({}, "b" * 64)]),
+                patch("scripts.k8s.teardown._failure_evidence", return_value=({}, "c" * 64)),
+                patch("scripts.k8s.teardown.receipt_from_document", return_value=object()),
+                patch("scripts.k8s.teardown.collect_runtime_ownership_receipt", return_value=object()),
+                patch("scripts.k8s.teardown.assert_receipt_matches_lock_and_live"),
+                patch("scripts.k8s.teardown.pipeline_receipt_from_document", return_value=object()),
+                patch(
+                    "scripts.k8s.teardown.collect_pipeline_receipt",
+                    return_value=SimpleNamespace(cluster_uid="cluster-uid", namespace_uid="namespace-uid"),
+                ),
+                patch("scripts.k8s.teardown.assert_pipeline_receipt_matches_live"),
+                patch("scripts.k8s.teardown._live_acceptance_job", return_value=(None, None)),
+                patch("scripts.k8s.teardown._acceptance_job_identity_from_failure", return_value=(None, None)),
+                patch(
+                    "scripts.k8s.teardown._validate_complete_profile_inventory",
+                    side_effect=TeardownError("foreign resource detected"),
+                ) as validate_inventory,
+            ):
+                with self.assertRaisesRegex(TeardownError, "no resources were deleted"):
+                    teardown_run(
+                        executor,
+                        self.identity,
+                        {},
+                        b2_receipt={},
+                        b3_receipt={},
+                        failure_evidence={},
+                        teardown_receipt_path=output,
+                        execute=True,
+                    )
+
+        validate_inventory.assert_called_once()
+        self.assertEqual(executor.calls, [])
 
 
 if __name__ == "__main__":
