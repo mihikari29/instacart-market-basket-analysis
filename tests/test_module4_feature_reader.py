@@ -64,4 +64,3 @@ def test_descriptive_reader_distinguishes_missing_prior_activity_from_invalid_ro
 def test_descriptive_reader_fails_closed_on_leakage_or_invalid_values(field, value):
     with pytest.raises(ValueError):
         inspect_user_feature_rows([_feature_row(**{field: value})], 71)
-
