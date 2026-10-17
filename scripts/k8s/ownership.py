@@ -320,9 +320,9 @@ def validate_receipt(identity: RunIdentity, receipt: OwnershipReceipt) -> None:
     storage = receipt.storage[0]
     if not isinstance(storage, StorageIdentity):
         raise OwnershipError("storage receipt is invalid")
-    for field, expected in DECLARED_STORAGE_OWNERSHIP.items():
-        if getattr(storage, field) != expected:
-            raise OwnershipError(f"storage receipt field {field} does not match the declaration")
+    for attribute, expected in DECLARED_STORAGE_OWNERSHIP.items():
+        if getattr(storage, attribute) != expected:
+            raise OwnershipError(f"storage receipt field {attribute} does not match the declaration")
     pvc = actual[("PersistentVolumeClaim", DECLARED_STORAGE_OWNERSHIP["claim_name"])]
     if storage.namespace != identity.namespace or storage.claim_uid != pvc.uid:
         raise OwnershipError("PVC namespace or UID does not match the owned inventory")
@@ -639,8 +639,8 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
     cluster = lock.get("cluster")
     if not isinstance(cluster, Mapping):
         raise OwnershipError("version lock is missing the cluster section")
-    for field in ("kubernetes_version", "minikube_version", "driver", "container_runtime", "cni", "cni_version"):
-        _require_concrete_string(cluster, field, f"cluster.{field}")
+    for key in ("kubernetes_version", "minikube_version", "driver", "container_runtime", "cni", "cni_version"):
+        _require_concrete_string(cluster, key, f"cluster.{key}")
     if not KUBERNETES_VERSION_PATTERN.fullmatch(cluster["kubernetes_version"]):
         raise OwnershipError("cluster.kubernetes_version must be an exact vMAJOR.MINOR.PATCH version")
     if not KUBERNETES_VERSION_PATTERN.fullmatch(cluster["minikube_version"]):
@@ -651,8 +651,8 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
         raise OwnershipError("cluster driver and container runtime do not match the B1 Docker/containerd contract")
     if cluster["cni"].lower() != "calico":
         raise OwnershipError("cluster.cni must match the required Calico policy-enforcing CNI")
-    for field in ("profile", "context", "cluster_uid"):
-        _require_concrete_string(cluster, field, f"cluster.{field}")
+    for key in ("profile", "context", "cluster_uid"):
+        _require_concrete_string(cluster, key, f"cluster.{key}")
     if cluster["profile"] != cluster["context"] or not re.fullmatch(
         r"it4931-k8s-[0-9a-f]{12}", cluster["profile"]
     ):
@@ -666,14 +666,14 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
     host = lock.get("host_capacity")
     if not isinstance(host, Mapping):
         raise OwnershipError("version lock is missing measured host_capacity")
-    for field in ("cpu_cores", "memory_gib", "free_disk_gib"):
-        value = host.get(field)
+    for key in ("cpu_cores", "memory_gib", "free_disk_gib"):
+        value = host.get(key)
         try:
             finite = math.isfinite(float(value))
         except (OverflowError, TypeError, ValueError):
             finite = False
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not finite:
-            raise OwnershipError(f"host_capacity.{field} must be a measured number")
+            raise OwnershipError(f"host_capacity.{key} must be a measured number")
     if host["cpu_cores"] < 4 or host["memory_gib"] < 6 or host["free_disk_gib"] < 20:
         raise OwnershipError("measured host capacity is below the documented B2 minimum")
     _require_concrete_string(host, "measured_at", "host_capacity.measured_at")
@@ -710,10 +710,10 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
             raise OwnershipError(f"image_provenance.{role}.source_revision must be a full Git SHA")
         if record.get("source_dirty") is not False:
             raise OwnershipError(f"image_provenance.{role}.source_dirty must be false")
-        for field in ("source_tree_sha256", "build_metadata_sha256"):
-            value = record.get(field)
+        for key in ("source_tree_sha256", "build_metadata_sha256"):
+            value = record.get(key)
             if not isinstance(value, str) or not HEX_SHA256_PATTERN.fullmatch(value):
-                raise OwnershipError(f"image_provenance.{role}.{field} must be a SHA-256")
+                raise OwnershipError(f"image_provenance.{role}.{key} must be a SHA-256")
         config_digest = record.get("config_digest")
         if not isinstance(config_digest, str) or not IMAGE_DIGEST_PATTERN.fullmatch(config_digest):
             raise OwnershipError(f"image_provenance.{role}.config_digest must be an OCI SHA-256")
@@ -735,10 +735,10 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
     dependencies = lock.get("python_dependencies")
     if not isinstance(dependencies, Mapping):
         raise OwnershipError("version lock is missing python_dependencies")
-    for field in ("api_python", "ui_python", "spark_parent_python"):
-        version = _require_concrete_string(dependencies, field, f"python_dependencies.{field}")
+    for key in ("api_python", "ui_python", "spark_parent_python"):
+        version = _require_concrete_string(dependencies, key, f"python_dependencies.{key}")
         if not PYTHON_VERSION_PATTERN.fullmatch(version):
-            raise OwnershipError(f"python_dependencies.{field} must be an exact Python version")
+            raise OwnershipError(f"python_dependencies.{key} must be an exact Python version")
     environment_digests = dependencies.get("resolved_environment_digests")
     if not isinstance(environment_digests, Mapping) or not REQUIRED_RESOLVED_ENVIRONMENTS.issubset(environment_digests):
         raise OwnershipError("version lock is missing resolved Python environment identities")
@@ -770,8 +770,8 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
     toolchain = lock.get("toolchain")
     if not isinstance(toolchain, Mapping):
         raise OwnershipError("version lock is missing the toolchain section")
-    for field in ("minikube_version", "kubectl_version", "docker_engine_version"):
-        _require_concrete_string(toolchain, field, f"toolchain.{field}")
+    for key in ("minikube_version", "kubectl_version", "docker_engine_version"):
+        _require_concrete_string(toolchain, key, f"toolchain.{key}")
     if toolchain["minikube_version"] != cluster["minikube_version"]:
         raise OwnershipError("toolchain Minikube version does not match the cluster lock")
     minikube_sha = toolchain.get("minikube_binary_sha256")
@@ -791,8 +791,8 @@ def validate_version_lock(lock: Mapping[str, Any]) -> None:
     storage = lock.get("storage")
     if not isinstance(storage, Mapping):
         raise OwnershipError("version lock is missing the storage section")
-    for field in ("default_storage_class", "provisioner", "volume_binding_mode"):
-        _require_concrete_string(storage, field, f"storage.{field}")
+    for key in ("default_storage_class", "provisioner", "volume_binding_mode"):
+        _require_concrete_string(storage, key, f"storage.{key}")
     _require_concrete_string(storage, "storage_class_uid", "storage.storage_class_uid")
     if storage.get("access_mode") != "ReadWriteOnce" or storage.get("capacity") != "2Gi":
         raise OwnershipError("storage contract must match the 2Gi ReadWriteOnce Mongo claim")

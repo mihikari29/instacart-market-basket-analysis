@@ -344,11 +344,6 @@ def collect_pipeline_receipt(
             owner_references=_parse_owner_references(metadata),
         ))
 
-    expected_images: dict[str, tuple[str, str]] = {
-        "hdfs-namenode": ("hdfs_namenode", "namenode"),
-        "hdfs-datanode": ("hdfs_datanode", "datanode"),
-        "kafka": ("kafka", "kafka"),
-    }
     image_roles = {role: (reference, lock["images"][role]["immutable_digest"]) for role, reference in (
         ("kafka", _locked_image(lock, "kafka")),
         ("hdfs_namenode", _locked_image(lock, "hdfs_namenode")),
@@ -357,7 +352,6 @@ def collect_pipeline_receipt(
     )}
     inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
     images: list[PipelineImage] = []
-    by_uid = {item.uid: item for item in objects}
     for item in objects:
         if item.kind != "Pod":
             continue

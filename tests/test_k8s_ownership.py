@@ -35,7 +35,6 @@ from scripts.k8s.receipts import (
     _locked_image_digest,
     _pv_spec_capacity,
     _validate_mongo_claim_template,
-    _validate_mongo_claim_template,
     receipt_from_document,
     receipt_json,
 )

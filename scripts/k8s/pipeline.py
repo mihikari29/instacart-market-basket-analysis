@@ -1027,8 +1027,6 @@ def execute_pipeline(
         source_receipt_sha256=source_receipt_sha256,
         input_directory=input_directory,
     )
-    as_of_event_time = plan["as_of_event_time"]
-
     serving_path = Path(serving_receipt_path)
     if serving_path.is_symlink() or serving_path.resolve() != render_root / "b2-ownership-receipt.json":
         raise PipelineError("B3 requires the matching private B2 ownership receipt")

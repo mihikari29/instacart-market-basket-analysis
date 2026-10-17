@@ -175,7 +175,7 @@ def run() -> dict[str, Any]:
             raise RuntimeError("analytics page omitted fixture batch products")
         if orders["scope"] != "all orders" or "all-order" not in analytics_visible.lower() and "all orders" not in analytics_visible.lower():
             raise RuntimeError("analytics page did not separate archived all-order distributions from prior-only metrics")
-        chart_count = _wait_for_chart_minimum(
+        _wait_for_chart_minimum(
             page, 4, "analytics page", "trend, batch, and two order charts"
         )
 

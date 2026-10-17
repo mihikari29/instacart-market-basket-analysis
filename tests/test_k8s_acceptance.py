@@ -34,6 +34,12 @@ from tests.test_k8s_ownership import _complete_lock, _valid_runtime_receipt
 from tests.test_k8s_pipeline import _complete_b3_lock, _valid_pipeline_receipt
 
 
+def _canonical_sha(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 class InertExecutor:
     def __init__(self):
         self.calls = []
@@ -652,9 +658,6 @@ class AcceptanceContractTests(unittest.TestCase):
 
         b2_doc = receipt_document(b2)
         b3_doc = pipeline_receipt_document(b3)
-        canonical_sha = lambda value: hashlib.sha256(
-            json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
         job_uid, pod_uid = "b4-acceptance-job-uid", "b4-acceptance-pod-uid"
         b4 = build_acceptance_receipt(
             identity=self.identity,
@@ -664,9 +667,9 @@ class AcceptanceContractTests(unittest.TestCase):
             namespace_uid=b2.namespace_uid,
             acceptance_job_uid=job_uid,
             acceptance_pod_uid=pod_uid,
-            lock_sha256=canonical_sha(_b3_lock),
-            b2_receipt_sha256=canonical_sha(b2_doc),
-            b3_receipt_sha256=canonical_sha(b3_doc),
+            lock_sha256=_canonical_sha(_b3_lock),
+            b2_receipt_sha256=_canonical_sha(b2_doc),
+            b3_receipt_sha256=_canonical_sha(b3_doc),
         )
         self.assertEqual(b4["status"], "fixture_runtime_pass")
         executor = ReceiptInventoryExecutor(
@@ -800,9 +803,6 @@ class AcceptanceContractTests(unittest.TestCase):
 
         _b2_lock, b3_lock, b2, b3 = self._genuine_b2_b3_receipts()
         b2_doc, b3_doc = receipt_document(b2), pipeline_receipt_document(b3)
-        canonical_sha = lambda value: hashlib.sha256(
-            json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
         job_uid, pod_uid = "b4-acceptance-job-uid", "b4-acceptance-pod-uid"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -815,9 +815,9 @@ class AcceptanceContractTests(unittest.TestCase):
                 identity=self.identity, scope="fixture_runtime", checks=_checks(),
                 cluster_uid=b2.cluster_uid, namespace_uid=b2.namespace_uid,
                 acceptance_job_uid=job_uid, acceptance_pod_uid=pod_uid,
-                lock_sha256=canonical_sha(b3_lock),
-                b2_receipt_sha256=canonical_sha(b2_doc),
-                b3_receipt_sha256=canonical_sha(b3_doc),
+                lock_sha256=_canonical_sha(b3_lock),
+                b2_receipt_sha256=_canonical_sha(b2_doc),
+                b3_receipt_sha256=_canonical_sha(b3_doc),
             )
             b4.update({
                 "task_result_path": str(task_result),
