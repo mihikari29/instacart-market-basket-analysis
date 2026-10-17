@@ -2,9 +2,34 @@
 
 > Current repository status is assessed against the approved [Proposal](Proposal.md). Historical runs remain attributed to their recorded revisions and environments. This page records status and evidence links; detailed contracts belong in the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [Docker runbook](docker.md).
 
+## Current implementation campaign — 17 October 2026
+
+The isolated branch `feat/offline-project-finalization` starts at the merged
+B1 baseline `1565b65f44a4b4c03f7df761e8e47fe3ba09ce3d`. It implements
+Milestones 1–6 and this final documentation milestone without modifying
+`docs/Proposal.md`, contacting services, or executing the runtime.
+
+| Area | Code status | Verification boundary |
+|---|---|---|
+| Module 1 input contract | Implemented fail-closed six-file preflight and staged output publication. | Focused source tests are present; application suite was not run because runtime dependencies are absent. |
+| Module 4 ALS/dashboard and Module 2 feature consumer | Implemented bounded, versioned read-only ALS results and descriptive prior-only feature access. | API/UI fixture tests are present; FastAPI/Mongo/Streamlit suites were not run. |
+| Kubernetes B2/B3/B4 | Implemented staged identity locks, isolated workloads, receipts, runtime acceptance, failure capture, and separately gated teardown. | Offline K8s tests only; no image, profile, namespace, Pod, or service was created. |
+| Experiments | Implemented Module 3 ingestion-to-output latency, local[1]/local[2] comparison, and prior-only Hybrid evaluation gates. | Unit and static checks only; no new latency or full-data result was generated. |
+| One-session runner | `scripts.k8s.demo` can preflight/plan, create a fresh dedicated profile, build/inspect images, finalize locks, execute B2→B3→B4, verify/collect, and separately plan/execute teardown. | Runner and fake-executor tests only; no runtime command was invoked. Resume is disabled. |
+| Runtime acceptance | Pending. | Current host preflight is below the 12 GiB B3 memory reserve; Minikube is absent and WSL backing-disk capacity is unknown. |
+
+The complete command set, required capacity, Proposal §39 demo script, §42/§45
+acceptance matrix, recovery flow, and limitations are in the
+[Kubernetes demo runbook](kubernetes-demo-runbook.md). The independent Sol 6.1
+review is still required.
+
+The audit tables below describe their historical main-branch snapshot and are
+retained as dated evidence; they are not the current implementation status of
+the finalization branch.
+
 ---
 
-## 1. Architecture overview and module status
+## Historical audit snapshot: architecture overview and module status
 
 ```text
 CSV -> Module 1
