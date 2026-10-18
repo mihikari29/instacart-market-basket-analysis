@@ -221,6 +221,17 @@ def _validate_raw_tables(tables: dict[str, pd.DataFrame]) -> None:
     if errors:
         raise RawInputValidationError(errors)
 
+    # Positive, unique positions are insufficient: every basket starts at one
+    # and contains exactly the contiguous sequence 1..N.
+    for table in ("order_products__prior", "order_products__train"):
+        frame = tables[table]
+        positions = pd.to_numeric(frame["add_to_cart_order"], errors="raise")
+        baskets = positions.groupby(frame["order_id"], sort=False).agg(["min", "max", "count"])
+        if ((baskets["min"] != 1) | (baskets["max"] != baskets["count"])).any():
+            errors.append(f"{table}.csv: add_to_cart_order must be contiguous 1..N in every order")
+    if errors:
+        raise RawInputValidationError(errors)
+
 
 def _coerce_raw_tables(tables: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     for table, dtypes in RAW_DATA_TYPES.items():
@@ -418,6 +429,9 @@ def clean_orders(orders: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     gap_diff = df.loc[valid_mask, "days_since_prior_order"] % 7
     stats["dow_mismatch_after_recovery"] = int((dow_diff != gap_diff).sum())
 
+    if not stats["cap_recovered_range_ok"] or stats["dow_mismatch_after_recovery"]:
+        raise RawInputValidationError(["orders.csv: reconstructed gaps must be in [30, 36] for capped rows and agree with weekday progression"])
+
     stats["eval_set_counts"] = {str(k): int(v) for k, v in df["eval_set"].value_counts().items()}
     df = df.drop(columns=["prev_dow"])
     df["days_since_prior_order"] = df["days_since_prior_order"].astype("float32")
@@ -464,11 +478,11 @@ def main() -> int:
         return 2
     try:
         dataframes = load_raw(data_dir, raw_dir)
+        orders, order_stats = clean_orders(dataframes["orders"])
     except RawInputValidationError as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
-    orders, order_stats = clean_orders(dataframes["orders"])
     products, product_stats = clean_products(dataframes["products"])
     prior = clean_order_products(dataframes["order_products__prior"])
     train = clean_order_products(dataframes["order_products__train"])

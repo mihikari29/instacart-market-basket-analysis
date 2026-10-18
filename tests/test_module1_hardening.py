@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
 from src.module1.config import SyntheticConfig
 from src.module1 import clean as raw_clean
@@ -101,7 +102,7 @@ def _write_raw_fixture(raw_dir: Path, *, reordered: str = "0", bad_train_order: 
     tables = {
         "orders": (
             ["order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"],
-            [["11", "1", "prior", "1", "0", "8", ""], ["12", "1", "train", "2", "2", "9", "7"], ["21", "2", "test", "1", "3", "10", ""]],
+            [["11", "1", "prior", "1", "0", "8", ""], ["12", "1", "train", "2", "2", "9", "2"], ["21", "2", "test", "1", "3", "10", ""]],
         ),
         "order_products__prior": (
             ["order_id", "product_id", "add_to_cart_order", "reordered"],
@@ -131,6 +132,49 @@ def test_raw_preflight_requires_all_six_tables_before_output_creation(tmp_path, 
     assert raw_clean.main() == 2
     assert "aisles.csv: required source file is missing" in capsys.readouterr().err
     assert not output.exists()
+
+
+@pytest.mark.parametrize("table", ["order_products__prior", "order_products__train"])
+@pytest.mark.parametrize("position", ["2", "3"])
+def test_raw_preflight_rejects_cart_gaps_before_replacing_output(tmp_path, monkeypatch, capsys, table, position):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    source = data_dir / "raw" / f"{table}.csv"
+    frame = pd.read_csv(source, dtype="string", keep_default_na=False)
+    frame.loc[0, "add_to_cart_order"] = position
+    frame.to_csv(source, index=False)
+    output = tmp_path / "clean"
+    _mark_owned_output(output)
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+    assert raw_clean.main() == 2
+    assert "contiguous 1..N" in capsys.readouterr().err
+    assert all((output / name).read_bytes() == b"old" for name in raw_clean._CLEAN_OUTPUT_FILES)
+
+
+def test_weekday_gate_rejects_inconsistent_gap_before_publication(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    source = data_dir / "raw" / "orders.csv"
+    frame = pd.read_csv(source, dtype="string", keep_default_na=False)
+    frame.loc[1, "days_since_prior_order"] = "7"
+    frame.to_csv(source, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+    assert raw_clean.main() == 2
+    assert "weekday progression" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_capped_gap_reconstruction_passes_weekday_gate():
+    frame = pd.DataFrame({
+        "user_id": [1] * 8, "order_number": list(range(1, 9)),
+        "order_dow": [0, 0, 1, 2, 3, 4, 5, 6],
+        "days_since_prior_order": [float("nan")] + [30.] * 7,
+        "eval_set": ["prior"] * 8,
+    })
+    cleaned, stats = raw_clean.clean_orders(frame)
+    assert stats["dow_mismatch_after_recovery"] == 0
+    assert cleaned.days_since_prior_order.iloc[1:].between(30, 36).all()
 
 
 def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_path, monkeypatch, capsys):

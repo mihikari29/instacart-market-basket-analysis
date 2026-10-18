@@ -16,6 +16,9 @@ assigned to the external operator.
   ceiling and matching Job/host bounds. Delivery/consumption evidence is checked
   again by B4; event-time tail state remains in the checkpoint. Fake-process,
   pacing, pipeline and acceptance-task tests were run without services.
+- M3: raw baskets require contiguous cart positions 1..N. Reconstructed gap
+  range and weekday checks now fail before publication. Regression cases cover
+  both interaction tables, existing-output preservation, and capped recovery.
 
 ## Baseline and safety
 
