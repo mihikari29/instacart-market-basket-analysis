@@ -23,6 +23,10 @@ assigned to the external operator.
   lambda zero, ALS-only at lambda one for warm users, trend fallback for cold
   users. Spark parity cases were added; they require the external Spark test
   environment and are not represented as executed here.
+- M5: added an explicit standalone Spark benchmark mode with distinct executor
+  core/memory layouts, isolated worker processes and bounded REST evidence of
+  active executor allocation. Existing local[1]/local[2] mode is preserved.
+  Fake-worker/configuration checks passed; no executor experiment was run.
 
 ## Baseline and safety
 

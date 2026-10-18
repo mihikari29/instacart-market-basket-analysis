@@ -1,8 +1,9 @@
-"""Compare bounded Spark local execution configurations on the same source.
+"""Compare bounded Spark execution configurations on the same source.
 
 This harness compares Spark's local[1] and local[2] thread pools. It does not
 claim to scale native Spark executors and is deliberately separate from the
 normal batch runner, which may target a different Spark master.
+Standalone mode compares explicit executor layouts on an existing Spark master.
 """
 
 from __future__ import annotations
@@ -19,12 +20,42 @@ import statistics
 import subprocess
 import sys
 import uuid
+from urllib.parse import quote
+from urllib.request import urlopen
 from typing import Any, Callable, Sequence
 
 from .config import Config
 
 
 LOCAL_ARMS = ("local[1]", "local[2]")
+STANDALONE_CONFIGS = (
+    {"executor_memory": "1g", "executor_cores": 1, "total_cores": 2},
+    {"executor_memory": "1g", "executor_cores": 2, "total_cores": 2},
+)
+
+
+def observed_executors(spark, config: Config, *, fetch=None) -> list[dict[str, Any]]:
+    """Require actual active executors and the requested core allocation."""
+    if fetch is None:
+        base = spark.sparkContext.uiWebUrl
+        if not base:
+            raise RuntimeError("Spark UI REST endpoint is required for executor evidence")
+        url = f"{base}/api/v1/applications/{quote(spark.sparkContext.applicationId, safe='')}/executors"
+        with urlopen(url, timeout=10) as response:
+            payload = response.read(1024 * 1024 + 1)
+        if len(payload) > 1024 * 1024:
+            raise RuntimeError("executor evidence exceeds the response bound")
+        rows = json.loads(payload)
+    else:
+        rows = fetch()
+    if not isinstance(rows, list):
+        raise RuntimeError("executor evidence must be a list")
+    active = [row for row in rows if row.get("id") != "driver" and row.get("isActive") is True]
+    if (not active or any(type(row.get("totalCores")) is not int or row["totalCores"] != config.executor_cores
+                          or type(row.get("maxMemory")) is not int or row["maxMemory"] <= 0 for row in active)
+            or sum(row["totalCores"] for row in active) != config.total_cores):
+        raise RuntimeError("observed executors do not match the requested core allocation")
+    return [{key: row.get(key) for key in ("id", "hostPort", "totalCores", "maxMemory", "isActive")} for row in active]
 
 
 def validate_arms(arms: Sequence[str]) -> tuple[str, ...]:
@@ -40,8 +71,27 @@ def build_plan(
     *, root: str, output: str | Path, run_id: str, arms: Sequence[str] = LOCAL_ARMS,
     repetitions: int = 3, warmups: int = 1, shuffle_partitions: int = 8,
     timeout_seconds: int = 1200,
+    execution_mode: str = "local", master: str | None = None,
+    executor_configs: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     selected = validate_arms(arms)
+    if execution_mode not in ("local", "standalone"):
+        raise ValueError("execution_mode must be local or standalone")
+    configs = None
+    if execution_mode == "standalone":
+        if not master or not re.fullmatch(r"spark://[A-Za-z0-9._-]+:[0-9]{1,5}", master):
+            raise ValueError("standalone mode requires an explicit spark://host:port master")
+        configs = list(executor_configs if executor_configs is not None else STANDALONE_CONFIGS)
+        if len(configs) < 2 or len(configs) > 8:
+            raise ValueError("select two through eight executor configurations")
+        for item in configs:
+            if not isinstance(item, dict) or set(item) != {"executor_memory", "executor_cores", "total_cores"}:
+                raise ValueError("executor configurations require memory, executor cores and total cores")
+            Config(root=root, master=master, **item)
+        if len({json.dumps(item, sort_keys=True) for item in configs}) != len(configs):
+            raise ValueError("executor configurations must be distinct")
+    elif master is not None or executor_configs is not None:
+        raise ValueError("master and executor_configs are standalone options")
     if repetitions < 3 or warmups < 1 or shuffle_partitions < 1:
         raise ValueError("require at least three repetitions and one warm-up")
     if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 7200:
@@ -51,7 +101,7 @@ def build_plan(
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
         raise ValueError("run_id must be a 1-80 character path-safe identifier")
     base = Path(output).resolve() / run_id
-    return {
+    plan = {
         "run_id": run_id,
         "output_directory": str(base),
         "root": root,
@@ -86,6 +136,25 @@ def build_plan(
             for master in selected
         ],
     }
+    if configs is not None:
+        plan.update(
+            execution_mode="standalone",
+            execution_scope="existing Spark standalone master; explicit executor configuration comparison",
+            spark_session_settings={"spark.sql.adaptive.enabled": "false", "spark.sql.autoBroadcastJoinThreshold": "-1", "spark.dynamicAllocation.enabled": "false"},
+            arms=[f"executor-{index}" for index in range(len(configs))],
+            arms_plan=[],
+        )
+        for index, config in enumerate(configs):
+            plan["arms_plan"].append({
+                "master": master, "execution_model": "Spark standalone", "native_executor_scaling": True,
+                "executor_config": config,
+                "command": [sys.executable, "-m", "src.module2.executor_benchmark", "worker", "--root", root,
+                            "--master", master, "--execution-mode", "standalone", "--executor-memory", config["executor_memory"],
+                            "--executor-cores", str(config["executor_cores"]), "--total-cores", str(config["total_cores"]),
+                            "--repetitions", str(repetitions), "--warmups", str(warmups), "--shuffle-partitions", str(shuffle_partitions),
+                            "--output", str(base), "--run-id", f"executor-{index}"],
+            })
+    return plan
 
 
 def execute_plan(
@@ -110,6 +179,14 @@ def execute_plan(
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         if summary.get("status") != "passed":
             raise RuntimeError(f"execution arm {arm['master']} did not pass")
+        if plan.get("execution_mode") == "standalone":
+            environment = summary.get("environment", {})
+            if environment.get("actual_master") != arm["master"]:
+                raise RuntimeError("standalone worker used a different master")
+            config = Config(root=plan["root"], master=arm["master"], **arm["executor_config"])
+            observed_executors(None, config, fetch=lambda: environment.get("observed_executors"))
+            if summary.get("executor_config") != arm["executor_config"]:
+                raise RuntimeError("standalone worker configuration differs from the plan")
         summaries.append(summary)
     signatures = {
         (
@@ -134,6 +211,12 @@ def execute_plan(
             "host caches, OS scheduling and background load remain uncontrolled",
         ],
     }
+    if plan.get("execution_mode") == "standalone":
+        result.update(executor_configuration_comparison_verified=True, limitations=[
+            "results describe the recorded standalone cluster and selected executor layouts",
+            "no Kubernetes executor scaling or performance improvement is implied",
+            "host caches, OS scheduling and background load remain uncontrolled",
+        ])
     (output / "summary.json").write_text(
         json.dumps(result, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
@@ -171,6 +254,9 @@ def run_worker(args: argparse.Namespace) -> int:
         shuffle_partitions=args.shuffle_partitions,
         repetitions=args.repetitions,
         warmups=args.warmups,
+        executor_memory=args.executor_memory,
+        executor_cores=args.executor_cores,
+        total_cores=args.total_cores,
     )
     output = Path(args.output) / args.run_id
     output.mkdir(parents=True, exist_ok=False)
@@ -241,6 +327,19 @@ def run_worker(args: argparse.Namespace) -> int:
             "trials": measured_results,
             "shuffle_metrics_source": "Spark event log task metrics attached by job_group",
         }
+        if args.execution_mode == "standalone":
+            if spark.sparkContext.master != config.master:
+                raise RuntimeError("actual Spark master differs from requested standalone master")
+            report["executor_config"] = {key: getattr(config, key) for key in ("executor_memory", "executor_cores", "total_cores")}
+            actual_conf = dict(spark.sparkContext.getConf().getAll())
+            expected_conf = {"spark.executor.memory": config.executor_memory,
+                             "spark.executor.cores": str(config.executor_cores), "spark.cores.max": str(config.total_cores)}
+            if any(actual_conf.get(key) != value for key, value in expected_conf.items()):
+                raise RuntimeError("actual Spark executor configuration differs from requested configuration")
+            report["environment"].update(
+                execution_model="Spark standalone", native_executor_scaling=True,
+                observed_executors=observed_executors(spark, config),
+            )
         spark.stop()
         spark = None
         attach_metrics(report["workload"], parse_event_logs(output / "eventlog"))
@@ -273,9 +372,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         command_parser.add_argument("--repetitions", type=int, default=3)
         command_parser.add_argument("--warmups", type=int, default=1)
         command_parser.add_argument("--shuffle-partitions", type=int, default=8)
+        command_parser.add_argument("--execution-mode", choices=("local", "standalone"), default="local")
+        command_parser.add_argument("--master", default=None)
+        command_parser.add_argument("--executor-configs", type=json.loads, default=None,
+                                    help='JSON array of executor_memory/executor_cores/total_cores objects')
     worker_parser = subparsers.add_parser("worker", help=argparse.SUPPRESS)
     worker_parser.add_argument("--root", required=True)
-    worker_parser.add_argument("--master", choices=LOCAL_ARMS, required=True)
+    worker_parser.add_argument("--master", required=True)
+    worker_parser.add_argument("--execution-mode", choices=("local", "standalone"), default="local")
+    worker_parser.add_argument("--executor-memory", default="1g")
+    worker_parser.add_argument("--executor-cores", type=int, default=2)
+    worker_parser.add_argument("--total-cores", type=int, default=2)
     worker_parser.add_argument("--repetitions", type=int, default=3)
     worker_parser.add_argument("--warmups", type=int, default=1)
     worker_parser.add_argument("--shuffle-partitions", type=int, default=8)
@@ -293,6 +400,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         repetitions=args.repetitions,
         warmups=args.warmups,
         shuffle_partitions=args.shuffle_partitions,
+        execution_mode=args.execution_mode, master=args.master, executor_configs=args.executor_configs,
     )
     if args.command == "plan":
         print(json.dumps(plan, indent=2, sort_keys=True))
