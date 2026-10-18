@@ -89,4 +89,3 @@ def progress_logger(query, output_dir: Path, stop_event, on_progress=None, error
 
     thread = Thread(target=_loop, daemon=True)
     return thread
-
