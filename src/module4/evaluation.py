@@ -286,8 +286,17 @@ def offline_hybrid_recommendations(
         )
         .select("user_id", "product_id", F.lit(0.0).alias("_normalized_als"), "_normalized_trend")
     )
+    if lambda_weight == 0.0:
+        selected = trend
+    elif lambda_weight == 1.0:
+        # Serving selects ALS-only for warm users, with trend-only fallback
+        # for users without ALS rows. Zero-weight candidates must not enter ties.
+        cold_trend = trend.join(als.select("user_id").distinct(), "user_id", "left_anti")
+        selected = als.unionByName(cold_trend.withColumn("_normalized_als", F.col("_normalized_trend")))
+    else:
+        selected = als.unionByName(trend)
     candidates = (
-        als.unionByName(trend)
+        selected
         .groupBy("user_id", "product_id")
         .agg(
             F.max("_normalized_als").alias("_normalized_als"),

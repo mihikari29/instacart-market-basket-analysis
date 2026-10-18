@@ -19,6 +19,10 @@ assigned to the external operator.
 - M3: raw baskets require contiguous cart positions 1..N. Reconstructed gap
   range and weekday checks now fail before publication. Regression cases cover
   both interaction tables, existing-output preservation, and capped recovery.
+- M4: offline Hybrid endpoint candidate sets now follow serving: trend-only at
+  lambda zero, ALS-only at lambda one for warm users, trend fallback for cold
+  users. Spark parity cases were added; they require the external Spark test
+  environment and are not represented as executed here.
 
 ## Baseline and safety
 
