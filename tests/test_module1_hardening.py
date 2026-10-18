@@ -165,6 +165,21 @@ def test_raw_preflight_rejects_order_hour_above_documented_domain(tmp_path, monk
     assert not output.exists()
 
 
+def test_raw_preflight_accepts_zero_padded_order_hour_as_decimal_eight(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    orders_path = raw_dir / "orders.csv"
+    orders = pd.read_csv(orders_path, dtype="string", keep_default_na=False)
+    orders.loc[0, "order_hour_of_day"] = "08"
+    orders.to_csv(orders_path, index=False)
+
+    tables = raw_clean.load_raw(data_dir)
+    coerced = raw_clean._coerce_raw_tables(tables)
+
+    assert coerced["orders"].loc[0, "order_hour_of_day"] == 8
+
+
 def test_raw_preflight_rejects_incompatible_foreign_key_before_writing_outputs(tmp_path, monkeypatch, capsys):
     data_dir = tmp_path / "data"
     _write_raw_fixture(data_dir / "raw", bad_train_order="999")

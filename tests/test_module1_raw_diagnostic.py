@@ -349,6 +349,15 @@ class RawDiagnosticTests(unittest.TestCase):
 
         self.assertIn("csv_first_invalid_field=none logical_records_scanned=3", output)
 
+    def test_zero_padded_hour_is_a_valid_decimal_hour(self):
+        content = f"{HEADER}\n1,2,train,1,0,08,7\n"
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = self.make_raw_dir(temporary, content)
+            output, _ = self.diagnose(raw_dir)
+
+        self.assertIn("csv_first_invalid_field=none logical_records_scanned=2", output)
+        self.assertNotIn("field=order_hour_of_day", output)
+
     def test_non_integer_and_blank_hour_values_are_classified_without_echo(self):
         for invalid, kind in (("nope", "malformed"), ("", "blank")):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:

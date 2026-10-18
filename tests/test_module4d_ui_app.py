@@ -211,6 +211,9 @@ class FakeApi:
         self.product_error = None
         self.empty_recommendations = False
         self.empty_als = False
+        self.serving_version_suffix = ""
+        self.als_model_version = "als-2026-10"
+        self.als_run_id = "source-run-42"
 
     def get_health(self):
         self.calls.append(("health", ()))
@@ -221,6 +224,7 @@ class FakeApi:
         if self.recommendation_errors:
             raise self.recommendation_errors.pop(0)
         payload = _recommendation(user_id)
+        payload["serving_version"] = f"hybrid-run-user-{user_id}{self.serving_version_suffix}"
         if self.empty_recommendations:
             payload["recommendations"] = []
             payload["recommendation_count"] = 0
@@ -232,7 +236,11 @@ class FakeApi:
         self.calls.append(("als_recommendations", (user_id, model_version, limit)))
         if self.als_errors:
             raise self.als_errors.pop(0)
-        return _als_recommendation(user_id, available=not self.empty_als)
+        payload = _als_recommendation(user_id, available=not self.empty_als)
+        payload["model_version"] = self.als_model_version
+        payload["source"]["model_version"] = self.als_model_version
+        payload["source"]["run_id"] = self.als_run_id
+        return payload
 
     def get_trends(self, source_namespace, as_of_event_time, max_event_age_seconds=None):
         self.calls.append(("trends", (source_namespace, as_of_event_time, max_event_age_seconds)))
@@ -285,6 +293,10 @@ def _submit(app, submit_key, input_key, value):
 
 def _texts(elements):
     return "\n".join(str(element.value) for element in elements)
+
+
+def _metric_values(app):
+    return {metric.label: str(metric.value) for metric in app.metric}
 
 
 def test_overview_imports_and_renders_with_independent_source_states(monkeypatch):
@@ -380,9 +392,12 @@ def test_recommendation_page_shows_verified_als_hybrid_and_real_score_sources(mo
     app, _ = _app(monkeypatch, page="Hybrid Recommendations")
     app = _submit(app, "recommendation_submit", "recommendation_user_id", "71")
     assert not app.exception
-    rendered = _texts(app.title) + _texts(app.subheader) + _texts(app.metric) + _texts(app.info) + _texts(app.caption)
-    assert "Serving version" in rendered
-    assert "hybrid-run-user-71" in rendered
+    metrics = _metric_values(app)
+    rendered = _texts(app.title) + _texts(app.subheader) + _texts(app.info) + _texts(app.caption)
+    assert metrics["Serving version"] == "hybrid-run-user-71"
+    assert metrics["Recommendation count"] == "1"
+    assert metrics["Mode"] == "hybrid"
+    assert metrics["Lambda requested / effective"] == "0.5 / 0.5"
     assert "ALS, trend, and final score comparison" in rendered
     assert "ALS score comes from user_recommendations" in rendered
     assert "stored Hybrid snapshot" in rendered
@@ -442,7 +457,7 @@ def test_unknown_recommendation_snapshot_has_not_found_semantics(monkeypatch):
     assert "HTTP 404" in rendered
 
 
-def test_changed_recommendation_pointer_offers_manual_retry(monkeypatch):
+def test_changed_recommendation_pointer_retry_refreshes_hybrid_and_als(monkeypatch):
     api = FakeApi()
     api.recommendation_errors = [
         ApiClientError("The snapshot changed during the read; retry the request.", status_code=409, code="snapshot_changed", request_id="req-race")
@@ -450,12 +465,19 @@ def test_changed_recommendation_pointer_offers_manual_retry(monkeypatch):
     app, api = _app(monkeypatch, api, page="Hybrid Recommendations")
     app = _submit(app, "recommendation_submit", "recommendation_user_id", "71")
     assert "snapshot_changed" in _texts(app.error)
-    assert any(button.label == "Retry this read" for button in app.button)
+    assert any(button.label == "Retry both reads" for button in app.button)
+    assert api.calls.count(("recommendations", (71,))) == 1
+    assert api.calls.count(("als_recommendations", (71, None, 20))) == 1
+    api.serving_version_suffix = "-refreshed"
+    api.als_model_version = "als-2026-11"
+    api.als_run_id = "source-run-43"
     app.button(key="retry_recommendation_read").click()
     app = app.run()
     assert not app.exception
     assert api.calls.count(("recommendations", (71,))) == 2
-    assert any(metric.label == "Serving version" for metric in app.metric)
+    assert api.calls.count(("als_recommendations", (71, None, 20))) == 2
+    assert _metric_values(app)["Serving version"] == "hybrid-run-user-71-refreshed"
+    assert "Model version: als-2026-11 · run: source-run-43" in _texts(app.caption)
 
 
 def test_ready_zero_recommendation_snapshot_is_a_distinct_empty_success(monkeypatch):
@@ -463,7 +485,11 @@ def test_ready_zero_recommendation_snapshot_is_a_distinct_empty_success(monkeypa
     api.empty_recommendations = True
     app, _ = _app(monkeypatch, api, page="Hybrid Recommendations")
     app = _submit(app, "recommendation_submit", "recommendation_user_id", "71")
-    assert "ready published snapshot with zero recommendations" in _texts(app.info)
+    assert "This is a ready published Hybrid snapshot with zero recommendations." in _texts(app.info)
+    metrics = _metric_values(app)
+    assert metrics["Recommendation count"] == "0"
+    assert metrics["Mode"] == "trend_only"
+    assert "Serving reason: no_candidates" in _texts(app.info)
 
 
 def test_user_recommendation_cache_is_keyed_by_user_id_and_never_leaks(monkeypatch):

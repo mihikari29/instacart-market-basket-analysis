@@ -20,7 +20,7 @@ _EXPECTED_SOURCE_URL = (
 )
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_VERSION = re.compile(r"[A-Za-z0-9.+!_-]{1,64}\Z")
-_INTEGER = re.compile(r"(?:0|[1-9][0-9]*)\Z")
+_ORDER_HOUR_INTEGER = re.compile(r"[0-9]{1,2}\Z")
 _ORDER_HOUR = "order_hour_of_day"
 _ORDER_COLUMNS = (
     "order_id",
@@ -206,7 +206,7 @@ def _source_metadata(raw_dir: Path, orders_path: Path) -> list[str]:
 def _csv_field_kind(value: str) -> str | None:
     if value == "":
         return "blank"
-    if not _INTEGER.fullmatch(value):
+    if not _ORDER_HOUR_INTEGER.fullmatch(value):
         return "malformed"
     # The accepted domain is two digits at most, so avoid converting attacker-sized integers.
     if len(value) > 2 or not _ORDER_HOUR_MIN <= int(value) <= _ORDER_HOUR_MAX:
@@ -341,7 +341,7 @@ def _pandas_scan(path: Path) -> list[str]:
             engine="c",
         ):
             values = chunk[_ORDER_HOUR].astype("string")
-            valid_text = values.str.fullmatch(_INTEGER.pattern, na=False)
+            valid_text = values.str.fullmatch(_ORDER_HOUR_INTEGER.pattern, na=False)
             parsed = pd.to_numeric(values.where(valid_text), errors="coerce")
             invalid = (
                 ~valid_text

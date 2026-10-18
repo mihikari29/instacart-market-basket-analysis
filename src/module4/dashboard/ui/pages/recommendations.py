@@ -12,6 +12,7 @@ from src.module4.dashboard.ui.state import fetch
 
 
 ACTIVE_USER_KEY = "_module4d_active_recommendation_user"
+_RETRY_BOTH_READS_KEY = "_module4d_retry_both_recommendation_reads"
 
 
 def _load_hybrid(st: Any, client: Any, user_id: int, *, refresh: bool):
@@ -81,6 +82,7 @@ def render_recommendations(st: Any, client: Any, *, refresh_requested: bool = Fa
         "The dashboard does not compute scores or publish recommendations."
     )
 
+    retry_requested = bool(st.session_state.pop(_RETRY_BOTH_READS_KEY, False))
     active_user = st.session_state.get(ACTIVE_USER_KEY)
     initial_value = str(active_user) if isinstance(active_user, int) else "1"
     with st.form("recommendation_request"):
@@ -113,10 +115,10 @@ def render_recommendations(st: Any, client: Any, *, refresh_requested: bool = Fa
         if user_id is not None:
             st.session_state[ACTIVE_USER_KEY] = user_id
             hybrid_payload, hybrid_error, hybrid_cached = _load_hybrid(
-                st, client, user_id, refresh=submitted or refresh_requested
+                st, client, user_id, refresh=submitted or refresh_requested or retry_requested
             )
             als_payload, als_error, als_cached = _load_als(
-                st, client, user_id, model_version, refresh=submitted or refresh_requested
+                st, client, user_id, model_version, refresh=submitted or refresh_requested or retry_requested
             )
     else:
         st.info("Enter a user ID and submit to query the recommendation API.")
@@ -125,11 +127,14 @@ def render_recommendations(st: Any, client: Any, *, refresh_requested: bool = Fa
     if hybrid_error:
         render_error(st, hybrid_error, label="Hybrid snapshot")
         if hybrid_error.code == "snapshot_changed":
-            if st.button("Retry both reads", key="retry_recommendation_read") and user_id is not None:
-                hybrid_payload, hybrid_error, hybrid_cached = _load_hybrid(st, client, user_id, refresh=True)
-                als_payload, als_error, als_cached = _load_als(st, client, user_id, model_version, refresh=True)
-                if hybrid_error:
-                    render_error(st, hybrid_error, label="Hybrid snapshot")
+            def request_retry_both_reads() -> None:
+                st.session_state[_RETRY_BOTH_READS_KEY] = True
+
+            st.button(
+                "Retry both reads",
+                key="retry_recommendation_read",
+                on_click=request_retry_both_reads,
+            )
     if als_error:
         render_error(st, als_error, label="ALS snapshot")
 

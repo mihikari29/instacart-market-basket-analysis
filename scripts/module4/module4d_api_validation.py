@@ -75,6 +75,7 @@ def _copy_context(destination: Path) -> None:
         "scripts/module4/module4d_demo_validate.py",
         "scripts/module4/module4c_responsiveness.py",
         "scripts/module4/module4c_streaming_demo.py",
+        "scripts/k8s/write_python_environment.py",
     ):
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -82,6 +82,9 @@ _CLEAN_OUTPUT_FILES = frozenset(
     }
 )
 _INTEGER = re.compile(r"(?:0|[1-9][0-9]*)\Z")
+# Kaggle's version-1 source uses zero-padded hours such as "08". Accept that
+# representation only for this field, then apply the same integer domain check.
+_ORDER_HOUR_INTEGER = re.compile(r"[0-9]{1,2}\Z")
 _NUMBER = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)\Z")
 _MAX_DIAGNOSTICS = 20
 
@@ -107,7 +110,8 @@ def _header(path: Path, table: str) -> list[str]:
 
 def _integer_column(frame: pd.DataFrame, table: str, column: str, low: int, high: int, errors: list[str]) -> None:
     values = frame[column].astype("string")
-    valid_text = values.str.fullmatch(_INTEGER.pattern, na=False)
+    pattern = _ORDER_HOUR_INTEGER if (table, column) == ("orders", "order_hour_of_day") else _INTEGER
+    valid_text = values.str.fullmatch(pattern.pattern, na=False)
     parsed = pd.to_numeric(values.where(valid_text), errors="coerce")
     invalid = ~valid_text | parsed.isna() | (parsed < low) | (parsed > high)
     if invalid.any():
