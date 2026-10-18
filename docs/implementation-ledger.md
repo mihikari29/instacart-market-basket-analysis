@@ -1,5 +1,17 @@
 # Offline implementation campaign ledger
 
+## Independent review remediation — 18 October 2026
+
+Baseline: `c169b76574f9abf8a8763c3c4cb742ec3ea12685` on
+`feat/offline-project-finalization`. The original dirty checkout, main,
+Proposal, and historical evidence are preserved. Runtime acceptance remains
+assigned to the external operator.
+
+- M1: added fresh run-only HDFS ownership bootstrap and consistent
+  `k8spipeline` staging/readback identity; required Immediate PVC binding.
+  Offline HDFS, pipeline, and runtime tests passed (see final validation record
+  below for the consolidated results). No runtime command was executed.
+
 ## Baseline and safety
 
 - Requested source baseline: `origin/main` at `1565b65f44a4b4c03f7df761e8e47fe3ba09ce3d`.

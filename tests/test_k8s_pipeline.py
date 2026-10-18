@@ -352,6 +352,7 @@ class PipelinePlannerTests(unittest.TestCase):
             self.assertEqual(clean[clean.index("--raw-dir") + 1], str(input_root))
             stage = calls[2][0]
             self.assertEqual(stage[stage.index("--raw-dir") + 1], str(input_root))
+            self.assertEqual(stage[stage.index("--user") + 1], "k8spipeline")
             self.assertFalse((runtime_root / "work" / "module1-offline" / "raw").exists())
             self.assertEqual(receipt["status"], "completed")
 
@@ -504,6 +505,9 @@ class PipelinePlannerTests(unittest.TestCase):
         first_apply = next(i for i, call in enumerate(executor.calls) if call[:2] == ["kubectl", "--context"] and "apply" in call)
         first_image_load = next(i for i, call in enumerate(executor.calls) if call[:3] == ["minikube", "image", "load"])
         self.assertLess(first_image_load, first_apply)
+        bootstrap = next(i for i, call in enumerate(executor.calls) if "-chown" in call)
+        first_job = next(i for i, call in enumerate(executor.calls) if any("job-input.yaml" in part for part in call))
+        self.assertLess(bootstrap, first_job)
         self.assertTrue(result["status"] == "completed")
         self.assertEqual(result["completed_steps"], ["platform", "input", "module1", "module2", "module4", "replay", "hybrid"])
         self.assertFalse(any("rollout" in call and "restart" in call for call in executor.calls))

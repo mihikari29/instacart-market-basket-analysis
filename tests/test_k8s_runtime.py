@@ -139,13 +139,17 @@ class RuntimePreflightTests(unittest.TestCase):
                 "annotations": {"storageclass.kubernetes.io/is-default-class": "true"},
             },
             "provisioner": "k8s.io/minikube-hostpath",
-            "volumeBindingMode": "WaitForFirstConsumer",
+            "volumeBindingMode": "Immediate",
         }
         executor = FakeExecutor([CommandResult(0, json.dumps({"items": [item]}))])
         result = collect_storage_class_identity(executor, identity, execute=True)
         self.assertEqual(result["storage_class_uid"], "sc-uid")
         self.assertIs(result["profile_local"], True)
         self.assertEqual(executor.calls[0][:3], ["kubectl", "--context", identity.profile])
+        item["volumeBindingMode"] = "WaitForFirstConsumer"
+        executor = FakeExecutor([CommandResult(0, json.dumps({"items": [item]}))])
+        with self.assertRaisesRegex(RuntimePreflightError, "Immediate"):
+            collect_storage_class_identity(executor, identity, execute=True)
 
     def test_capacity_and_creation_plan_fail_closed(self):
         with self.assertRaisesRegex(RuntimePreflightError, "below"):

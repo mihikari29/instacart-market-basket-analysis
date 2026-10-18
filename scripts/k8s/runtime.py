@@ -381,8 +381,8 @@ def collect_storage_class_identity(
     ):
         raise RuntimePreflightError("default StorageClass is not the expected profile-local provisioner")
     binding = storage_class.get("volumeBindingMode")
-    if binding not in {"Immediate", "WaitForFirstConsumer"}:
-        raise RuntimePreflightError("default StorageClass has an unsupported binding mode")
+    if binding != "Immediate":
+        raise RuntimePreflightError("default StorageClass must use Immediate binding before sequential Jobs")
     return {
         "default_storage_class": name,
         "storage_class_uid": uid,

@@ -76,7 +76,7 @@ def _check_hdfs_readback(run_id: str) -> dict[str, Any]:
 
     url = f"http://namenode:9870/webhdfs/v1/instacart/{run_id}/curated/_sources.json"
     try:
-        response = requests.get(url, params={"op": "OPEN", "user.name": "hadoop"}, timeout=30)
+        response = requests.get(url, params={"op": "OPEN", "user.name": "k8spipeline"}, timeout=30)
         response.raise_for_status()
         payload = response.json()
     except Exception as exc:

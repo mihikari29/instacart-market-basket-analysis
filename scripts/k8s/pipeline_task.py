@@ -216,6 +216,7 @@ def module1() -> dict:
             "--webhdfs", os.environ.get("PIPELINE_WEBHDFS_URL", ""),
             "--hdfs-root", values["PIPELINE_HDFS_ROOT"], "--raw-dir", str(INPUT_ROOT),
             "--clean-dir", str(clean_dir), "--no-rewrite-datanode-to-localhost",
+            "--user", "k8spipeline",
         ],
         env=env, log_path=work_root / "stage.log", timeout=3600,
     )

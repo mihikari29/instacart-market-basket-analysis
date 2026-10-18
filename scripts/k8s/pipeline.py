@@ -1074,6 +1074,9 @@ def execute_pipeline(
         )
     for resource, timeout_seconds in (("statefulset/hdfs-namenode", 900), ("statefulset/hdfs-datanode", 900), ("statefulset/kafka", 900)):
         _checked(executor, kubectl(identity, "--namespace", identity.namespace, "rollout", "status", resource, f"--timeout={timeout_seconds}s"), f"{resource} readiness", timeout_seconds + 30)
+    from .hdfs_lifecycle import bootstrap_hdfs
+
+    receipt["hdfs_bootstrap"] = bootstrap_hdfs(executor, identity, execute=True)
     receipt["completed_steps"].append("platform")
     execution_receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     execution_receipt_path.chmod(0o600)
