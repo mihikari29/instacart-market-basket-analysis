@@ -1,5 +1,59 @@
 # Offline implementation campaign ledger
 
+## Independent review correction — 18 October 2026
+
+Sol 6.1 reviewed `b4a9bbe19e5949a0b181151ea605b54ed670b6a9` and returned
+**FAIL — CODE COMPLETENESS** for two confirmed P1 defects. The two corrections
+below address those findings; no full-data or runtime acceptance is claimed.
+
+1. **Idle Spark progress stopped streaming telemetry.** Spark 3.5.5's
+   [MicroBatchExecution](https://github.com/apache/spark/blob/v3.5.5/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/MicroBatchExecution.scala)
+   records
+   `durationMs.addBatch` inside `MicroBatchExecution.runBatch`. Idle
+   observations do not execute `runBatch` and lack that field; state-cleanup
+   batches still execute it even when `numInputRows` is zero. The production
+   [ProgressReporter](https://github.com/apache/spark/blob/v3.5.5/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/ProgressReporter.scala)
+   stores both executed and idle progress observations, so batch ID alone is
+   insufficient for this distinction. The production
+   logger now filters by this marker before deduplicating IDs, processes every
+   new executed record, and drains on shutdown. `CompletedBatchPublisher`
+   pairs each record with its matching sink receipt. Its 16-entry receipt map
+   blocks the Spark callback at capacity until prior metrics are handled, so
+   it cannot evict a receipt silently. Missing receipts, progress gaps, and
+   publication failures are surfaced with fixed sanitized messages. The
+   finite-replay and timed-stream loops check for background publication
+   failures promptly.
+2. **BSON `Int64` values failed telemetry validation.** The shared validator
+   now accepts only bounded integer values, including Python integer
+   subclasses such as BSON `Int64`, and continues to reject booleans, floats,
+   negatives where prohibited, zero measured completion times, and values
+   outside signed 64-bit bounds. The dashboard reader validates first, then
+   explicitly converts integer counters, timestamps, rates and latency summary
+   values to built-in integers at the JSON boundary. No PyMongo import was
+   added to the shared client contract.
+
+### Correction validation
+
+- Focused streaming telemetry/BSON suite: **38 passed**.
+- Focused telemetry + Module 4D API + UI client/AppTest selection:
+  **113 passed**. The API returned HTTP 200 for a current-epoch BSON `Int64`
+  document, and the existing UI response validator accepted its payload.
+- Broad non-service suite on this correction: **782 passed, 7 skipped**;
+  zero failures.
+- Repository Ruff: **PASS**, no findings. Python syntax/compilation:
+  **190 files PASS**. `git diff --check`: **PASS**. No YAML changed, so YAML
+  parsing was not rerun.
+- Seven PySpark-dependent modules remain skipped; eight live MongoDB modules
+  and two PySpark-importing service suites remain explicitly excluded. Full
+  data, images, cluster, Kafka/HDFS/Spark/MongoDB server, browser runtime and
+  production acceptance were **NOT RUN** by scope. No new CI result is claimed;
+  historical workflow runs are for `c169b76`.
+
+Status: **IMPLEMENTATION COMPLETE — AWAITING SOL 6.1 REVIEW**. External
+acceptance remains a separate operator task. See the
+[external acceptance handoff](external-acceptance-handoff.md) for exact test
+selection and remaining runtime work.
+
 ## Independent review remediation — 18 October 2026
 
 Baseline: `c169b76574f9abf8a8763c3c4cb742ec3ea12685` on
@@ -39,9 +93,9 @@ assigned to the external operator.
   Python sources without repository mounts, removed an unused checkpoint-delete
   helper and leaking Spark stubs. No data, outputs, volumes or evidence deleted.
 
-### Final remediation validation
+### Original seven-milestone validation at the review baseline
 
-- Broad non-service suite: **757 passed, 7 skipped**, zero failures. Eight live
+- At `b4a9bbe`, the broad non-service suite reported **757 passed, 7 skipped**, zero failures. Eight live
   Mongo modules and two modules requiring unavailable Spark imports were
   explicitly excluded. The skipped Spark parity and feature-handoff modules
   remain external operator checks.

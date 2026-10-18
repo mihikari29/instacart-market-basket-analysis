@@ -12,12 +12,22 @@ FULL_REPLAY_SECONDS = 64_800
 FIXTURE_REPLAY_SECONDS = 1_200
 
 
-def wait_for_replay(query, completion, seconds, *, clock=time.monotonic, sleep=time.sleep):
+def wait_for_replay(
+    query,
+    completion,
+    seconds,
+    *,
+    clock=time.monotonic,
+    sleep=time.sleep,
+    check_progress=None,
+):
     """Keep the consumer alive until reconciliation or a hard deadline."""
     if seconds <= 0:
         raise TimeoutError("stream replay deadline has expired")
     deadline = clock() + seconds
     while True:
+        if check_progress is not None:
+            check_progress()
         if not query.isActive:
             raise RuntimeError("stream stopped before replay completion") from query.exception()
         if clock() >= deadline:

@@ -7,9 +7,8 @@ orchestration with finite durations.
 import json
 import time
 from dataclasses import asdict
-from collections import OrderedDict
 from pathlib import Path
-from threading import Lock
+from threading import Event
 
 from .config import Config
 from .parse import from_kafka
@@ -22,7 +21,11 @@ from .replay import wait_for_replay
 from .metrics import build_snapshot, publish_snapshot
 
 
-from .progress_log import PROGRESS_LOG_NAME, progress_logger as _progress_logger
+from .progress_log import (
+    PROGRESS_LOG_NAME,
+    CompletedBatchPublisher,
+    progress_logger as _progress_logger,
+)
 CHECKPOINT_STATE_VERSION = "ingestion-latency-v1"
 
 
@@ -109,30 +112,35 @@ def run_stream(
         state_version=CHECKPOINT_STATE_VERSION,
     )
     sink_log = output_dir / "sink_batches.jsonl"
-    sink_results = OrderedDict()
-    metrics_lock = Lock()
+    metrics_errors = []
+    stop_event = Event()
+
+    def _publish_progress(progress, sink_result):
+        document = build_snapshot(
+            progress,
+            sink_result,
+            source_namespace=config.trend_source_namespace,
+            source_scope=config.trend_source_scope,
+            run_id=run_id,
+        )
+        publish_snapshot(config, document)
+
+    progress_publisher = (
+        CompletedBatchPublisher(_publish_progress)
+        if config.publish_trend_bundles
+        else None
+    )
 
     def _foreach(batch_df, batch_id):
         result = _foreach_batch(batch_df, batch_id, config, sink_log)
-        if config.publish_trend_bundles:
-            with metrics_lock:
-                sink_results[batch_id] = {
+        if progress_publisher is not None:
+            progress_publisher.record_sink_result(
+                batch_id,
+                {
                     "batch_id": batch_id,
                     "ingestion_to_output_latency": result["ingestion_to_output_latency"],
-                }
-                while len(sink_results) > 16:
-                    sink_results.popitem(last=False)
-
-    def _publish_progress(progress):
-        if not config.publish_trend_bundles:
-            return
-        with metrics_lock:
-            result = sink_results.get(progress.get("batchId"))
-        if result is None:
-            raise RuntimeError("completed progress has no matching bounded sink receipt")
-        document = build_snapshot(progress, result, source_namespace=config.trend_source_namespace,
-                                  source_scope=config.trend_source_scope, run_id=run_id)
-        publish_snapshot(config, document)
+                },
+            )
 
     writer = (
         counts.writeStream
@@ -167,10 +175,22 @@ def run_stream(
         "sink_log": str(sink_log),
     }
 
-    stop_event = __import__("threading").Event()
-    metrics_errors = []
-    logger_thread = _progress_logger(query, output_dir, stop_event, _publish_progress, metrics_errors)
+    logger_thread = _progress_logger(
+        query,
+        output_dir,
+        stop_event,
+        progress_publisher,
+        metrics_errors,
+        on_error=progress_publisher.fail if progress_publisher is not None else None,
+    )
     logger_thread.start()
+
+    def _raise_metrics_error():
+        if metrics_errors:
+            raise RuntimeError(
+                f"stream progress/metrics publication failed: {metrics_errors[0]}"
+            )
+
     try:
         if on_query_started is not None:
             info["orchestration"] = on_query_started(query)
@@ -178,15 +198,29 @@ def run_stream(
             if duration_seconds is None or duration_seconds <= 0:
                 raise ValueError("completion-driven streaming requires a positive hard deadline")
             info["completion"] = wait_for_replay(
-                query, until_complete, duration_seconds - (time.monotonic() - started_monotonic)
+                query,
+                until_complete,
+                duration_seconds - (time.monotonic() - started_monotonic),
+                check_progress=_raise_metrics_error,
             )
         elif duration_seconds is not None and duration_seconds > 0:
-            elapsed = time.monotonic() - started_monotonic
-            query.awaitTermination(max(0.0, duration_seconds - elapsed))
+            deadline = started_monotonic + duration_seconds
+            while query.isActive:
+                _raise_metrics_error()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                query.awaitTermination(min(1.0, remaining))
+            _raise_metrics_error()
+            if not query.isActive:
+                failure = query.exception()
+                if failure is not None:
+                    raise failure
         else:
             # Do not block inside a Py4J call forever: PySpark's SIGINT handler
             # also uses the gateway and can otherwise re-enter it on Ctrl+C.
             while query.isActive:
+                _raise_metrics_error()
                 time.sleep(1.0)
             failure = query.exception()
             if failure is not None:
@@ -194,13 +228,16 @@ def run_stream(
     except KeyboardInterrupt:
         info["interrupted"] = True
     finally:
-        if query.isActive:
-            query.stop()
-        stop_event.set()
-        logger_thread.join(timeout=15)
+        try:
+            if query.isActive:
+                query.stop()
+        finally:
+            stop_event.set()
+            logger_thread.join()
 
     if logger_thread.is_alive() or metrics_errors:
-        raise RuntimeError("stream progress/metrics publication did not complete successfully")
+        detail = metrics_errors[0] if metrics_errors else "progress logger did not stop"
+        raise RuntimeError(f"stream progress/metrics publication failed: {detail}")
 
     info["last_progress"] = list(query.recentProgress)[-1] if query.recentProgress else None
     return info

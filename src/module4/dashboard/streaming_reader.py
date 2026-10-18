@@ -1,6 +1,6 @@
 """Read one bounded metrics document through MongoDB's built-in _id index."""
 
-from src.module3.metrics import COLLECTION, FIELDS, validate_snapshot
+from src.module3.metrics import COLLECTION, FIELDS, canonicalize_snapshot_for_json
 from .readers import DatabaseReadFailure, InvalidSnapshot
 
 
@@ -13,7 +13,7 @@ def read_streaming_metrics(database, source_namespace, *, max_time_ms):
         raise DatabaseReadFailure("streaming metrics query failed") from exc
     if document is not None:
         try:
-            validate_snapshot(document)
+            document = canonicalize_snapshot_for_json(document)
             if document["source_namespace"] != source_namespace:
                 raise ValueError("metrics namespace mismatch")
         except (TypeError, ValueError, KeyError, OverflowError) as exc:

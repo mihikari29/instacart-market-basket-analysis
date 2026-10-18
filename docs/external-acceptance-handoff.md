@@ -1,15 +1,32 @@
 # External acceptance handoff — 18 October 2026
 
-**CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE** describes source completion
-and the development checks below. Runtime, full-data and production acceptance
-are not claimed.
+**IMPLEMENTATION COMPLETE — AWAITING INDEPENDENT REVIEW.** After that review
+accepts the correction, this source is ready for external acceptance. Runtime,
+full-data and production acceptance are not claimed.
 
-Use `feat/offline-project-finalization`, starting from remediation baseline
-`c169b76574f9abf8a8763c3c4cb742ec3ea12685`. The implementation worktree is
-`/home/minh/projects/instacart-market-basket-analysis-finalize`. Resolve the
-final source identity with `git rev-parse HEAD` and verify it against the remote
-branch before acceptance. Main and PR #16 are outside this handoff; the PR
-remains closed and unmerged.
+The independent review examined `b4a9bbe19e5949a0b181151ea605b54ed670b6a9`
+and found two P1 defects. The progress logger treated Spark idle observations
+as executions and forwarded only the last new record in a poll. It now uses
+Spark 3.5.5's `durationMs.addBatch` marker, which is recorded inside
+`MicroBatchExecution.runBatch`; that retains zero-input state-cleanup batches
+while ignoring idle records. The logger pairs and publishes each new executed
+batch, drains on shutdown, reports sanitized failures, and applies backpressure
+to its bounded sink-receipt map instead of evicting an unprocessed receipt.
+
+The review also found that strict built-in-`int` checks rejected valid BSON
+`Int64` counters and epoch-millisecond timestamps. Validation now accepts only
+bounded Python integer values (including BSON's integer subclass), still
+rejects booleans and floats, and the dashboard reader explicitly converts the
+validated integer fields to built-in integers before returning the public JSON
+contract. BSON round-trip tests cover the reader, FastAPI endpoint and existing
+UI response validator.
+
+Use `feat/offline-project-finalization` in
+`/home/minh/projects/instacart-market-basket-analysis-finalize`. The reviewed
+implementation baseline is `b4a9bbe19e5949a0b181151ea605b54ed670b6a9`; verify
+the final source identity with `git rev-parse HEAD` against the remote branch
+before acceptance. Main and PR #16 are outside this handoff; the PR remains
+closed and unmerged.
 
 ## Completed milestones and source map
 
@@ -20,7 +37,7 @@ remains closed and unmerged.
 | 3. Cleaning | `src/module1/clean.py`: contiguous 1..N baskets and reconstructed gap/weekday gates before any publication; failure preserves previous outputs. |
 | 4. Hybrid parity | `src/module4/evaluation.py`: endpoint candidates follow serving, including cold-user fallback and deterministic zero-score ties. |
 | 5. Executor layouts | `src/module2/{config,spark,executor_benchmark}.py`: explicit existing-standalone-master mode, distinct layouts, actual executor evidence; existing local-thread comparison retained. |
-| 6. Streaming telemetry | `src/module3/{metrics,progress_log,stream,trend_bundle}.py`, dashboard reader/schema/API/client/Overview and `Dockerfile`: bounded same-batch rates/latency, indexed read-only lookup, source/capture identity and explicit unavailable/skew states. |
+| 6. Streaming telemetry | `src/module3/{metrics,progress_log,stream,trend_bundle}.py`, dashboard reader/schema/API/client/Overview and `Dockerfile`: bounded same-batch rates/latency, executed-batch progress pairing including zero-input cleanup, BSON integer handling, indexed read-only lookup, source/capture identity and explicit unavailable/skew states. |
 | 7. Cleanup and handoff | Current README/runbooks/contracts, offline tests, and `.github/workflows/kubernetes-packaging.yml`: corrected status, source-package checks, producer/reader regression and a manual service-free image import job. Removed unused destructive `reset_checkpoint` helper and obsolete PySpark test stubs; no runtime files were cleaned. |
 
 Focused tests accompany each milestone. `docs/Proposal.md`, `docs/evidence/`,
@@ -37,12 +54,18 @@ of the pinned Spark/Java container environment or every transitive dependency.
 
 | Check | Final result |
 |---|---|
-| Broad non-service pytest suite | **757 passed, 7 skipped**; zero failures. Includes fake K8s clients, local Kustomize rendering, cleaning of the bounded synthetic fixture, ranking/publication/readers, HTTP/client contracts, Streamlit AppTest and source-package imports. |
+| Focused telemetry/BSON regression tests | **38 passed**; includes idle/reused IDs, executed zero-input batches, missing receipts, multi-batch drain, idempotence, bounded backpressure, shutdown drain, real BSON round trips, reader/API/UI validation and malformed values. |
+| Focused telemetry, Module 4D API and UI client/AppTest selection | **113 passed**; HTTP 200 and the existing client validator were exercised with a BSON-round-tripped measured snapshot. |
+| Broad non-service pytest suite on the correction | **782 passed, 7 skipped**; zero failures. Includes fake K8s clients, local Kustomize rendering, cleaning of the bounded synthetic fixture, ranking/publication/readers, HTTP/client contracts, Streamlit AppTest and source-package imports. |
 | Repository-wide Ruff | **PASS**, zero findings. |
-| Python source compilation/AST | **PASS** for all source, script and test Python files, without writing bytecode. |
-| Kubernetes and packaging workflow YAML | **PASS**, 13 YAML files parsed. |
-| Offline standalone benchmark plan | **PASS**; no Spark process or experiment started. |
+| Python source compilation | **PASS**, 190 Python files compiled without writing bytecode. |
+| YAML parsing | **NOT RUN**; no YAML manifests or workflow files changed in this correction. |
 | `git diff --check` and protected-path comparison | **PASS**. |
+
+These checks ran with Python 3.14 and temporary lightweight packages under
+`/tmp`, outside the repository. The correction commit uses `[skip ci]`; no new
+GitHub Actions result exists for it. The three historical green workflow runs
+are attached to `c169b76`, not this correction.
 
 The broad suite used this selection (with pytest/application packages available):
 
@@ -104,6 +127,9 @@ parser error. Final results above supersede those development attempts.
 7. Review the interactive Proposal demo and the acceptance matrix. Collect
    success/failure artifacts. Review teardown separately before executing it.
 
-No known mandatory code blocker remains. Measurements, image/cluster identity,
-service behavior and acceptance of this revision remain unverified until these
-operator tasks run. Historical results retain their original dates/revisions.
+No full-data, Docker, Kubernetes, Kafka, HDFS, Spark, MongoDB-server, browser
+runtime or production acceptance ran here. Measurements, image/cluster
+identity, service behavior and acceptance of this revision remain unverified
+until these operator tasks run. Historical results retain their original
+dates/revisions. Code completion awaits the independent Sol 6.1 review of this
+correction.

@@ -6,9 +6,26 @@ import math
 import re
 
 COLLECTION = "streaming_metrics"
+MAX_BSON_INT64 = (1 << 63) - 1
+MIN_BSON_INT64 = -(1 << 63)
 FIELDS = {"schema_version", "source_namespace", "source_scope", "run_id", "query_id", "batch_id",
           "captured_at", "num_input_rows", "input_rows_per_second", "processed_rows_per_second",
           "ingestion_to_output_latency"}
+
+
+def _is_integer(value):
+    """Accept Python/BSON integers without accepting booleans or floats."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _valid_int64(value, *, minimum=MIN_BSON_INT64, maximum=MAX_BSON_INT64):
+    return _is_integer(value) and minimum <= value <= maximum
+
+
+def _valid_finite_number(value):
+    if _is_integer(value):
+        return MIN_BSON_INT64 <= value <= MAX_BSON_INT64
+    return type(value) is float and math.isfinite(value)
 
 
 def validate_snapshot(document):
@@ -17,21 +34,21 @@ def validate_snapshot(document):
         raise ValueError("invalid streaming metrics fields")
     if len(json.dumps(document, allow_nan=False).encode()) > 16_384:
         raise ValueError("streaming metrics exceed the document bound")
-    if type(document["schema_version"]) is not int or document["schema_version"] != 1:
+    if not _valid_int64(document["schema_version"], minimum=1, maximum=1):
         raise ValueError("unsupported streaming metrics version")
     for key, maximum in (("source_namespace", 256), ("source_scope", 128), ("run_id", 256), ("query_id", 128)):
         value = document[key]
         if not isinstance(value, str) or not 1 <= len(value) <= maximum or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*", value):
             raise ValueError("invalid streaming metrics identity")
     for key in ("batch_id", "num_input_rows"):
-        if type(document[key]) is not int or document[key] < 0:
+        if not _valid_int64(document[key], minimum=0):
             raise ValueError("invalid streaming metrics count")
     captured = datetime.fromisoformat(document["captured_at"])
     if captured.tzinfo is None:
         raise ValueError("streaming metrics timestamp requires timezone")
     for key in ("input_rows_per_second", "processed_rows_per_second"):
         value = document[key]
-        if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value < 0):
+        if value is not None and (not _valid_finite_number(value) or value < 0):
             raise ValueError("invalid streaming rate")
     latency = document["ingestion_to_output_latency"]
     if not isinstance(latency, dict):
@@ -42,14 +59,14 @@ def validate_snapshot(document):
     elif latency.get("status") == "measured":
         required = {"status", "sample_count", "source_timestamp_field", "output_completion_epoch_ms", "sample_boundary",
                     "latency_ms", "clock_skew_detected", "timestamp_provenance", "limitations"}
-        if set(latency) != required or type(latency["sample_count"]) is not int or latency["sample_count"] <= 0:
+        if set(latency) != required or not _valid_int64(latency["sample_count"], minimum=1):
             raise ValueError("invalid measured latency")
-        if type(latency["output_completion_epoch_ms"]) is not int or latency["output_completion_epoch_ms"] <= 0:
+        if not _valid_int64(latency["output_completion_epoch_ms"], minimum=1):
             raise ValueError("invalid latency completion time")
         values = latency["latency_ms"]
         if not isinstance(values, dict) or set(values) != {"minimum", "mean", "maximum"}:
             raise ValueError("invalid latency summary")
-        if any(type(v) not in (int, float) or not math.isfinite(v) for v in values.values()):
+        if any(not _valid_finite_number(v) for v in values.values()):
             raise ValueError("invalid latency values")
         if not values["minimum"] <= values["mean"] <= values["maximum"]:
             raise ValueError("inconsistent latency values")
@@ -65,6 +82,28 @@ def validate_snapshot(document):
     else:
         raise ValueError("invalid latency status")
     return document
+
+
+def canonicalize_snapshot_for_json(document):
+    """Validate a stored document and convert BSON integer subclasses at the API boundary."""
+    validate_snapshot(document)
+    canonical = dict(document)
+    for key in ("schema_version", "batch_id", "num_input_rows"):
+        canonical[key] = int(document[key])
+    for key in ("input_rows_per_second", "processed_rows_per_second"):
+        if _is_integer(document[key]):
+            canonical[key] = int(document[key])
+    latency = dict(document["ingestion_to_output_latency"])
+    if latency.get("status") == "measured":
+        latency["sample_count"] = int(latency["sample_count"])
+        latency["output_completion_epoch_ms"] = int(latency["output_completion_epoch_ms"])
+        latency_values = dict(latency["latency_ms"])
+        for key, value in latency_values.items():
+            if _is_integer(value):
+                latency_values[key] = int(value)
+        latency["latency_ms"] = latency_values
+    canonical["ingestion_to_output_latency"] = latency
+    return canonical
 
 
 def build_snapshot(progress, sink_result, *, source_namespace, source_scope, run_id):
