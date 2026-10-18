@@ -2,26 +2,27 @@
 
 ## Status and relationship to the Proposal
 
-**CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE:** the implementation targets a
-bounded Lambda demonstration in one dedicated local Minikube profile. It owns
-its HDFS, Kafka, MongoDB, Spark, API, dashboard resources, and storage. Spark
-runs in local mode inside Kubernetes-managed Jobs. This is a single-node course
-demonstration, not a high-availability or production-capacity design.
+**CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE; RUNTIME ACCEPTANCE PENDING.**
+The implementation targets a bounded Lambda demonstration in one dedicated
+local Minikube profile. It owns its HDFS, Kafka, MongoDB, Spark, API, dashboard
+resources, and storage. Spark runs in local mode inside Kubernetes-managed
+Jobs. This is a single-node course demonstration, not a high-availability or
+production-capacity design. See [project status](progress.md) for the current
+verification summary.
 
 The approved [Proposal](Proposal.md) remains the requirements baseline. Its
 §§3.1, 36.2, 39, 42, and 45 define the demonstration, acceptance, and
 deliverables. This implementation follows the fully isolated topology. A real
 runtime demonstration is still required to close the Proposal requirements.
 
-The implementation includes B1 private rendering, B2 serving and ownership
+The implementation includes private rendering, B2 serving and ownership
 proof, B3 isolated HDFS/Kafka/Spark Jobs, B4 runtime acceptance and guarded
-teardown, and the M6 `scripts.k8s.demo` coordinator. It also includes the
-per-user ALS API/dashboard view and the prior-only Hybrid evaluation harness.
+teardown, and the `scripts.k8s.demo` coordinator. It also includes the per-user
+ALS API/dashboard view and the prior-only Hybrid evaluation harness.
 
-**RUNTIME NOT VERIFIED:** this campaign did not build or pull an image, start
-Minikube, contact Kubernetes, create a namespace/Pod/PVC/Secret/Mongo user, run a
-pipeline, probe the dashboard, or execute teardown. Offline receipts and tests
-are not Kubernetes runtime acceptance.
+**RUNTIME NOT VERIFIED:** no image build, cluster deployment, pipeline run,
+live service probe, or teardown has been accepted for this implementation.
+Offline receipts and tests are not Kubernetes runtime acceptance.
 
 ## Implemented phases
 
@@ -243,14 +244,11 @@ Profile-specific image loading follows the [Minikube image-loading guide](https:
 
 ## Verification and remaining runtime checks
 
-**PRIOR CAMPAIGN VALIDATION (17 October 2026):** 79 focused Kubernetes tests and 4 Module 2 executor
-benchmark tests passed in the isolated worktree, including fake-executor demo
-state checks, synthetic receipt rejection, local Kustomize rendering, and
-Mongo Secret/index contracts. Python compilation and `git diff --check` pass.
-These checks do not exercise Docker, Minikube, Kubernetes, MongoDB, or
-application runtime behavior.
-
-The [18 October handoff](external-acceptance-handoff.md) records the latest checks.
+The reviewed implementation passed offline fake-client, static, runner, and
+local-rendering checks. The broad offline suite reported 803 passed and 7
+skipped; see the [acceptance handoff](external-acceptance-handoff.md) for the
+recorded development checks and their scope. Offline checks do not exercise
+Docker, Minikube, Kubernetes, live MongoDB, or deployed application behavior.
 
 The following remain **RUNTIME NOT VERIFIED**: image builds and image loading;
 Minikube scheduling and DNS; PVC/PV behavior; MongoDB initialization with

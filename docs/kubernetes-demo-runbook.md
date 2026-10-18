@@ -1,12 +1,12 @@
 # Kubernetes demonstration runbook
 
 This is the operating guide for the offline-first coordinator in
-[`scripts/k8s/demo.py`](../scripts/k8s/demo.py). It records the intended future
-runtime flow; the implementation campaign did not run it.
+[`scripts/k8s/demo.py`](../scripts/k8s/demo.py). Runtime acceptance remains
+pending; consult [project status](progress.md) before planning a run.
 
 ## Scope and status
 
-The coordinator implements a complete isolated Minikube run: local checks,
+The coordinator supports an isolated Minikube run: local checks,
 dedicated-profile creation, runtime identity collection, three application
 image builds, Kafka/HDFS image inspection, B2/B3 lock finalization, serving
 deployment, the six-step batch/stream pipeline, B4 acceptance, and private
@@ -40,13 +40,10 @@ the code does not invent those identities.
   requires the B3 reserve, and caps raw inputs at 4 GiB. The 16 GiB pipeline
   claim budgets up to 3× raw bytes plus 2 GiB; the DataNode has its own 16 GiB claim. Module 1 performs its full raw-domain validation inside the run.
 
-An implementation-time local preflight on this host measured 6 physical CPU
-cores, 5.271 GiB available RAM, 7.46 GiB total RAM, and 947.6 GiB free in the
-WSL guest. The Windows backing disk was unknown and Minikube was absent. The
-source tree was dirty during that check; rerun preflight against the final
-committed source before any later execution. The measured RAM fails the B3
-reserve in any case. Docker and kubectl executables were present, but this
-campaign did not query the Docker Engine or Kubernetes.
+Run preflight on the operator's selected host before each run. In WSL, measure
+the Windows backing disk independently and provide its current value; guest
+free space does not establish backing-disk capacity. Preflight does not contact
+Docker Engine or Kubernetes.
 
 ## Commands
 
@@ -261,11 +258,9 @@ runtime acceptance. The test matrix and evidence scope are recorded in
 
 ## Known limitations
 
-- No image build, profile creation, workload, runtime acceptance, browser demo,
-  or teardown was executed during offline implementation.
-- The closing local preflight is blocked: 5.285 GiB available RAM is below the
-  12 GiB B3 reserve; Minikube is not installed; WSL backing-disk capacity is
-  unknown.
+- Runtime acceptance requires image build and load, profile creation, workload
+  execution, browser demonstration, and verified teardown evidence in the
+  selected operator environment.
 - WSL backing disk is operator-supplied evidence and is not independently
   inspected by the CLI.
 - Automatic resume is intentionally disabled. The runner requires a new run
@@ -278,11 +273,3 @@ runtime acceptance. The test matrix and evidence scope are recorded in
   mode implies a speedup; scheduling and caches affect timing.
 - The run keeps resources after success or failure. Teardown needs a separate
   review and explicit `--execute`.
-
-## CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE
-
-The implementation and feasible offline checks are recorded in the
-[external acceptance handoff](external-acceptance-handoff.md). Real image identity discovery, capacity validation on an eligible
-host, deployment behavior, B2/B3/B4 runtime receipts, interactive demonstration,
-and teardown remain pending. This status makes no claim of runtime success,
-full-data acceptance, or production readiness.

@@ -17,7 +17,7 @@ scripts/module1.py, module2.py…    project pipeline entry points
 scripts/module4/                   Module 4C experiments and Module 4D tools
 src/module1/ … src/module4/        processing and application packages
 tests/                             unit, contract, Spark and service-backed tests
-docs/                              requirements, canonical guides and evidence
+docs/                              requirements, current guides and evidence
 .github/workflows/                 CI and gated full-data validation
 ```
 
@@ -44,16 +44,19 @@ no compatibility packages at `src.module4c` or `src.module4d`.
 | Document | Responsibility |
 |---|---|
 | [Proposal](Proposal.md) | Approved project requirements and architecture baseline. |
-| [Progress](progress.md) | Current implementation, validation scope, requirement gaps, and next work. |
+| [Documentation index](README.md) | Entry points for project, technical, operating, and evidence guides. |
+| [Progress](progress.md) | Current implementation and the boundary of completed checks and pending acceptance. |
+| [External acceptance handoff](external-acceptance-handoff.md) | Operator preparation, delivered scope, and external validation tasks. |
+| [Implementation summary](implementation-ledger.md) | Design decisions, important contracts, safety, and verification boundaries. |
 | [Module 3 contracts](module3-contracts.md) | Kafka, event-time aggregation, Mongo publication, bundles, and Module 4C boundary. |
 | [Module 4 plan](module4-plan.md) | Module 4A–4D algorithms, data, ranking, evaluation, API, and dashboard contracts. |
 | [Docker guide](docker.md) | Image targets, runtime prerequisites, operational procedures, and scoped cleanup. |
 | [Evidence archive](evidence/README.md) | Dated validation reports, receipts, historical observations, and archive indexes. |
 
 Use current guides for current behavior and procedures. The Module 4C/4D
-standalone design and release documents were relocated to sibling evidence
-archives; their original dates, run identities, measurements, and limitations
-remain part of the record.
+standalone design and release documents live in the evidence archives; their
+original dates, run identities, measurements, and limitations remain part of
+the record.
 
 ## Application and deployment paths
 
@@ -84,5 +87,6 @@ points. Check the relevant canonical guide before changing these contracts.
 
 Historical reports are not rewritten when code or current documentation changes.
 The [evidence index](evidence/README.md) links each result to its recorded
-revision and scope; the [style regression report](style-regression-validation.md)
-retains its **NOT FULLY VERIFIED** assessment.
+revision and scope. The [style regression report](style-regression-validation.md)
+retains its dated **NOT FULLY VERIFIED** assessment for that comparison; it is
+not a runtime acceptance statement for the reviewed implementation revision.

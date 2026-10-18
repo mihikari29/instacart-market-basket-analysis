@@ -847,53 +847,35 @@ streaming, live Mongo, staged-flow, and publication-replay checks. Separate
 manual full-data workflows have their own validation and UI test ownership.
 Every browser expectation and curated evidence artifact remains unchanged.
 
-## Consolidation validation — 2026-10-14
+## Historical Docker validation — 14 October 2026
 
-Validation started from PR #7's merged main commit
-`d44bb14615f57e78b1611a64954b9f2ead6709ad` on
-`refactor/unified-docker-build`. All four targets and the UI development variant
-built separately with exit code 0. Every target passed `pip check`; the external
-base digests, pinned requirements, and all jar SHA-512 values match the accepted
-Dockerfiles.
+The recorded validation used `refactor/unified-docker-build` at
+`d44bb14615f57e78b1611a64954b9f2ead6709ad`. It is evidence for that revision,
+not a fresh result for the current implementation. The four runtime targets
+and UI development target built successfully, passed `pip check`, and matched
+their pinned base, dependency, and jar digests. The context exporter admitted
+127 files (1,568,612 bytes), including five registered evidence files and six
+scripts; protected exclusions were rejected. Staged file names and SHA-256
+values matched their manifests. Spark contained no repository source; API,
+UI, and browser images contained 119, 15, and 2 files respectively. UI omitted
+PyMongo, PySpark, and Playwright; API omitted Streamlit and Playwright. The two
+Compose service topologies were unchanged apart from build definitions.
 
-Docker's context exporter admitted 127 files totaling 1,568,612 bytes, including
-exactly five evidence files and six scripts. Seventeen exclusion markers for
-credentials, datasets, state, caches, and unregistered files were rejected.
-Copied file names and SHA-256 hashes matched each stage's manifest: Spark has
-no repository source under `/workspace`, API has 119 files, UI has 15, and
-browser has two. UI has no PyMongo, PySpark, or Playwright; API has no Streamlit
-or Playwright. Both Compose topologies are unchanged after excluding their
-build-definition fields from the comparison.
+| Recorded check | Result |
+|---|---|
+| Repository Spark suite | 690 passed, 69 service-backed skips, 5 warnings |
+| UI client/AppTest/evaluation suites | 64 passed |
+| API/Hybrid unit suites | 497 passed |
+| Live API Mongo suites | 26 passed |
+| Supplementary Module 3/4/4C Mongo suites | 93 passed |
+| Publisher and read-only route validation | 21 HTTP cases and source/index/evidence assertions passed |
+| Chromium end-to-end run | Four pages, five evaluation charts, selectors, refresh, fallback, error recovery, and no JavaScript exceptions |
+| Ruff, compilation, shell syntax, Compose/workflow YAML, image checks, and diff checks | Passed |
 
-| Check | Result | Exit |
-|---|---|---:|
-| Repository Spark suite, command above | 690 passed, 69 service-backed skips, 5 warnings; 154.56 s | 0 |
-| D2A/D2B UI client/AppTest/evaluation suites | 64 passed; 7.81 s | 0 |
-| API/Hybrid unit suites through the API harness | 497 passed; 3.65 s | 0 |
-| D1A/D1B live API Mongo suites | 26 passed; 39.92 s | 0 |
-| Supplementary Module 3/4/4C Mongo suites | 93 passed; 44.47 s | 0 |
-| Demo accepted publishers and read-only route validator | 21 HTTP cases and all source/index/evidence assertions passed | 0 |
-| Unchanged Chromium E2E runner | Four pages, five evaluation charts, all selectors, refresh, fallback, error recovery; no JavaScript exceptions | 0 |
-| Ruff, compileall, shell syntax, Compose and workflow YAML, Docker build check, diff check | Passed; Docker build check reported no warnings | 0 |
-
-The 69 broad-suite skips are service-backed cases; isolated Mongo suites run
-separately and streaming workflows exercise Kafka paths. The initial
-supplementary harness used an alias and credentials rejected by the existing
-URI guards (28 passed, 65 setup errors); the documented dedicated-alias run
-passed all 93 without changing tests. One initial browser capture lacked the
-last C8B duration heading; the next run of the unchanged runner passed every
-assertion. Both attempts retain the original expectations.
-
-Runtime observations were Python 3.10.12 / Java 17.0.14 / Spark 3.5.5 /
-GraphFrames Python 0.6 / FastAPI 0.143.0 / PyMongo 4.11.3 for Spark/API;
-Python 3.14.8 / Streamlit 1.65.0 for UI; and Python 3.12.3 / Playwright 1.63.0 /
-Chromium 153.0.8010.12 for browser. GraphFrames import and functional graph tests,
-OpenAPI/Uvicorn startup, Streamlit host-loopback health, and Chromium execution
-passed. The demo run `83ea6e42419a` used its own tmpfs database and retained
-the authenticated fixture administrator, database-scoped reader, exact indexes,
-loopback ports, and separate networks.
-
-Cleanup removed the task's demo, validation services, networks, five uniquely
-tagged images, and private temporary files. No task resources remain. Existing
-pipeline containers, volumes, shared images, ignored `results/`, and local data
-were preserved; no global Docker prune was used.
+The recorded runtime versions were Python 3.10.12, Java 17.0.14, Spark 3.5.5,
+GraphFrames Python 0.6, FastAPI 0.143.0, and PyMongo 4.11.3 for Spark/API;
+Python 3.14.8 and Streamlit 1.65.0 for UI; Python 3.12.3, Playwright 1.63.0,
+and Chromium 153.0.8010.12 for browser checks. The isolated demo used run ID
+`83ea6e42419a`, a temporary database, scoped accounts, exact indexes,
+loopback-only ports, and separate networks. These records preserve the measured
+scope and do not establish acceptance of a later source revision.
