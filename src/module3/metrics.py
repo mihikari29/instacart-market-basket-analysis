@@ -54,7 +54,12 @@ def validate_snapshot(document):
     if not isinstance(latency, dict):
         raise ValueError("invalid streaming latency")
     if latency.get("status") == "unavailable":
-        if latency != {"status": "unavailable", "reason": "no_valid_ingestion_timestamps_in_finalized_output", "sample_count": 0}:
+        required = {"status", "reason", "sample_count"}
+        if (
+            set(latency) != required
+            or latency["reason"] != "no_valid_ingestion_timestamps_in_finalized_output"
+            or not _valid_int64(latency["sample_count"], minimum=0, maximum=0)
+        ):
             raise ValueError("invalid unavailable latency")
     elif latency.get("status") == "measured":
         required = {"status", "sample_count", "source_timestamp_field", "output_completion_epoch_ms", "sample_boundary",
@@ -102,6 +107,8 @@ def canonicalize_snapshot_for_json(document):
             if _is_integer(value):
                 latency_values[key] = int(value)
         latency["latency_ms"] = latency_values
+    else:
+        latency["sample_count"] = int(latency["sample_count"])
     canonical["ingestion_to_output_latency"] = latency
     return canonical
 

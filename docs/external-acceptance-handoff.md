@@ -1,29 +1,37 @@
 # External acceptance handoff — 18 October 2026
 
-**IMPLEMENTATION COMPLETE — AWAITING INDEPENDENT REVIEW.** After that review
-accepts the correction, this source is ready for external acceptance. Runtime,
-full-data and production acceptance are not claimed.
+**IMPLEMENTATION COMPLETE — AWAITING INDEPENDENT REVIEW.** This source is ready
+for an independent review before handoff to the external acceptance operator.
+Runtime, full-data and production acceptance are not claimed.
 
-The independent review examined `b4a9bbe19e5949a0b181151ea605b54ed670b6a9`
-and found two P1 defects. The progress logger treated Spark idle observations
-as executions and forwarded only the last new record in a poll. It now uses
-Spark 3.5.5's `durationMs.addBatch` marker, which is recorded inside
-`MicroBatchExecution.runBatch`; that retains zero-input state-cleanup batches
-while ignoring idle records. The logger pairs and publishes each new executed
-batch, drains on shutdown, reports sanitized failures, and applies backpressure
-to its bounded sink-receipt map instead of evicting an unprocessed receipt.
+At the earlier review baseline `b4a9bbe19e5949a0b181151ea605b54ed670b6a9`,
+Sol found two P1 defects. The `1a25d10` correction uses Spark 3.5.5's
+`durationMs.addBatch` marker, recorded inside `MicroBatchExecution.runBatch`,
+to retain zero-input state-cleanup batches while ignoring idle records. It
+pairs each executed batch with its same-ID sink receipt, processes every new
+record, applies bounded backpressure, and reports sanitized failures.
 
-The review also found that strict built-in-`int` checks rejected valid BSON
-`Int64` counters and epoch-millisecond timestamps. Validation now accepts only
-bounded Python integer values (including BSON's integer subclass), still
-rejects booleans and floats, and the dashboard reader explicitly converts the
-validated integer fields to built-in integers before returning the public JSON
-contract. BSON round-trip tests cover the reader, FastAPI endpoint and existing
-UI response validator.
+The subsequent review of `1a25d108f13baa1db5c41e0d222e74e07a708ebf` found two
+P2 defects. `run_stream` now calls synchronous `query.stop()` even after Spark
+reports the query inactive, then signals the progress logger. The logger treats
+that owner signal as the only shutdown condition and performs its final drain
+after `stop()` returns, when Spark's execution thread has finished reporting
+progress. Deterministic tests drive the actual `run_stream` coordination and
+logger through delayed final progress, zero-input cleanup, multiple final
+batches, missing receipts, publication errors, idle ID reuse, and empty
+shutdown.
+
+Unavailable latency now requires the exact three-field schema and a strict
+bounded integer zero sample count. BSON `Int64(0)` remains valid, while booleans,
+floats and out-of-contract values fail. The reader converts valid BSON integer
+subclasses to ordinary Python integers, including the unavailable sample count,
+before returning JSON. Real BSON round trips exercise reader rejection,
+HTTP 502 `invalid_snapshot`, and UI-client rejection for malformed documents;
+valid Python and BSON integer zeros reach HTTP 200 and pass the UI validator.
 
 Use `feat/offline-project-finalization` in
-`/home/minh/projects/instacart-market-basket-analysis-finalize`. The reviewed
-implementation baseline is `b4a9bbe19e5949a0b181151ea605b54ed670b6a9`; verify
+`/home/minh/projects/instacart-market-basket-analysis-finalize`. The remediation
+starts from reviewed HEAD `1a25d108f13baa1db5c41e0d222e74e07a708ebf`; verify
 the final source identity with `git rev-parse HEAD` against the remote branch
 before acceptance. Main and PR #16 are outside this handoff; the PR remains
 closed and unmerged.
@@ -54,18 +62,19 @@ of the pinned Spark/Java container environment or every transitive dependency.
 
 | Check | Final result |
 |---|---|
-| Focused telemetry/BSON regression tests | **38 passed**; includes idle/reused IDs, executed zero-input batches, missing receipts, multi-batch drain, idempotence, bounded backpressure, shutdown drain, real BSON round trips, reader/API/UI validation and malformed values. |
-| Focused telemetry, Module 4D API and UI client/AppTest selection | **113 passed**; HTTP 200 and the existing client validator were exercised with a BSON-round-tripped measured snapshot. |
-| Broad non-service pytest suite on the correction | **782 passed, 7 skipped**; zero failures. Includes fake K8s clients, local Kustomize rendering, cleaning of the bounded synthetic fixture, ranking/publication/readers, HTTP/client contracts, Streamlit AppTest and source-package imports. |
+| Focused telemetry/BSON regression tests | **59 passed**; adds production `run_stream` shutdown orderings A–H, including a query already inactive before cleanup, and actual BSON validation at validator, reader, HTTP and UI boundaries. |
+| Focused telemetry, Module 4D API and UI client/AppTest selection | **134 passed**; includes HTTP 200 for current-epoch measured `Int64` values and valid unavailable Python/BSON integer zero, plus HTTP 502 for malformed unavailable counts. |
+| Broad non-service pytest suite on this correction | **803 passed, 7 skipped**; zero failures. Includes fake K8s clients, local Kustomize rendering, cleaning of the bounded synthetic fixture, ranking/publication/readers, HTTP/client contracts, Streamlit AppTest and source-package imports. |
 | Repository-wide Ruff | **PASS**, zero findings. |
 | Python source compilation | **PASS**, 190 Python files compiled without writing bytecode. |
 | YAML parsing | **NOT RUN**; no YAML manifests or workflow files changed in this correction. |
 | `git diff --check` and protected-path comparison | **PASS**. |
 
 These checks ran with Python 3.14 and temporary lightweight packages under
-`/tmp`, outside the repository. The correction commit uses `[skip ci]`; no new
-GitHub Actions result exists for it. The three historical green workflow runs
-are attached to `c169b76`, not this correction.
+`/tmp`, outside the repository. No full Spark process or service was started.
+The follow-up correction push uses `[skip ci]`; no GitHub Actions result is
+claimed for it. Historical green workflow runs attached to `c169b76` do not
+validate either later correction.
 
 The broad suite used this selection (with pytest/application packages available):
 

@@ -229,8 +229,10 @@ def run_stream(
         info["interrupted"] = True
     finally:
         try:
-            if query.isActive:
-                query.stop()
+            # Spark can report isActive=False before its execution thread has
+            # published final progress. stop() waits for that thread, so only
+            # signal the logger after this synchronous shutdown has completed.
+            query.stop()
         finally:
             stop_event.set()
             logger_thread.join()

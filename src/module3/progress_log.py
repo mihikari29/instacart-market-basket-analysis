@@ -153,7 +153,7 @@ def progress_logger(
     on_error=None,
     poll_interval=2.0,
 ) -> Thread:
-    """Capture each newly observed executed batch and drain once at shutdown."""
+    """Capture executed batches until the owner confirms query shutdown."""
     log_path = output_dir / PROGRESS_LOG_NAME
     log_path.parent.mkdir(parents=True, exist_ok=True)
     last_batch_id = None
@@ -194,8 +194,6 @@ def progress_logger(
             with log_path.open("a", encoding="utf-8") as fh:
                 while not stop_event.is_set():
                     try:
-                        if not query.isActive:
-                            break
                         _drain(fh)
                         if stop_event.wait(poll_interval):
                             break

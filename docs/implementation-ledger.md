@@ -1,6 +1,53 @@
 # Offline implementation campaign ledger
 
-## Independent review correction — 18 October 2026
+## Follow-up independent review correction — 18 October 2026
+
+Sol 6.1 reviewed `1a25d108f13baa1db5c41e0d222e74e07a708ebf` and returned
+**FAIL — CODE COMPLETENESS** for two confirmed P2 defects. This follow-up
+addresses only those findings. No full-data or runtime acceptance is claimed.
+
+1. **Final Spark progress could arrive after the logger's terminal drain.** The
+   logger now polls until its owner signals shutdown; `run_stream` calls
+   synchronous `query.stop()` before setting that signal, including when
+   `isActive` is already false. Since Spark 3.5.5 can set `TERMINATED` before
+   its execution thread exits, `stop()` joins that thread before the logger's
+   final drain. Offline tests drive the actual `run_stream` function and
+   production logger through the inactive-before-progress ordering, including
+   zero-input cleanup, multiple final batches, missing receipts, callback
+   failure, idle ID reuse, and shutdown with no additional progress.
+2. **Unavailable-latency sample counts accepted equal-but-noninteger values.**
+   Validation now checks the exact unavailable schema and uses the strict
+   signed-64-bit integer helper to require zero. `False`, `True`, floats,
+   negatives, positive counts, strings, nulls, missing/extra fields, and wrong
+   reasons are rejected. The API reader converts valid BSON `Int64(0)` to a
+   built-in integer at the JSON boundary. No PyMongo dependency was added to
+   the Streamlit UI.
+
+### Follow-up validation
+
+- Focused streaming telemetry/BSON tests: **59 passed**.
+- Focused telemetry + Module 4D API + UI client/AppTest selection:
+  **134 passed**. This includes actual BSON round trips, reader checks, HTTP
+  200 for valid current-epoch measured integers and both valid unavailable
+  integer-zero forms, HTTP 502 `invalid_snapshot` for malformed unavailable
+  documents, and UI-client validation.
+- Broad non-service suite: **803 passed, 7 skipped**, zero failures.
+- Repository-wide Ruff: **PASS**, zero findings. Python compilation:
+  **190 files PASS**. `git diff --check` and comparison of this change against
+  its starting HEAD for `docs/Proposal.md` and `docs/evidence/`: **PASS**.
+- UI dependency isolation: **PASS**; importing the UI client and shared
+  validator did not import PyMongo or BSON. No YAML changed.
+- The seven Spark-dependent skips, eight live MongoDB exclusions, and two
+  PySpark-importing service-suite exclusions remain external offline-runtime
+  limitations. No services, full-data workload, image build, Kubernetes run,
+  or runtime acceptance ran.
+
+Status: **IMPLEMENTATION COMPLETE — AWAITING SOL 6.1 REVIEW**. External
+acceptance remains a separate operator task. See the
+[external acceptance handoff](external-acceptance-handoff.md) for the exact
+test selection and runtime boundary.
+
+## Earlier independent review correction — 18 October 2026
 
 Sol 6.1 reviewed `b4a9bbe19e5949a0b181151ea605b54ed670b6a9` and returned
 **FAIL — CODE COMPLETENESS** for two confirmed P1 defects. The two corrections
@@ -32,7 +79,7 @@ below address those findings; no full-data or runtime acceptance is claimed.
    values to built-in integers at the JSON boundary. No PyMongo import was
    added to the shared client contract.
 
-### Correction validation
+### Validation recorded at the earlier correction revision
 
 - Focused streaming telemetry/BSON suite: **38 passed**.
 - Focused telemetry + Module 4D API + UI client/AppTest selection:
@@ -49,10 +96,9 @@ below address those findings; no full-data or runtime acceptance is claimed.
   production acceptance were **NOT RUN** by scope. No new CI result is claimed;
   historical workflow runs are for `c169b76`.
 
-Status: **IMPLEMENTATION COMPLETE — AWAITING SOL 6.1 REVIEW**. External
-acceptance remains a separate operator task. See the
-[external acceptance handoff](external-acceptance-handoff.md) for exact test
-selection and remaining runtime work.
+At that revision the implementation was marked **IMPLEMENTATION COMPLETE —
+AWAITING SOL 6.1 REVIEW**. The follow-up findings and current status are
+recorded above.
 
 ## Independent review remediation — 18 October 2026
 
