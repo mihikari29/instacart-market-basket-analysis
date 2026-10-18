@@ -937,6 +937,8 @@ the archive.
 |---|---|---|
 | `GET /health` | API process liveness only; does not ping MongoDB. | Process-level health response only; never implies source availability. |
 | `GET /api/v1/recommendations/{user_id}` | Positive integer ID; per-user Hybrid pointer, exact serving-version rows, rank order, at most 20 rows. Returns persisted raw/normalized/final scores, mode/reason, and source identities. | `404` no published snapshot; `503` not ready or service unavailable; `409` pointer changed during read; `502` invalid stored snapshot. |
+| `GET /api/v1/als/recommendations/{user_id}` | Active paired A/B model only; optional exact model version; limit 1–20; indexed stored ALS ranks/scores with matching graph names when available. | Unknown model `404`; unready `503`; changed pointer `409`; malformed rows `502`. |
+| `GET /api/v1/streaming/metrics` | Exact allowlisted namespace; one latest `streaming_metrics` document through `_id_`, validated within 16 KiB. Real same-batch Spark rates and defined finalized-output latency, run/query/batch and capture time. | No document returns `available=false`; malformed `502`; query failure `503`; invalid namespace `422`. |
 | `GET /api/v1/trends` | Exact allowlisted namespace plus explicit UTC cutoff/optional max event age; returns one newest eligible finalized bundle through the C5 verifier, including window, scope, publication/expiry, digest, and ranked items. | Missing, expired, and stale states remain distinct; malformed or corrupt newest bundle fails closed; missing required index is `503 trend_index_unavailable`. |
 | `GET /api/v1/batch/products` | `order=purchase_count` or `reorder_rate`; default limit 20, hard limit 50; metric descending and product ID ascending. Product names are not in this Mongo source. | Invalid inputs `422`; unavailable required ranking index `503 batch_index_unavailable`; malformed source `502`. |
 | `GET /api/v1/batch/departments` | Reads at most 22 records to validate the fixed 1–21 department domain; returns at most 21 rows ordered by purchase count descending then ID ascending. | More than 21 or malformed documents fail with `502`; collection-specific run/time is preserved. |
@@ -996,14 +998,14 @@ The API itself never provisions or repairs indexes.
 The four Streamlit views are:
 
 1. **Overview:** API liveness, independent source availability, each source's
-   own run/version/window and timestamp, and fixed evidence registry state.
+   own run/version/window and timestamp, fixed evidence registry state, and refreshable same-batch streaming rates/latency with clock-skew disclosure.
 2. **Realtime & Batch Analytics:** one selected finalized trend window,
    prior-only product/department metrics, and archived all-order day/hour
    counts. Product/department names are not inferred from IDs.
 3. **Hybrid Recommendations:** the verified per-user persisted ranking,
    component and final scores, inclusion flags, mode/reason, and source
-   provenance. The implemented endpoint does not provide an ALS side-by-side
-   comparison.
+   provenance. A separate versioned ALS read is aligned by product ID for
+   side-by-side comparison; unavailable scores remain blank.
 4. **Evaluation & Performance:** archived ALS/baseline evaluation, Module 2
    benchmark observations, and C8A/C8B receipts, each labeled by run, scope,
    environment, and method.

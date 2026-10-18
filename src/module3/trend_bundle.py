@@ -1,7 +1,7 @@
 """Atomic, replay-safe bundles for finalized Module 3 trending windows.
 
-This module is deliberately standalone. The production streaming query does
-not call it until the bundle reader and rollout are reviewed separately.
+The production stream enables this publisher explicitly with a stable source
+namespace. Pure document validation remains usable without importing Spark.
 """
 
 from __future__ import annotations

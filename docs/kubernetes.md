@@ -2,7 +2,7 @@
 
 ## Status and relationship to the Proposal
 
-**CODE COMPLETE — RUNTIME ACCEPTANCE PENDING:** the implementation targets a
+**CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE:** the implementation targets a
 bounded Lambda demonstration in one dedicated local Minikube profile. It owns
 its HDFS, Kafka, MongoDB, Spark, API, dashboard resources, and storage. Spark
 runs in local mode inside Kubernetes-managed Jobs. This is a single-node course
@@ -152,7 +152,7 @@ connections, including loopback-only port-forward behavior.
 MongoDB has one StatefulSet replica and one isolated 2 GiB ReadWriteOnce PVC
 for `/data/db`; config and temporary files use bounded ephemeral volumes. The
 manifest relies on the profile's default dynamic StorageClass. B2's runtime
-checks require a StorageClass that provisions a profile-local volume and verify
+checks require Immediate binding and a StorageClass that provisions a profile-local volume, and verify
 that the actual PVC/PV binding and capacity match the run receipt. B3 adds isolated
 1 GiB NameNode, 16 GiB DataNode, 2 GiB Kafka, 16 GiB pipeline, and 2 GiB
 checkpoint claims. Together with Mongo, the run requests 39 GiB of profile-local
@@ -243,12 +243,14 @@ Profile-specific image loading follows the [Minikube image-loading guide](https:
 
 ## Verification and remaining runtime checks
 
-**OFFLINE VALIDATION:** 79 focused Kubernetes tests and 4 Module 2 executor
+**PRIOR CAMPAIGN VALIDATION (17 October 2026):** 79 focused Kubernetes tests and 4 Module 2 executor
 benchmark tests passed in the isolated worktree, including fake-executor demo
 state checks, synthetic receipt rejection, local Kustomize rendering, and
 Mongo Secret/index contracts. Python compilation and `git diff --check` pass.
 These checks do not exercise Docker, Minikube, Kubernetes, MongoDB, or
 application runtime behavior.
+
+The [18 October handoff](external-acceptance-handoff.md) records the latest checks.
 
 The following remain **RUNTIME NOT VERIFIED**: image builds and image loading;
 Minikube scheduling and DNS; PVC/PV behavior; MongoDB initialization with

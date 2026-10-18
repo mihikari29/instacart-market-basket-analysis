@@ -106,12 +106,11 @@ downloads the recorded public mirror, checks the expected row counts, writes
 those files, and creates `data/raw/source-receipt.json`; it refuses to overwrite
 existing source CSVs. Keep and inspect any existing files before fetching.
 
-Clean first, then generate one feed at a time. The cleaning command writes or
-overwrites Parquet files under `data/clean/`. Its `--validate` option prints
-audit statistics after writing; it does not fail closed on every missing file
-or raw-domain problem. Check that all six inputs exist and review the output
-before staging. The cleaner's missing-input and pre-coercion validation gap is
-recorded in [current progress](progress.md#module-1--ingestion--storage).
+Clean first, then generate one feed at a time. The cleaner requires all six
+inputs, validates raw domains/keys/relationships and contiguous cart positions,
+and rejects inconsistent weekday reconstruction before publishing. It replaces
+only a recognized owned output directory after staging all outputs. Its
+`--validate` option prints statistics; mandatory validation runs without it.
 Generation reuses its selected output directory and replaces the feed file and
 manifest there; retain any existing feed before selecting the same path.
 
@@ -573,8 +572,10 @@ Keep the accepted `final_recommendations` indexes
 `uq_serving_user_rank` (unique `(serving_version, user_id, rank)`) and
 `uq_serving_user_product` (unique `(serving_version, user_id, product_id)`).
 The API also requires the ordinary MongoDB `_id_` indexes and permission to
-inspect index metadata. Module 2 replaces `batch_product_metrics` and its
-indexes during publication; recreate both D1B product indexes afterward.
+inspect index metadata. Module 2 provisions both D1B product ranking indexes
+on the replacement collection before promotion; the administrator provisions
+initial indexes for empty or externally managed collections. Streaming metrics
+use one exact namespace lookup through the built-in `_id_` index.
 Missing or incompatible indexes fail closed with an explicit API error rather
 than triggering an unbounded collection scan.
 

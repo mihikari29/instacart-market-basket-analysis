@@ -180,6 +180,28 @@ and Mongo sink duration. It also includes the configured event-time watermark
 wait for finalized windows. C8B's acknowledgement-to-bundle-visible interval
 remains a separate bounded synthetic boundary measurement.
 
+When immutable bundle publication is enabled, the completed-progress logger
+pairs the latest Spark progress record with the same batch's sink receipt and
+upserts one versioned `streaming_metrics` document per namespace. It retains
+at most 16 sink receipts in memory and exposes input/processed rows per second,
+input count, run/query/batch IDs, capture time and the latency summary. Missing
+or non-finite Spark rates are explicitly unavailable. A batch without finalized
+rows has no latency sample. Publication errors fail the run instead of reporting
+successful telemetry. The local JSONL logs remain the detailed run record.
+
+`GET /api/v1/streaming/metrics?source_namespace=...` uses the API namespace
+allowlist and one bounded `_id` lookup; it performs no writes or index creation.
+The dashboard Overview displays the last published batch with explicit refresh,
+capture time, latency boundary and clock-skew status. Existence of a snapshot
+does not establish that the stream is currently running. Stored snapshots are
+validated within 16 KiB; no arbitrary logs or result directories are exposed.
+
+The isolated Kubernetes finite replay waits for producer success and terminal
+Kafka offsets consumed by completed Spark batches. Its receipt reconciles every
+generated event with delivery and consumption. The full feed is not capped to
+fit a short timer. Final event-time tail windows remain checkpointed when the
+finite source ends; offset drainage does not imply all windows are finalized.
+
 ## Source, tests, and evidence
 
 - Parsing and offset contract: [`src/module3/parse.py`](../src/module3/parse.py), [`src/module3/config.py`](../src/module3/config.py), [`tests/test_module3.py`](../tests/test_module3.py), [`tests/test_module3_config.py`](../tests/test_module3_config.py).

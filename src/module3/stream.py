@@ -116,7 +116,10 @@ def run_stream(
         result = _foreach_batch(batch_df, batch_id, config, sink_log)
         if config.publish_trend_bundles:
             with metrics_lock:
-                sink_results[batch_id] = result
+                sink_results[batch_id] = {
+                    "batch_id": batch_id,
+                    "ingestion_to_output_latency": result["ingestion_to_output_latency"],
+                }
                 while len(sink_results) > 16:
                     sink_results.popitem(last=False)
 

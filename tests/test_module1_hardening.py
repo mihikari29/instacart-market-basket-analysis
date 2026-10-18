@@ -177,6 +177,35 @@ def test_capped_gap_reconstruction_passes_weekday_gate():
     assert cleaned.days_since_prior_order.iloc[1:].between(30, 36).all()
 
 
+@pytest.mark.parametrize("last_position", [2, 3])
+def test_cart_sequence_checks_internal_gaps(tmp_path, last_position):
+    data_dir = tmp_path / "data"
+    raw = data_dir / "raw"
+    _write_raw_fixture(raw)
+    products = pd.read_csv(raw / "products.csv")
+    products.loc[1] = [2, "Second product", 10, 2]
+    products.to_csv(raw / "products.csv", index=False)
+    prior = pd.read_csv(raw / "order_products__prior.csv")
+    prior.loc[1] = [11, 2, last_position, 0]
+    prior.to_csv(raw / "order_products__prior.csv", index=False)
+    if last_position == 3:
+        with pytest.raises(raw_clean.RawInputValidationError, match="contiguous 1..N"):
+            raw_clean.load_raw(data_dir)
+    else:
+        assert len(raw_clean.load_raw(data_dir)["order_products__prior"]) == 2
+
+
+def test_kubernetes_synthetic_fixture_passes_all_cleaning_gates(tmp_path, monkeypatch):
+    from scripts.k8s.fixture_data import write_fixture
+    data_dir = tmp_path / "data"
+    write_fixture(data_dir / "raw")
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir)])
+    assert raw_clean.main() == 0
+    orders = pd.read_parquet(data_dir / "clean" / "orders.parquet")
+    assert len(orders) == 48
+    assert len(pd.read_parquet(data_dir / "clean" / "order_products__prior.parquet")) == 72
+
+
 def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_path, monkeypatch, capsys):
     data_dir = tmp_path / "data"
     _write_raw_fixture(data_dir / "raw", reordered="2")

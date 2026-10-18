@@ -2,7 +2,18 @@
 
 > Current repository status is assessed against the approved [Proposal](Proposal.md). Historical runs remain attributed to their recorded revisions and environments. This page records status and evidence links; detailed contracts belong in the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [Docker runbook](docker.md).
 
-## Current implementation campaign — 17 October 2026
+## Current remediation — 18 October 2026
+
+The feature branch `feat/offline-project-finalization` implements the seven
+independent-review milestones from baseline `c169b76574f9abf8a8763c3c4cb742ec3ea12685`:
+HDFS identity/storage admission, finite replay completion, cleaning gates,
+Hybrid endpoint parity, standalone executor comparison, API/UI streaming
+telemetry, and documentation/packaging cleanup. The [handoff](external-acceptance-handoff.md)
+and [ledger](implementation-ledger.md) record exact development checks and
+unexecuted acceptance tasks. Main, Proposal and historical evidence are preserved.
+No runtime acceptance is claimed.
+
+## Previous implementation campaign — 17 October 2026
 
 The isolated branch `feat/offline-project-finalization` starts at the merged
 B1 baseline `1565b65f44a4b4c03f7df761e8e47fe3ba09ce3d`. It implements

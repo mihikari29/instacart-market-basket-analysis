@@ -60,12 +60,3 @@ def ensure_checkpoint(
             )
     checkpoint.mkdir(parents=True, exist_ok=True)
     return checkpoint.as_uri()
-
-
-def reset_checkpoint(output_dir: Path, run_id: str) -> None:
-    checkpoint = (output_dir / "checkpoint" / run_id).resolve()
-    if checkpoint.exists():
-        import shutil
-
-        shutil.rmtree(checkpoint)
-    checkpoint.mkdir(parents=True, exist_ok=True)

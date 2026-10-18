@@ -30,12 +30,14 @@ UI has no direct MongoDB connection.
 
 | Area | Status |
 |---|---|
-| Modules 1–2 | Implemented; historical full-data results are recorded. Module 1 raw-input preflight remains incomplete. |
-| Module 3 | Implemented; bounded streaming and recovery evidence is recorded. End-to-end latency is not measured. |
+| Modules 1–2 | Implemented, including fail-closed raw validation, atomic publication and prior-only feature handoff. Historical full-data results retain their original revision scope. |
+| Module 3 | Implemented finite replay reconciliation and defined ingestion-to-output telemetry. New runtime measurements remain pending. |
 | Modules 4A–4B | Historical full-data acceptance passed 21/21 gates on 10 October 2026; post-style full-data workflows have not been rerun. |
-| Module 4C | Implemented and integration-tested; leakage-safe Hybrid quality and production-capacity results are not established. |
-| Module 4D | Read-only API and four-page dashboard are implemented; an independently verified per-user ALS view is missing. |
-| Kubernetes | Required by the Proposal; no deployment assets or evidence are present. |
+| Module 4C | Implemented serving and prior-only official-train Hybrid evaluation; new quality results and production capacity remain unestablished. |
+| Module 4D | Read-only API/dashboard includes versioned ALS/Hybrid comparison and completed-batch streaming metrics. |
+| Kubernetes | Isolated B2/B3/B4 assets and runner implemented; image builds, deployment and runtime acceptance remain pending. |
+
+Current branch: `feat/offline-project-finalization`. See the [external acceptance handoff](docs/external-acceptance-handoff.md) for development checks and remaining runtime work.
 
 See [project progress](docs/progress.md) for evidence dates, recorded CI, Proposal
 gaps, and next work. The [Module 3 guide](docs/module3-contracts.md) owns its
@@ -93,11 +95,12 @@ before operating it.
 
 ## Cleaning (validated)
 
-Historical full-data checks recorded the cleaning and event-generation results.
-The current cleaner still needs fail-fast checks for missing inputs and raw
-`reordered` values before coercion or output writes. This guard gap does not
-invalidate the recorded valid-input results; details are in [progress](docs/progress.md#module-1--ingestion--storage)
-and the [full-data evidence](docs/evidence/full/README.md).
+The cleaner requires all six source tables and validates headers, raw domains,
+keys, relationships and contiguous cart positions before coercion. Reconstructed
+gaps must agree with weekday progression. It stages every Parquet output before
+publishing an owned output directory; invalid inputs preserve the previous
+publication. `--validate` prints audit statistics after these mandatory gates.
+Historical full-data results remain in the [full-data evidence](docs/evidence/full/README.md).
 
 ## SyntheticConfig
 
@@ -182,14 +185,14 @@ passed on the parent code commit; PR #11 changed documentation only.
 
 ## Known limitations
 
-- Kubernetes demonstration is not implemented.
-- Module 1 raw-input preflight remains incomplete.
-- Module 2 does not independently hash every staged input; its optional local
-  source check and Module 4's staged-Parquet hash validation are separate.
-- Module 2 `user_features` consumption in Module 4 is unresolved.
-- No independently verified per-user ALS dashboard view is available.
-- Defined end-to-end streaming latency, executor comparison, and leakage-safe
-  Hybrid quality evaluation are missing.
+- Kubernetes runtime and full-data acceptance of the finalization revision are pending.
+- Module 2's optional local source check and Module 4's staged-Parquet hash
+  validation remain separate checks.
+- Module 2 user features are descriptive inputs only; ALS fitting does not use them.
+- Streaming latency compares producer/output wall clocks without independent
+  synchronization and includes finalized-window watermark delay.
+- Executor benchmarks and prior-only Hybrid evaluation are implemented; new
+  measured results require an authorized runtime session.
 - A historical browser CI assertion observed four charts instead of five; later
   runs passed, but the original failure cause remains unexplained.
 - Historical writes to default Compose volumes cannot be ruled out where no
@@ -214,8 +217,8 @@ no leakage-safe official-train Hybrid quality result is available. See the
 ## Module 4D — Dashboard demonstration
 
 The four-page Streamlit UI reads through FastAPI. It displays trends, batch
-metrics, Hybrid recommendations, and registered historical evidence; it has no
-independently verified per-user ALS recommendation view. The isolated synthetic
+metrics, independently versioned ALS/Hybrid recommendations, completed-batch
+streaming throughput/latency, and registered historical evidence. The isolated synthetic
 demo does not establish production capacity. See the [API/UI contracts](docs/module4-plan.md#module4d-spec)
 and [Docker runbook](docs/docker.md).
 

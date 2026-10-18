@@ -34,8 +34,28 @@ assigned to the external operator.
   query identities, unavailable measurements and clock skew remain visible.
   Reader imports no longer eagerly require PySpark. Offline fake-client, HTTP,
   progress-thread and UI checks are recorded in the final validation table.
+- M7: corrected current documentation, added the actual Spark producer/reader
+  roundtrip test and manual image packaging workflow, verified copied UI/API
+  Python sources without repository mounts, removed an unused checkpoint-delete
+  helper and leaking Spark stubs. No data, outputs, volumes or evidence deleted.
 
-## Baseline and safety
+### Final remediation validation
+
+- Broad non-service suite: **757 passed, 7 skipped**, zero failures. Eight live
+  Mongo modules and two modules requiring unavailable Spark imports were
+  explicitly excluded. The skipped Spark parity and feature-handoff modules
+  remain external operator checks.
+- Repository-wide Ruff, Python compilation/AST, 13 Kubernetes/workflow YAML
+  parses, offline standalone plan, protected-path comparison and diff checks:
+  **PASS**. Lightweight dependencies were installed only into temporary `/tmp`
+  directories; earlier no-install statements below describe the prior campaign.
+- No services, infrastructure, Docker build, live pipeline, cluster, acceptance
+  or teardown ran. The manual packaging workflow was added but not dispatched.
+  The final push uses `[skip ci]` to prevent automatic runtime/image-build CI.
+- Detailed command selection, source map, resolved development failures and
+  unexecuted operator tasks: [external acceptance handoff](external-acceptance-handoff.md).
+
+## Historical campaign baseline and safety — 17 October 2026
 
 - Requested source baseline: `origin/main` at `1565b65f44a4b4c03f7df761e8e47fe3ba09ce3d`.
 - Implementation branch: `feat/offline-project-finalization`.

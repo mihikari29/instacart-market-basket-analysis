@@ -27,7 +27,8 @@ the code does not invent those identities.
   builds only run-tagged API, UI, and pipeline images from a clean committed
   source revision.
 - Minikube v1.39.0, `kubectl`, Docker driver, one containerd node, Calico, and a
-  default profile-local dynamic StorageClass with ReadWriteOnce support.
+  default profile-local dynamic StorageClass with ReadWriteOnce and Immediate
+  binding. Delayed binding is rejected because the runner waits for PVCs before Jobs.
 - At least 6 physical CPU cores, 12 GiB available RAM, and 40 GiB free disk for
   B3 and image work. B2 serving alone reserves 4 CPU, 6 GiB RAM, and 20 GiB disk.
 - In WSL, a separately measured Windows backing-disk value of at least 40 GiB;
@@ -36,8 +37,8 @@ the code does not invent those identities.
 - Fixture mode uses the bounded deterministic image fixture (at most 50 users
   and 5,000 generated events). Full-data mode accepts exactly the six required
   CSV files with declared headers, hashes them before any cluster creation,
-  requires the B3 reserve, and caps raw inputs at 12 GiB for the 16 GiB DataNode
-  claim. Module 1 performs its full raw-domain validation inside the run.
+  requires the B3 reserve, and caps raw inputs at 4 GiB. The 16 GiB pipeline
+  claim budgets up to 3× raw bytes plus 2 GiB; the DataNode has its own 16 GiB claim. Module 1 performs its full raw-domain validation inside the run.
 
 An implementation-time local preflight on this host measured 6 physical CPU
 cores, 5.271 GiB available RAM, 7.46 GiB total RAM, and 947.6 GiB free in the
@@ -168,6 +169,17 @@ inventory; Kafka/HDFS/pipeline image inspection/build; B2/B3 lock finalization;
 private render and namespace absence check; serving deployment; pipeline
 execution; B4 acceptance. Each API operation retains its reviewed timeouts.
 Pipeline Jobs have `backoffLimit: 0`; failed steps do not retry automatically.
+After HDFS readiness, a checked superuser bootstrap creates only the fresh
+`/instacart/<run-id>` root, assigns it to `k8spipeline` with mode 750, and refuses
+an existing run root. Staging, Spark writes and readback use that pipeline identity.
+No recursive ownership changes affect other paths.
+
+Replay waits for successful producer delivery and committed terminal Kafka
+offsets, then reconciles generated/attempted/acknowledged/consumed counts.
+Fixture replay has a 1,200-second hard deadline. Full replay retains the entire
+feed at 1,000 events/second with an 18-hour ceiling; its Job allows 65,400 seconds.
+Final event-time tail state remains in the checkpoint; no future events are
+fabricated to close it. Inspect both completion and output evidence.
 
 The pipeline order is `input → module1 → module2 → module4 → replay → hybrid`.
 The Module 2 step also runs three measured trials each for Spark `local[1]` and
@@ -260,15 +272,17 @@ runtime acceptance. The test matrix and evidence scope are recorded in
   identity and fresh output path; it does not resume Kafka offsets/checkpoints.
 - B4 verifies NetworkPolicy behavior only at runtime. Static manifest validity
   does not establish that the chosen CNI enforces the intended flows.
-- Spark comparison measures local thread pools on one host, not distributed
-  executors. Timing also depends on host scheduling and cache state.
+- The automated B3 comparison measures local thread pools. Proposal §15.6
+  executor-layout evidence needs the separate existing-standalone-master
+  experiment in [the benchmark guide](module2-executor-benchmark.md). Neither
+  mode implies a speedup; scheduling and caches affect timing.
 - The run keeps resources after success or failure. Teardown needs a separate
   review and explicit `--execute`.
 
-## CODE COMPLETE — RUNTIME ACCEPTANCE PENDING
+## CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE
 
-The implementation and offline orchestration checks are complete for this
-campaign. Real image identity discovery, capacity validation on an eligible
+The implementation and feasible offline checks are recorded in the
+[external acceptance handoff](external-acceptance-handoff.md). Real image identity discovery, capacity validation on an eligible
 host, deployment behavior, B2/B3/B4 runtime receipts, interactive demonstration,
 and teardown remain pending. This status makes no claim of runtime success,
 full-data acceptance, or production readiness.
