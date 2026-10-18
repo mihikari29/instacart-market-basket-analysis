@@ -86,6 +86,7 @@ COPY src/__init__.py ./src/__init__.py
 COPY src/module4/__init__.py ./src/module4/__init__.py
 COPY src/module4/dashboard/__init__.py ./src/module4/dashboard/__init__.py
 COPY src/module4/dashboard/ui ./src/module4/dashboard/ui
+COPY src/module3/__init__.py src/module3/metrics.py ./src/module3/
 
 USER 10001:10001
 EXPOSE 8501
@@ -132,6 +133,7 @@ COPY src/__init__.py /workspace/src/__init__.py
 COPY src/module3/__init__.py /workspace/src/module3/__init__.py
 COPY src/module3/config.py /workspace/src/module3/config.py
 COPY src/module3/trend_bundle.py /workspace/src/module3/trend_bundle.py
+COPY src/module3/metrics.py /workspace/src/module3/metrics.py
 COPY src/module4/ /workspace/src/module4/
 
 # These files are part of the established Module 4 provenance digest. Keep

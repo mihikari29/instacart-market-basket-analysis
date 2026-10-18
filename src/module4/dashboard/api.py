@@ -20,6 +20,7 @@ from src.module4.hybrid.trend_reader import (
 )
 
 from .config import ApiConfig
+from .streaming_reader import read_streaming_metrics
 from .batch_readers import (
     BatchDatabaseFailure,
     BatchIndexUnavailable,
@@ -61,6 +62,7 @@ from .schemas import (
     EvidenceRegistryResponse,
     EvidenceResponse,
     HealthResponse,
+    StreamingMetricsResponse,
     OrdersDistributionResponse,
     RecommendationResponse,
     TrendResponse,
@@ -355,6 +357,16 @@ def create_app(
             "items": items,
             "observed_at": datetime.now(timezone.utc),
         }
+
+    @app.get("/api/v1/streaming/metrics", response_model=StreamingMetricsResponse, tags=["streaming"],
+             responses={422: {"model": ErrorEnvelope}, 502: {"model": ErrorEnvelope}, 503: {"model": ErrorEnvelope}})
+    def streaming_metrics(request: Request, source_namespace: str = Query(..., min_length=1, max_length=256)):
+        settings: ApiConfig = request.app.state.api_config
+        if source_namespace not in settings.trend_source_namespaces:
+            return _error(request, 422, "invalid_namespace", "Trend source namespace is not configured.")
+        result = read_streaming_metrics(request.app.state.database, source_namespace, max_time_ms=settings.max_time_ms)
+        result["observed_at"] = datetime.now(timezone.utc)
+        return result
 
     # D1A's injected fixture app retains its accepted OpenAPI snapshot; the
     # production app and runtime smoke publish the full D1A+D1B contract.

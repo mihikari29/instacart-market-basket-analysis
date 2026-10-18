@@ -14,11 +14,10 @@ import json
 import math
 from numbers import Real
 import time
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
-from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
-from pyspark.sql.types import TimestampType
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
 
 from .config import Config
 
@@ -619,6 +618,9 @@ def write_trend_bundles(
     Positive retention is measured from processing-time ``published_at`` and
     controls MongoDB TTL only. It does not establish event-time freshness.
     """
+    from pyspark.sql import DataFrame, functions as F
+    from pyspark.sql.types import TimestampType
+
     started = time.perf_counter()
     counters = _Counters()
 

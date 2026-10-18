@@ -214,6 +214,12 @@ class FakeApi:
         self.serving_version_suffix = ""
         self.als_model_version = "als-2026-10"
         self.als_run_id = "source-run-42"
+        self.metrics_document = None
+
+    def get_streaming_metrics(self, source_namespace):
+        self.calls.append(("streaming_metrics", (source_namespace,)))
+        return {"available": self.metrics_document is not None, "source_namespace": source_namespace,
+                "metrics": self.metrics_document, "observed_at": _time()}
 
     def get_health(self):
         self.calls.append(("health", ()))
@@ -277,6 +283,24 @@ def _app(monkeypatch, api=None, page="Overview"):
     return app.run(), api or app.session_state["_module4d_api_client"]
 
 
+def test_overview_displays_real_batch_rates_latency_and_clock_skew(monkeypatch):
+    from src.module3.metrics import build_snapshot
+    from src.module3.latency import summarize_ingestion_to_output
+    api = FakeApi()
+    api.metrics_document = build_snapshot(
+        {"id": "query-1", "batchId": 3, "numInputRows": 10, "inputRowsPerSecond": 5., "processedRowsPerSecond": 7.},
+        {"batch_id": 3, "ingestion_to_output_latency": summarize_ingestion_to_output(
+            {"count": 1, "sum": 1200, "min": 1200, "max": 1200}, 1100)},
+        source_namespace=NAMESPACE, source_scope="fixture", run_id="run-1",
+    )
+    app, _ = _app(monkeypatch, api)
+    assert not app.exception
+    assert any(metric.label == "Input rows / second" and metric.value == "5.00" for metric in app.metric)
+    assert any("Clock skew detected" in warning.value for warning in app.warning)
+    app.button(key="streaming_metrics_refresh").click().run()
+    assert len([call for call in api.calls if call[0] == "streaming_metrics"]) == 2
+
+
 def _go_to(app, page):
     app.radio(key="ui_page").set_value(page)
     return app.run()
@@ -307,7 +331,7 @@ def test_overview_imports_and_renders_with_independent_source_states(monkeypatch
     assert "process liveness only" in rendered
     assert "Finalized trends" in rendered
     assert "Archived reports are historical evidence" in rendered
-    assert {call[0] for call in api.calls} == {"health", "products", "departments", "trends", "evidence"}
+    assert {call[0] for call in api.calls} == {"health", "products", "departments", "trends", "evidence", "streaming_metrics"}
 
 
 def test_analytics_page_loads_fixed_routes_and_labels_real_sources(monkeypatch):

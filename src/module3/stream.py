@@ -7,10 +7,9 @@ orchestration with finite durations.
 import json
 import time
 from dataclasses import asdict
+from collections import OrderedDict
 from pathlib import Path
-from threading import Thread
-
-from pyspark.sql.streaming import StreamingQuery
+from threading import Lock
 
 from .config import Config
 from .parse import from_kafka
@@ -20,9 +19,10 @@ from .trending import build_window_counts, rank_trending_batch, select_top_k
 from .checkpoint import ensure_checkpoint
 from .latency import summarize_ingestion_to_output
 from .replay import wait_for_replay
+from .metrics import build_snapshot, publish_snapshot
 
 
-PROGRESS_LOG_NAME = "streaming_progress.jsonl"
+from .progress_log import PROGRESS_LOG_NAME, progress_logger as _progress_logger
 CHECKPOINT_STATE_VERSION = "ingestion-latency-v1"
 
 
@@ -86,76 +86,6 @@ def _foreach_batch(batch_df, batch_id, config: Config, sink_log: Path) -> dict:
     return result
 
 
-def _progress_logger(query: StreamingQuery, output_dir: Path, stop_event) -> Thread:
-    """Background thread that polls recentProgress into a JSONL log."""
-    log_path = output_dir / PROGRESS_LOG_NAME
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    seen_batch_ids = set()
-
-    def _record(progress):
-        batch_id = progress.get("batchId")
-        if batch_id in seen_batch_ids:
-            return None
-        seen_batch_ids.add(batch_id)
-        duration = progress.get("durationMs") or {}
-        event_time = progress.get("eventTime") or {}
-        state_operators = []
-        for operator in progress.get("stateOperators") or []:
-            state_operators.append(
-                {
-                    "numRowsTotal": operator.get("numRowsTotal"),
-                    "numRowsUpdated": operator.get("numRowsUpdated"),
-                    "numRowsRemoved": operator.get("numRowsRemoved"),
-                    "numRowsDroppedByWatermark": operator.get("numRowsDroppedByWatermark"),
-                    "customMetrics": operator.get("customMetrics") or {},
-                }
-            )
-        return {
-            "capturedAtEpoch": time.time(),
-            "id": progress.get("id"),
-            "batchId": batch_id,
-            "numInputRows": progress.get("numInputRows"),
-            "inputRowsPerSecond": progress.get("inputRowsPerSecond"),
-            "processedRowsPerSecond": progress.get("processedRowsPerSecond"),
-            "durationMs": {
-                "triggerExecution": duration.get("triggerExecution"),
-                "addBatch": duration.get("addBatch"),
-                "getBatch": duration.get("getBatch"),
-            },
-            "eventTime": event_time,
-            "observedMetrics": progress.get("observedMetrics") or {},
-            "stateOperators": state_operators,
-            "sources": progress.get("sources") or [],
-            "sink": progress.get("sink") or {},
-            "timestamp": progress.get("timestamp"),
-        }
-
-    def _loop():
-        with log_path.open("a", encoding="utf-8") as fh:
-            while True:
-                try:
-                    for progress in query.recentProgress:
-                        progress_record = _record(progress)
-                        if progress_record is not None:
-                            fh.write(json.dumps(progress_record, default=str) + "\n")
-                            fh.flush()
-                except Exception:
-                    pass
-                if stop_event.wait(2.0) or not query.isActive:
-                    break
-
-            try:
-                for progress in query.recentProgress:
-                    progress_record = _record(progress)
-                    if progress_record is not None:
-                        fh.write(json.dumps(progress_record, default=str) + "\n")
-                fh.flush()
-            except Exception:
-                pass
-
-    thread = Thread(target=_loop, daemon=True)
-    return thread
-
 
 def run_stream(
     spark,
@@ -179,9 +109,27 @@ def run_stream(
         state_version=CHECKPOINT_STATE_VERSION,
     )
     sink_log = output_dir / "sink_batches.jsonl"
+    sink_results = OrderedDict()
+    metrics_lock = Lock()
 
     def _foreach(batch_df, batch_id):
-        _foreach_batch(batch_df, batch_id, config, sink_log)
+        result = _foreach_batch(batch_df, batch_id, config, sink_log)
+        if config.publish_trend_bundles:
+            with metrics_lock:
+                sink_results[batch_id] = result
+                while len(sink_results) > 16:
+                    sink_results.popitem(last=False)
+
+    def _publish_progress(progress):
+        if not config.publish_trend_bundles:
+            return
+        with metrics_lock:
+            result = sink_results.get(progress.get("batchId"))
+        if result is None:
+            raise RuntimeError("completed progress has no matching bounded sink receipt")
+        document = build_snapshot(progress, result, source_namespace=config.trend_source_namespace,
+                                  source_scope=config.trend_source_scope, run_id=run_id)
+        publish_snapshot(config, document)
 
     writer = (
         counts.writeStream
@@ -217,7 +165,8 @@ def run_stream(
     }
 
     stop_event = __import__("threading").Event()
-    logger_thread = _progress_logger(query, output_dir, stop_event)
+    metrics_errors = []
+    logger_thread = _progress_logger(query, output_dir, stop_event, _publish_progress, metrics_errors)
     logger_thread.start()
     try:
         if on_query_started is not None:
@@ -245,7 +194,10 @@ def run_stream(
         if query.isActive:
             query.stop()
         stop_event.set()
-        logger_thread.join(timeout=5)
+        logger_thread.join(timeout=15)
+
+    if logger_thread.is_alive() or metrics_errors:
+        raise RuntimeError("stream progress/metrics publication did not complete successfully")
 
     info["last_progress"] = list(query.recentProgress)[-1] if query.recentProgress else None
     return info

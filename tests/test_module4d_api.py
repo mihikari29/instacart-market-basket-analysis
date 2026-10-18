@@ -357,6 +357,7 @@ def test_openapi_is_get_only_for_d1a_and_has_no_wildcard_cors():
     assert set(schema["paths"]) == {
         "/health", "/api/v1/recommendations/{user_id}",
         "/api/v1/als/recommendations/{user_id}", "/api/v1/trends",
+        "/api/v1/streaming/metrics",
     }
     assert all(set(item) == {"get"} for item in schema["paths"].values())
     assert "Access-Control-Allow-Origin" not in health.headers
@@ -389,7 +390,6 @@ def test_api_import_and_openapi_do_not_start_spark_kafka_or_hdfs():
     smoke = """
 import sys
 from fastapi.testclient import TestClient
-from pyspark import SparkContext
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 
@@ -397,7 +397,7 @@ settings = ApiConfig("mongodb://127.0.0.1:27017/module4_import_smoke", "module4_
 app = create_app(settings, database=object())
 with TestClient(app) as client:
     assert client.get("/openapi.json").status_code == 200
-assert SparkContext._active_spark_context is None
+assert "pyspark" not in sys.modules
 assert "src.module3.cli" not in sys.modules
 assert "src.module3.streaming" not in sys.modules
 """

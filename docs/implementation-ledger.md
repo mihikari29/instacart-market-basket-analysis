@@ -27,6 +27,13 @@ assigned to the external operator.
   core/memory layouts, isolated worker processes and bounded REST evidence of
   active executor allocation. Existing local[1]/local[2] mode is preserved.
   Fake-worker/configuration checks passed; no executor experiment was run.
+- M6: completed-batch telemetry publishes one validated latest document per
+  namespace, pairing real Spark input/processing rates with the same batch's
+  defined ingestion-to-finalized-output latency. Added a bounded indexed GET
+  endpoint, strict client checks and a refreshable overview panel. Capture/run/
+  query identities, unavailable measurements and clock skew remain visible.
+  Reader imports no longer eagerly require PySpark. Offline fake-client, HTTP,
+  progress-thread and UI checks are recorded in the final validation table.
 
 ## Baseline and safety
 

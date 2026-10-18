@@ -26,6 +26,13 @@ class HealthResponse(StrictResponse):
     status: Literal["ok"]
 
 
+class StreamingMetricsResponse(StrictResponse):
+    available: StrictBool
+    source_namespace: StrictStr
+    metrics: dict[str, Any] | None
+    observed_at: datetime
+
+
 class RankingConfigResponse(StrictResponse):
     algorithm_version: StrictStr
     lambda_requested: FiniteFloat | None

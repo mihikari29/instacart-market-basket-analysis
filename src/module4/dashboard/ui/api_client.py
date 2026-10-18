@@ -528,7 +528,19 @@ def _validate_evidence(value: Any, evidence_id: str) -> dict[str, Any]:
 
 def _validate_response(endpoint: str, value: Any) -> dict[str, Any]:
     body = _require_mapping(value, endpoint)
-    if endpoint == "health":
+    if endpoint == "streaming_metrics":
+        from src.module3.metrics import validate_snapshot
+        _require_keys(body, {"available", "source_namespace", "metrics", "observed_at"}, endpoint)
+        _check_bool(body["available"], endpoint)
+        _check_text(body["source_namespace"], endpoint)
+        _validate_timestamp(body["observed_at"], endpoint)
+        if body["available"] != (body["metrics"] is not None):
+            raise ValueError("streaming metrics availability is inconsistent")
+        if body["metrics"] is not None:
+            validate_snapshot(body["metrics"])
+            if body["metrics"]["source_namespace"] != body["source_namespace"]:
+                raise ValueError("streaming metrics namespace is inconsistent")
+    elif endpoint == "health":
         _require_keys(body, {"status"}, endpoint)
         if body["status"] != "ok":
             raise ValueError("health status is invalid")
@@ -1038,6 +1050,13 @@ class ApiClient:
                 status_code=502,
                 code="invalid_response",
             )
+        return payload
+
+    def get_streaming_metrics(self, source_namespace: str) -> dict[str, Any]:
+        namespace = validate_trend_namespace(source_namespace)
+        payload = self._get("/api/v1/streaming/metrics", endpoint="streaming_metrics", params={"source_namespace": namespace})
+        if payload["source_namespace"] != namespace:
+            raise ApiClientError("The API returned a different metrics namespace.", status_code=502, code="invalid_response")
         return payload
 
     def get_batch_products(self, order: str = "purchase_count", limit: int = 20) -> dict[str, Any]:
