@@ -3,8 +3,12 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 
 from src.module1.raw_diagnostic import (
@@ -28,6 +32,7 @@ EXPECTED_URL = (
     "https://www.kaggle.com/api/v1/datasets/download/"
     "psparks/instacart-market-basket-analysis?datasetVersionNumber=1"
 )
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class RawDiagnosticTests(unittest.TestCase):
@@ -61,6 +66,141 @@ class RawDiagnosticTests(unittest.TestCase):
             "archive_sha256": "a" * 64,
             "files": {"orders.csv": {"rows": 1, "sha256": digest}},
         }
+
+    def run_diagnostic_cli(self, raw_dir: Path, startup_hook: str) -> subprocess.CompletedProcess[bytes]:
+        with tempfile.TemporaryDirectory() as temporary:
+            Path(temporary, "sitecustomize.py").write_text(startup_hook, encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PYTHONPATH"] = os.pathsep.join((temporary, str(REPOSITORY_ROOT)))
+            environment["PYTHONDONTWRITEBYTECODE"] = "1"
+            return subprocess.run(
+                [
+                    sys.executable,
+                    "-B",
+                    "-m",
+                    "src.module1.raw_diagnostic",
+                    "--raw-dir",
+                    str(raw_dir),
+                ],
+                cwd=REPOSITORY_ROOT,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                check=False,
+            )
+
+    def test_optional_pandas_import_failures_are_sanitized_by_cli(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = self.make_raw_dir(temporary, f"{HEADER}\n1,2,train,1,0,24,7\n")
+            for exception_name in ("RuntimeError", "ValueError", "ImportError"):
+                with self.subTest(exception_name=exception_name):
+                    startup_hook = textwrap.dedent(
+                        f"""
+                        import importlib.abc
+                        import sys
+
+                        class BrokenPandasImport(importlib.abc.MetaPathFinder):
+                            def find_spec(self, fullname, path=None, target=None):
+                                if fullname == "pandas":
+                                    raise {exception_name}(
+                                        "SYNTH_IMPORT_FAILURE_" + "x" * 20000
+                                    )
+
+                        sys.meta_path.insert(0, BrokenPandasImport())
+                        """
+                    )
+                    result = self.run_diagnostic_cli(raw_dir, startup_hook)
+                    combined = result.stdout + result.stderr
+
+                    self.assertEqual(result.returncode, 0)
+                    self.assertLessEqual(len(result.stdout) + len(result.stderr), MAX_OUTPUT_BYTES)
+                    self.assertNotIn(b"Traceback", combined)
+                    self.assertNotIn(b"SYNTH_IMPORT_FAILURE_", combined)
+                    self.assertNotIn(b"x" * 256, combined)
+                    self.assertNotIn(b"Error:", result.stderr)
+                    if exception_name == "ImportError":
+                        self.assertIn(b"pandas_scan=unavailable reason=pandas_not_installed", result.stdout)
+                    else:
+                        self.assertIn(
+                            f"pandas_scan=error error_type={exception_name}".encode(),
+                            result.stdout,
+                        )
+                    self.assertEqual(result.stderr, b"")
+
+    def test_successful_pandas_import_uses_normal_scan_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_dir = self.make_raw_dir(temporary, f"{HEADER}\n")
+            startup_hook = textwrap.dedent(
+                """
+                import sys
+                import types
+
+                pandas = types.ModuleType("pandas")
+
+                def read_csv(source, **options):
+                    assert options == {
+                        "dtype": "string",
+                        "keep_default_na": False,
+                        "chunksize": 4096,
+                        "engine": "c",
+                    }
+                    assert source.getvalue().startswith(b"order_id,user_id,")
+                    return iter(())
+
+                pandas.read_csv = read_csv
+                sys.modules["pandas"] = pandas
+                """
+            )
+            result = self.run_diagnostic_cli(raw_dir, startup_hook)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertLessEqual(len(result.stdout) + len(result.stderr), MAX_OUTPUT_BYTES)
+        self.assertIn(b"csv_first_invalid_field=none logical_records_scanned=1", result.stdout)
+        self.assertIn(b"pandas_first_invalid_field=none dataframe_rows_scanned=0", result.stdout)
+        self.assertEqual(result.stderr, b"")
+
+    def test_workflow_preserves_preflight_status_when_diagnostic_succeeds_or_fails(self):
+        workflow = (REPOSITORY_ROOT / ".github/workflows/module3-full.yml").read_text(encoding="utf-8")
+        step = workflow.split(
+            "      - name: Regenerate bounded Module 1 feed\n        run: |\n", 1
+        )[1].split("      - name: Build pinned Spark runtime", 1)[0]
+        workflow_script = textwrap.dedent(step)
+        command_stub = textwrap.dedent(
+            """
+            python() {
+              case "$*" in
+                "scripts/fetch_instacart.py") return 0 ;;
+                "-m src.module1.clean --validate") return "$PREFLIGHT_STATUS" ;;
+                "-m src.module1.raw_diagnostic --raw-dir data/raw") printf 'diagnostic-ran\\n'; return "$DIAGNOSTIC_STATUS" ;;
+                *"src.module1.generate"*) printf 'generation-ran\\n'; return 0 ;;
+                *) return 90 ;;
+              esac
+            }
+            """
+        )
+
+        for preflight_status, diagnostic_status, expected_status in (
+            (0, 0, 0),
+            (2, 0, 2),
+            (2, 1, 2),
+        ):
+            with self.subTest(preflight_status=preflight_status, diagnostic_status=diagnostic_status):
+                environment = os.environ.copy()
+                environment["PREFLIGHT_STATUS"] = str(preflight_status)
+                environment["DIAGNOSTIC_STATUS"] = str(diagnostic_status)
+                result = subprocess.run(
+                    ["bash", "--noprofile", "--norc", "-eo", "pipefail", "-c", command_stub + workflow_script],
+                    cwd=REPOSITORY_ROOT,
+                    env=environment,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=10,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, expected_status)
+                self.assertEqual(b"diagnostic-ran" in result.stdout, preflight_status != 0)
+                self.assertEqual(b"generation-ran" in result.stdout, preflight_status == 0)
 
     def test_receipt_urls_and_control_text_are_never_emitted(self):
         untrusted_values = (

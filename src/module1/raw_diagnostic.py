@@ -328,6 +328,8 @@ def _pandas_scan(path: Path) -> list[str]:
         import pandas as pd
     except ImportError:
         return ["pandas_scan=unavailable reason=pandas_not_installed"]
+    except Exception as exc:
+        return [f"pandas_scan=error error_type={_exception_type(exc)}"]
 
     rows_scanned = 0
     try:
