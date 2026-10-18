@@ -408,7 +408,7 @@ class PipelinePlan:
     execution_model: str = "Spark local[2] inside Kubernetes-managed Jobs; not native distributed Spark-on-Kubernetes"
 
 
-def _step_specs(identity: RunIdentity) -> tuple[PipelineStep, ...]:
+def _step_specs(identity: RunIdentity, mode: str = "fixture") -> tuple[PipelineStep, ...]:
     return tuple(
         PipelineStep(name, f"it4931-{name}-{identity.run_id}", timeout, retry, retry_text)
         for name, timeout, retry, retry_text in (
@@ -416,7 +416,7 @@ def _step_specs(identity: RunIdentity) -> tuple[PipelineStep, ...]:
             ("module1", 1800, 0, "no automatic retry; inspect partial staging before a new run identity"),
             ("module2", 7200, 0, "no automatic retry; includes bounded local[1]/local[2] executor benchmark"),
             ("module4", 7200, 0, "no automatic retry; stable model versions require a reviewed new attempt"),
-            ("replay", 7200, 0, "no automatic retry; resume requires verified Kafka offsets and checkpoint receipt"),
+            ("replay", 65_400 if mode == "full" else 1800, 0, "no automatic retry; resume requires verified Kafka offsets and checkpoint receipt"),
             ("hybrid", 900, 0, "insert-only source identity; no automatic conflict repair"),
         )
     )
@@ -446,7 +446,7 @@ def plan_pipeline(
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum:
                 raise PipelineError(f"full mode requires at least {minimum} {field.replace('_', ' ')}")
         caps = (None, None)
-    steps = _step_specs(identity)
+    steps = _step_specs(identity, mode)
     return PipelinePlan(
         run_id=identity.run_id,
         profile=identity.profile,
@@ -953,7 +953,7 @@ def validate_pipeline_plan(
     ):
         if plan.get(field) != getattr(expected_plan, field):
             raise PipelineError(f"private B3 {field} does not match the validated run plan")
-    expected_steps = [asdict(step) for step in _step_specs(identity)]
+    expected_steps = [asdict(step) for step in _step_specs(identity, plan["mode"])]
     if plan.get("steps") != expected_steps:
         raise PipelineError("private B3 dependency order or retry policy differs from the reviewed plan")
     locked_images = {role: lock["images"][role] for role in PIPELINE_IMAGE_ROLES}

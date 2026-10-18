@@ -345,6 +345,11 @@ def replay() -> dict:
     from src.module3.spark import session
     from src.module3.stream import run_stream
     from src.module3.validate import validate_kafka, validate_mongo
+    from src.module3.replay import (
+        FIXTURE_REPLAY_SECONDS, FULL_REPLAY_SECONDS, ReplayCompletion,
+        kafka_end_offsets, validate_replay_budget, validate_replay_completion,
+    )
+    import pyarrow.parquet as pq
 
     uri = os.environ.get("MONGODB_URI")
     if not uri:
@@ -357,6 +362,10 @@ def replay() -> dict:
     if len(candidates) != 1:
         raise TaskError("Module 3 requires exactly one validated run-scoped Module 1 event feed")
     event_feed = candidates[0].parent
+    expected_events = pq.ParquetFile(candidates[0]).metadata.num_rows
+    rate = 100 if values["PIPELINE_MODE"] == "fixture" else 1000
+    duration = FIXTURE_REPLAY_SECONDS if values["PIPELINE_MODE"] == "fixture" else FULL_REPLAY_SECONDS
+    validate_replay_budget(expected_events, rate, duration)
     config = StreamConfig(
         root=values["PIPELINE_HDFS_URI"], master="local[2]",
         bootstrap_servers=os.environ.get("PIPELINE_KAFKA_BOOTSTRAP", ""),
@@ -367,6 +376,9 @@ def replay() -> dict:
         trend_source_scope="synthetic_fixture" if values["PIPELINE_MODE"] == "fixture" else "full_data_input",
     )
     _ensure_topic(config)
+    start_offsets = kafka_end_offsets(config.bootstrap_servers, config.topic)
+    if any(value != 0 for value in start_offsets.values()):
+        raise TaskError("replay requires a fresh empty run-scoped topic")
     kafka_health = validate_kafka(config)
     mongo_health = validate_mongo(config)
     if kafka_health.get("ok") is not True:
@@ -378,7 +390,7 @@ def replay() -> dict:
     producer_command = [
         sys.executable, "-m", "src.module1.producer", "--feed", str(event_feed),
         "--bootstrap", config.bootstrap_servers, "--topic", config.topic,
-        "--target-events-per-second", "100" if values["PIPELINE_MODE"] == "fixture" else "1000",
+        "--target-events-per-second", str(rate),
         "--receipt", str(producer_receipt), "--input-order", "auto",
     ]
     producer_env = dict(os.environ)
@@ -396,17 +408,23 @@ def replay() -> dict:
                 )
                 return {"producer_pid": producer.pid, "start": "after-Structured-Streaming-query-start"}
 
-            duration = 300 if values["PIPELINE_MODE"] == "fixture" else 3600
+            completion = ReplayCompletion(
+                expected_events=expected_events, topic=config.topic,
+                start_offsets=start_offsets, producer=lambda: producer,
+                receipt_path=producer_receipt,
+                end_offsets=lambda: kafka_end_offsets(config.bootstrap_servers, config.topic),
+            )
             stream_receipt = run_stream(
                 spark, config, output, f"k8s-{values['PIPELINE_RUN_ID']}",
                 duration_seconds=duration, checkpoint_id=f"k8s-{values['PIPELINE_RUN_ID']}",
                 checkpoint_root=Path("/run/checkpoints") / "module3", on_query_started=start_replay,
+                until_complete=completion,
             )
             if stream_receipt.get("interrupted") is True:
                 raise TaskError("Structured Streaming stopped before its bounded run duration completed")
             if producer is None:
                 raise TaskError("event replay was not started after Spark query readiness")
-            code = producer.wait(timeout=600)
+            code = producer.wait(timeout=1)
             if code != 0 or not producer_receipt.is_file():
                 raise TaskError("Kafka event producer failed; no successful delivery receipt was produced")
         except Exception:
@@ -422,6 +440,7 @@ def replay() -> dict:
             if spark is not None:
                 spark.stop()
     replay_values = json.loads(producer_receipt.read_text(encoding="utf-8"))
+    validate_replay_completion(stream_receipt.get("completion", {}))
     if replay_values.get("failed_events") != 0 or replay_values.get("acked_events", 0) != replay_values.get("attempted_events"):
         raise TaskError("Kafka producer acknowledgement receipt does not reconcile all attempted events")
     receipt = {
@@ -430,6 +449,7 @@ def replay() -> dict:
         "checkpoint_id": stream_receipt.get("checkpoint_id"),
         "producer_receipt": str(producer_receipt), "producer": replay_values,
         "last_progress": stream_receipt.get("last_progress"),
+        "completion": stream_receipt["completion"],
         "synthetic_event_time_provenance": "Synthetic event time for replay simulation",
     }
     _write_json(output / "replay-receipt.json", receipt)

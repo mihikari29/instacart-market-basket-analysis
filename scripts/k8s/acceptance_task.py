@@ -673,6 +673,11 @@ def run() -> dict[str, Any]:
     producer = replay_receipt.get("producer") if isinstance(replay_receipt, dict) else None
     if not isinstance(producer, dict) or producer.get("failed_events") != 0 or producer.get("acked_events") != producer.get("attempted_events"):
         raise TaskError("Module 3 replay receipt does not reconcile all Kafka acknowledgements")
+    from src.module3.replay import validate_replay_completion
+
+    validate_replay_completion(replay_receipt.get("completion", {}))
+    if replay_receipt["completion"]["expected_events"] != _load_step("module1")["receipt"].get("generated_events"):
+        raise TaskError("replay completion differs from the generated Module 1 event count")
     hybrid_receipt = _load_step("hybrid")["receipt"]
     if not isinstance(hybrid_receipt, dict) or hybrid_receipt.get("status") not in {"published", "already_active"}:
         raise TaskError("Module 4C Hybrid did not publish a ready run-scoped snapshot")

@@ -19,6 +19,7 @@ from .trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
 from .trending import build_window_counts, rank_trending_batch, select_top_k
 from .checkpoint import ensure_checkpoint
 from .latency import summarize_ingestion_to_output
+from .replay import wait_for_replay
 
 
 PROGRESS_LOG_NAME = "streaming_progress.jsonl"
@@ -165,6 +166,7 @@ def run_stream(
     checkpoint_id: str | None = None,
     checkpoint_root: Path | None = None,
     on_query_started=None,
+    until_complete=None,
 ) -> dict:
     """Run until the duration expires, or indefinitely until interrupted."""
     events = from_kafka(spark, config)
@@ -220,7 +222,13 @@ def run_stream(
     try:
         if on_query_started is not None:
             info["orchestration"] = on_query_started(query)
-        if duration_seconds is not None and duration_seconds > 0:
+        if until_complete is not None:
+            if duration_seconds is None or duration_seconds <= 0:
+                raise ValueError("completion-driven streaming requires a positive hard deadline")
+            info["completion"] = wait_for_replay(
+                query, until_complete, duration_seconds - (time.monotonic() - started_monotonic)
+            )
+        elif duration_seconds is not None and duration_seconds > 0:
             elapsed = time.monotonic() - started_monotonic
             query.awaitTermination(max(0.0, duration_seconds - elapsed))
         else:

@@ -11,6 +11,11 @@ assigned to the external operator.
   `k8spipeline` staging/readback identity; required Immediate PVC binding.
   Offline HDFS, pipeline, and runtime tests passed (see final validation record
   below for the consolidated results). No runtime command was executed.
+- M2: finite replay now waits for producer success and committed terminal Kafka
+  offsets. Full mode retains every generated event, with an 18-hour replay
+  ceiling and matching Job/host bounds. Delivery/consumption evidence is checked
+  again by B4; event-time tail state remains in the checkpoint. Fake-process,
+  pacing, pipeline and acceptance-task tests were run without services.
 
 ## Baseline and safety
 

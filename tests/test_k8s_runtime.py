@@ -40,8 +40,8 @@ class RuntimePreflightTests(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["timeout"], 7200)
         self.assertIs(run.call_args.kwargs["shell"], False)
 
-        with self.assertRaisesRegex(RuntimePreflightError, "10800 seconds"):
-            executor.run(["python3", "-c", "pass"], timeout=10801)
+        with self.assertRaisesRegex(RuntimePreflightError, "65430 seconds"):
+            executor.run(["python3", "-c", "pass"], timeout=65431)
 
     def test_collision_preflight_refuses_existing_profile_or_context(self):
         identity = RunIdentity("0123456789ab")
