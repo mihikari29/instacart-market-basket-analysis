@@ -82,7 +82,8 @@ python3 -m scripts.k8s.demo preflight \
 python3 -m scripts.k8s.demo plan \
   --mode full \
   --run-id 0123456789ab \
-  --input-dir /data/instacart
+  --input-dir /data/instacart \
+  --windows-backing-disk-gib 120
 
 python3 -m scripts.k8s.demo run \
   --mode full \
@@ -92,9 +93,11 @@ python3 -m scripts.k8s.demo run \
   --execute
 ```
 
-Replace the backing-disk example with a current measurement. The numeric flag
-is recorded as operator-supplied evidence; the runner cannot inspect the
-Windows filesystem from inside WSL.
+On WSL, replace `120` with a current measurement of Windows backing-disk free
+capacity. Supply that measured value independently to each applicable
+`preflight`, `plan`, and `run` invocation; an earlier command does not persist
+it for the next one. The runner records this as operator-supplied evidence and
+does not inspect Windows free capacity from inside WSL.
 
 The runner refuses an existing profile/context, namespace, output path, or
 preparation path. With no `--lock`, it creates a new profile and derives a

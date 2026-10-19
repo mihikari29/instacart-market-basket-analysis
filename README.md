@@ -6,20 +6,34 @@ The architecture follows the **Lambda Architecture** pattern. The batch layer co
 
 ## Architecture
 
-```text
-Six source CSV files
-        |
-     Module 1 ──> HDFS raw/curated Parquet ──> Module 2 batch metrics ──────> Module 4D API
-        |                                  ├──> Module 4A prior-history ALS ─┐
-        |                                  └──> Module 4B prior-basket graph ├─> Module 4C Hybrid
-        └──> Kafka replay events ──> Module 3 event-time trends ─────────────┘       |
-                          ├── mutable legacy realtime_trending                      |
-                          └── optional immutable finalized trend bundles ───────────┘
-                                                                                   |
-                                                                        FastAPI read interface
-                                                                                   |
-                                                                        Streamlit dashboard
+```mermaid
+flowchart LR
+  csv["Six source CSV files"] --> m1["Module 1"]
+  m1 --> hdfs[("HDFS curated Parquet")]
+  hdfs --> m2["Module 2 batch analytics"]
+  hdfs -->|"prior interactions"| als["Module 4A ALS"]
+  hdfs -->|"prior interactions"| graph["Module 4B product graph"]
+  m2 --> batch[("MongoDB batch metrics")]
+  batch --> api["Module 4D FastAPI read API"]
+  m2 --> features[("HDFS prior-only user_features")]
+  features --> featureReader["Bounded Module 4 descriptive reader<br/>(not a Hybrid ranking input)"]
+  als --> alsStore[("MongoDB versioned ALS snapshots")]
+  alsStore --> hybrid["Module 4C Hybrid"]
+  alsStore --> api
+  graph --> graphStore[("MongoDB graph snapshots")]
+  graphStore --> hybrid
+  m1 -->|"synthetic events"| kafka[("Kafka")]
+  kafka --> m3["Module 3 event-time processing"]
+  m3 --> legacy[("Mutable realtime_trending<br/>legacy output only")]
+  m3 -. "OPTIONAL immutable publication" .-> bundles[("realtime_trending_windows<br/>complete finalized-window bundles")]
+  bundles --> hybrid
+  bundles -->|"trends route"| api
+  hybrid --> hybridStore[("MongoDB recommendation snapshots")]
+  hybridStore --> api
+  api --> ui["Streamlit dashboard"]
 ```
+
+The bounded Module 4 user-feature reader is a separate descriptive lookup. It does not feed Hybrid ranking. Module 3's legacy mutable rows are not a Hybrid source; only the explicitly enabled immutable finalized bundles serve the Hybrid and trends API paths shown above.
 
 Module 1 creates replay timestamps because the source has weekday and hour fields, but no absolute purchase timestamps. Those dates and times are simulated values, not observed customer chronology. The ordinary generated feed includes both `prior` and `train` orders; its Kafka contract does not retain `eval_set`, so an event-time cutoff alone cannot make that feed safe for official-train evaluation. Module 4A/4B fit from prior-history data. Official train baskets are held out as evaluation truth. Module 4D reads through FastAPI; the dashboard does not connect directly to MongoDB.
 

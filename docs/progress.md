@@ -70,7 +70,7 @@ Spark analytics include product and department aggregates, user features, order 
 
 **Objective and flow.** Module 3 consumes the keyed Kafka event feed, validates JSON schema and field domains, accounts for invalid messages and deduplicates by `event_id` while state remains within the configured watermark. One 120-minute sliding stateful aggregation produces the short 30-minute and long 120-minute windows. Windows slide every five minutes, the watermark is ten minutes, and the configured short/long weights are 0.7/0.3. After a window is complete, the full product population is normalized and deterministically ranked, then limited to Top-20.
 
-**Outputs and operations.** The legacy `realtime_trending` collection is mutable and replaces a complete window before upserting its rows; it is not a transaction for readers. Optional `realtime_trending_windows` stores immutable finalized product/window documents with a namespace and bundle identity. Retries of identical documents are accepted while conflicts fail; atomicity is per document, not across a set of windows. TTL is based on expiry metadata and is distinct from event-time filtering. Module 4C reads finalized bundles; no open-window leaderboard is implied.
+**Outputs and operations.** The legacy `realtime_trending` collection stores mutable product/window rows and replaces a complete window before upserting its rows; those operations are not a transaction for readers. Optional `realtime_trending_windows` stores one complete immutable ranked document per finalized window and source namespace. Its identity combines a digest of `source_namespace` with the UTC `window_end`; the document contains schema version, window bounds, Top-K and row counts, an `items` array of ranked products, configuration and content hashes, publication time, and optional `expires_at`. An identical retry is accepted, while conflicting content under the same identity fails. Publication is atomic for one document, not across several windows. TTL expiry metadata is distinct from event-time filtering. Module 4C and the trends API consume these bundles when explicitly enabled; neither path uses the legacy mutable rows. Per-product/window latency samples describe finalized output rows and do not change the bundle's one-document-per-window granularity. No open-window leaderboard is implied.
 
 Checkpoint continuity is bound to a versioned path such as `checkpoint/<id>/ingestion-latency-v1`. Unversioned legacy telemetry state is rejected without mutation. A checkpoint is reusable only with matching query/topic/config identity. The Kubernetes runner disables automatic resume and requires a fresh run identity.
 
@@ -111,7 +111,6 @@ The prior-only evaluation command uses a fixed global-frequency Top-20 candidate
 ## Module 4D — API and dashboard
 
 <a id="progress-module4d"></a>
-<a id="d3-local-integration-and-release-validation"></a>
 
 **Objective and flow.** Module 4D offers a bounded read surface over versioned recommendation and graph outputs, batch metrics, order distributions, finalized trends, streaming metrics and an allowlisted set of historical evidence. Mongo indexes are provisioned by an administrator; API database credentials are read-only. FastAPI validates current readiness/source identities and uses indexed bounded queries. Streamlit calls the API and has no MongoDB client.
 

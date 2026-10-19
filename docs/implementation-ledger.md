@@ -6,18 +6,34 @@ This ledger records the system's interfaces, important implementation choices an
 
 The project separates data acquisition and preparation (Module 1), historical processing (Module 2), event-time processing (Module 3), recommendation and graph computation (Modules 4A/4B), their combined serving snapshot (Module 4C), and read-only presentation (Module 4D). HDFS stores curated Parquet and staged feed artifacts. Kafka provides replayable product events. Spark performs batch and streaming work. MongoDB stores versioned serving outputs and trend data. FastAPI is the only database boundary used by Streamlit.
 
-```text
-CSV source + receipt
-   └─ Module 1 clean/stage ── HDFS curated tables ── Module 2 analytics/features ──┐
-                         ├── HDFS prior interactions ── 4A ALS / 4B graph ─────────┤
-                         └── synthetic Kafka events ── Module 3 finalized trends ──┤
-                                                                                   v
-                                                                       Module 4C Hybrid versions
-                                                                                   |
-                                                          Module 4D read-only API ── Streamlit
+```mermaid
+flowchart LR
+  csv["Six source CSV files"] --> m1["Module 1"]
+  m1 --> hdfs[("HDFS curated Parquet")]
+  hdfs --> m2["Module 2 batch analytics"]
+  hdfs -->|"prior interactions"| als["Module 4A ALS"]
+  hdfs -->|"prior interactions"| graph["Module 4B product graph"]
+  m2 --> batch[("MongoDB batch metrics")]
+  batch --> api["Module 4D FastAPI read API"]
+  m2 --> features[("HDFS prior-only user_features")]
+  features --> featureReader["Bounded Module 4 descriptive reader<br/>(not a Hybrid ranking input)"]
+  als --> alsStore[("MongoDB versioned ALS snapshots")]
+  alsStore --> hybrid["Module 4C Hybrid"]
+  alsStore --> api
+  graph --> graphStore[("MongoDB graph snapshots")]
+  graphStore --> hybrid
+  m1 -->|"synthetic events"| kafka[("Kafka")]
+  kafka --> m3["Module 3 event-time processing"]
+  m3 --> legacy[("Mutable realtime_trending<br/>legacy output only")]
+  m3 -. "OPTIONAL immutable publication" .-> bundles[("realtime_trending_windows<br/>complete finalized-window bundles")]
+  bundles --> hybrid
+  bundles -->|"trends route"| api
+  hybrid --> hybridStore[("MongoDB recommendation snapshots")]
+  hybridStore --> api
+  api --> ui["Streamlit dashboard"]
 ```
 
-The interfaces intentionally retain distinct source scope and version identities. Module 2's descriptive user features are not silently treated as ALS input. Module 3's mutable legacy trend collection and immutable finalized bundles have different consistency properties. A/B publication does not become a single transaction merely because both snapshots are required by readiness. The API returns the source identities used by each view so a caller can distinguish a current snapshot from an unavailable one.
+The Module 2 feature reader is a bounded descriptive lookup, separate from Hybrid ranking and the API's Mongo-backed routes. The API reads batch metrics and ALS snapshots directly; Hybrid consumes ready ALS/graph snapshots and, when enabled, immutable finalized trend bundles. The trends API also reads those optional bundles. The legacy mutable trend collection is a separate output and is not a Hybrid source. These interfaces retain distinct source scope and version identities. A/B publication does not become a single transaction merely because both snapshots are required by readiness. The API returns the source identities used by each view so a caller can distinguish a current snapshot from an unavailable one.
 
 ## 2. Module 1 — raw contracts, cleaning and publication
 
@@ -112,7 +128,7 @@ Watermarking bounds state and lateness; it is not an eternal event-ID registry. 
 
 `realtime_trending` preserves a legacy mutable window contract: a complete window is deleted and its rows are upserted. The individual Mongo operations are not a reader transaction, so a concurrent reader may see an incomplete window during replacement. TTL is seven days by default and is based on update/expiry fields, not the event-time cutoff.
 
-Optional `realtime_trending_windows` stores immutable, versioned product/window documents under a stable logical source namespace. Exact retries are accepted; conflicting content under the same identity fails. Each document write is atomic, but publishing many window documents is not one transaction. The namespace identifies a logical source, not a run. A descriptive `source_scope` cannot prove prior-only provenance. Expiry uses `expires_at`, distinct from event-time cutoff and optional maximum event-age selection. Module 4C and Module 4D consume this immutable path when explicitly enabled.
+Optional `realtime_trending_windows` stores one complete immutable ranked document for each finalized window in a stable logical source namespace. Its identity combines a digest of `source_namespace` with the UTC `window_end`; the document contains schema version, window bounds, Top-K and row counts, an `items` array of ranked products, configuration and canonical content hashes, publication time, and optional `expires_at`. An identical retry is accepted, while conflicting content for an existing identity is rejected. Publishing one whole document is atomic; publishing multiple window documents is not a cross-document transaction. The namespace identifies a logical source, not a run, and descriptive `source_scope` cannot prove prior-only provenance. Expiry/TTL is distinct from event-time cutoff and optional maximum event-age selection. Module 4C and the Module 4D trends API consume these bundles only when publication is explicitly enabled. The legacy `realtime_trending` collection remains the separate mutable product/window-row contract described above. Per-product/window latency samples describe finalized output rows; they are not separate immutable bundle documents.
 
 ### 4.3 Checkpoints and finite replay
 
