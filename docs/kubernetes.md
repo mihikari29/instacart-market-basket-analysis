@@ -220,14 +220,17 @@ campaign. `scripts.k8s.deployment.deploy_serving` requires a complete lock and
 verified host/toolchain/cluster/storage/image evidence before applying the
 namespace, Secrets, or serving overlay.
 
-`deploy/k8s/versions.lock.yaml` selects Minikube v1.39.0, Kubernetes v1.37.1,
-and Calico v3.33.0 as selected release versions. Calico 3.33 documents testing
-on Kubernetes 1.35–1.37; this release-level compatibility reference does not
-verify the installed CNI or policy enforcement. B2 must inspect and record the
-actual Kubernetes and Calico image digests used by the profile. The repository's
-Spark and Mongo base image digests are retained from the locked Dockerfile and
-Compose file. The committed template remains **incomplete**. Strict validation
-rejects it until measured host capacity, supported host architecture,
+`deploy/k8s/versions.lock.yaml` selects Minikube v1.39.0, Kubernetes v1.36.4,
+and Calico v3.32.2. For this `--cni=calico` bootstrap path, Minikube v1.39.0
+bundles Calico v3.32.2; its supported Kubernetes version list includes v1.36.4
+and its kubeadm image map defines the matching control-plane dependencies.
+Calico 3.32 documents testing on Kubernetes 1.34–1.36. This upstream version
+compatibility does not verify a deployed cluster, the installed CNI, or policy
+enforcement. B2 must inspect and record the actual Kubernetes and Calico image
+digests used by the profile. The repository's Spark and Mongo base image digests
+are retained from the locked Dockerfile and Compose file. The committed template
+remains **incomplete**. Strict validation rejects it until measured host
+capacity, supported host architecture,
 cluster/profile UID, Minikube checksum, kubectl and Docker Engine versions,
 control-plane and Calico image roles, app image identities/build provenance,
 resolved Python environment digests/runtime versions, and default
@@ -237,8 +240,11 @@ locks only after their evidence validates. No runtime preflight or cluster
 operation was executed in this campaign.
 
 Sources: [Minikube v1.39.0 release](https://github.com/kubernetes/minikube/releases/tag/v1.39.0),
-[Kubernetes 1.37 release status](https://kubernetes.io/releases/1.37/), and
-[Calico 3.33 system requirements](https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements).
+[its bundled Calico version](https://github.com/kubernetes/minikube/blob/v1.39.0/pkg/minikube/bootstrapper/images/images.go),
+[its supported Kubernetes versions](https://github.com/kubernetes/minikube/blob/v1.39.0/pkg/minikube/constants/constants_kubernetes_versions.go),
+[its Kubernetes 1.36.4 kubeadm image map](https://github.com/kubernetes/minikube/blob/v1.39.0/pkg/minikube/constants/constants_kubeadm_images.go),
+[Kubernetes v1.36.4 release](https://github.com/kubernetes/kubernetes/releases/tag/v1.36.4), and
+[Calico 3.32 system requirements](https://docs.tigera.io/calico/3.32/getting-started/kubernetes/requirements).
 The Streamlit probe path follows the [official Docker deployment guide](https://docs.streamlit.io/deploy/tutorials/docker#health-check).
 Profile-specific image loading follows the [Minikube image-loading guide](https://minikube.sigs.k8s.io/docs/handbook/pushing/).
 

@@ -670,7 +670,7 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertIn("Calico component image digests", "\n".join(lock["unresolved"]))
         self.assertEqual(
             lock["cluster"]["cni_compatibility_source"],
-            "https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements",
+            "https://docs.tigera.io/calico/3.32/getting-started/kubernetes/requirements",
         )
         docs = (ROOT / "docs/kubernetes.md").read_text(encoding="utf-8")
         self.assertIn(lock["cluster"]["cni_compatibility_source"], docs)

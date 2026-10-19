@@ -2,20 +2,20 @@ schema_version: 1
 status: incomplete
 lock_policy: A runtime preflight must reject this lock until every required identity is concrete and unresolved is empty.
 cluster:
-  kubernetes_version: v1.37.1
+  kubernetes_version: v1.36.4
   minikube_version: v1.39.0
   driver: docker
   container_runtime: containerd
   cni: calico
-  cni_version: v3.33.0
+  cni_version: v3.32.2
   node_count: 1
   architecture: unresolved-host-architecture
   profile: unresolved-until-dedicated-profile-exists
   context: unresolved-until-dedicated-profile-exists
   cluster_uid: unresolved-until-dedicated-profile-exists
   minikube_release_source: https://github.com/kubernetes/minikube/releases/tag/v1.39.0
-  kubernetes_release_source: https://kubernetes.io/releases/1.37/
-  cni_compatibility_source: https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements
+  kubernetes_release_source: https://github.com/kubernetes/kubernetes/releases/tag/v1.36.4
+  cni_compatibility_source: https://docs.tigera.io/calico/3.32/getting-started/kubernetes/requirements
 images:
   mongo:
     reference: mongo:7.0.16@sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a

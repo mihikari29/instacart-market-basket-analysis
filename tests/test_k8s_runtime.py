@@ -79,7 +79,7 @@ class RuntimePreflightTests(unittest.TestCase):
                                 "Config": {
                                     "Driver": "docker",
                                     "KubernetesConfig": {
-                                        "KubernetesVersion": "v1.37.1",
+                                        "KubernetesVersion": "v1.36.4",
                                         "ContainerRuntime": "containerd",
                                         "CNI": "calico",
                                     },
@@ -90,7 +90,7 @@ class RuntimePreflightTests(unittest.TestCase):
                 ),
             ),
             CommandResult(0, json.dumps({"metadata": {"uid": "cluster-uid"}})),
-            CommandResult(0, json.dumps({"serverVersion": {"gitVersion": "v1.37.1"}})),
+            CommandResult(0, json.dumps({"serverVersion": {"gitVersion": "v1.36.4"}})),
             CommandResult(
                 0,
                 json.dumps(
@@ -169,10 +169,12 @@ class RuntimePreflightTests(unittest.TestCase):
                     })
         identity = RunIdentity("0123456789ab")
         command = cluster_creation_plan(
-            identity, kubernetes_version="v1.37.1", cpus=4, memory_mib=6144, disk_gib=40
+            identity, kubernetes_version="v1.36.4", cpus=4, memory_mib=6144, disk_gib=40
         )
         self.assertIn("--profile", command)
         self.assertIn(identity.profile, command)
+        self.assertIn("--kubernetes-version=v1.36.4", command)
+        self.assertIn("--cni=calico", command)
         self.assertFalse(any("current-context" in value for value in command))
 
 

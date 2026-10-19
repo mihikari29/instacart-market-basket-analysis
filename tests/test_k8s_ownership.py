@@ -51,7 +51,7 @@ def _complete_lock() -> dict:
         "status": "complete",
         "unresolved": [],
         "cluster": {
-            "kubernetes_version": "v1.37.1",
+            "kubernetes_version": "v1.36.4",
             "minikube_version": "v1.39.0",
             "profile": "it4931-k8s-0123456789ab",
             "context": "it4931-k8s-0123456789ab",
@@ -59,7 +59,7 @@ def _complete_lock() -> dict:
             "driver": "docker",
             "container_runtime": "containerd",
             "cni": "calico",
-            "cni_version": "v3.33.0",
+            "cni_version": "v3.32.2",
             "architecture": "linux/amd64",
             "node_count": 1,
         },
@@ -106,21 +106,18 @@ def _complete_lock() -> dict:
             "minikube_binary_sha256": "c" * 64,
             "docker_engine_version": "27.5.1",
             "kubernetes_control_plane_images": {
-                role: f"registry.k8s.io/{role}:v1.37.1@{_DIGEST_A}"
-                for role in (
-                    "kube-apiserver",
-                    "kube-controller-manager",
-                    "kube-scheduler",
-                    "kube-proxy",
-                    "etcd",
-                    "pause",
-                    "coredns",
-                )
+                "kube-apiserver": f"registry.k8s.io/kube-apiserver:v1.36.4@{_DIGEST_A}",
+                "kube-controller-manager": f"registry.k8s.io/kube-controller-manager:v1.36.4@{_DIGEST_A}",
+                "kube-scheduler": f"registry.k8s.io/kube-scheduler:v1.36.4@{_DIGEST_A}",
+                "kube-proxy": f"registry.k8s.io/kube-proxy:v1.36.4@{_DIGEST_A}",
+                "etcd": f"registry.k8s.io/etcd:3.6.8-0@{_DIGEST_A}",
+                "pause": f"registry.k8s.io/pause:3.10.2@{_DIGEST_A}",
+                "coredns": f"registry.k8s.io/coredns/coredns:v1.14.2@{_DIGEST_A}",
             },
             "calico_images": {
-                "cni": f"docker.io/calico/cni:v3.33.0@{_DIGEST_A}",
-                "node": f"docker.io/calico/node:v3.33.0@{_DIGEST_A}",
-                "kube-controllers": f"docker.io/calico/kube-controllers:v3.33.0@{_DIGEST_A}",
+                "cni": f"docker.io/calico/cni:v3.32.2@{_DIGEST_A}",
+                "node": f"docker.io/calico/node:v3.32.2@{_DIGEST_A}",
+                "kube-controllers": f"docker.io/calico/kube-controllers:v3.32.2@{_DIGEST_A}",
             },
         },
         "storage": {

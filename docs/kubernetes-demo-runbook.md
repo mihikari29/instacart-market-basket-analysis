@@ -14,11 +14,16 @@ evidence retention. `run --execute` is the only command that performs that
 workflow. It never falls back to the current Kubernetes context or Compose
 services, and it never deletes resources.
 
-The exact selected releases are Minikube **v1.39.0**, Kubernetes **v1.37.1**,
-Calico **v3.33.0**, Apache Spark **3.5.5**, Kafka **3.7.0**, MongoDB **7.0.16**,
+The exact selected releases are Minikube **v1.39.0**, Kubernetes **v1.36.4**,
+Calico **v3.32.2**, Apache Spark **3.5.5**, Kafka **3.7.0**, MongoDB **7.0.16**,
 and the locked Hadoop **3.2.1** images. The Python runtime and transitive image
 environments are measured during preparation and written to the private lock;
-the code does not invent those identities.
+the code does not invent those identities. Minikube v1.39.0 bundles Calico
+v3.32.2 for the selected `--cni=calico` bootstrap and recognizes Kubernetes
+v1.36.4, which is in Calico 3.32's documented tested range. Version compatibility
+does not prove a successful runtime deployment; cluster readiness, image
+identities, storage behavior, and NetworkPolicy enforcement still require
+future runtime acceptance.
 
 ## Prerequisites and capacity
 

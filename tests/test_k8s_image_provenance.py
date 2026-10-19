@@ -142,12 +142,19 @@ class ImageProvenanceTests(unittest.TestCase):
 
         images = []
         for index, repository in enumerate(CONTROL_PLANE_REPOSITORIES.values(), start=1):
-            tag = "v1.12.0" if repository.endswith("/coredns/coredns") else "v1.37.1"
+            if repository.endswith("/coredns/coredns"):
+                tag = "v1.14.2"
+            elif repository.endswith("/etcd"):
+                tag = "3.6.8-0"
+            elif repository.endswith("/pause"):
+                tag = "3.10.2"
+            else:
+                tag = "v1.36.4"
             digest = "sha256:" + f"{index:064x}"
             images.append({"repoTags": [f"{repository}:{tag}"], "repoDigests": [f"{repository}@{digest}"]})
         for index, repository in enumerate(CALICO_REPOSITORIES.values(), start=20):
             digest = "sha256:" + f"{index:064x}"
-            images.append({"repoTags": [f"{repository}:v3.33.0"], "repoDigests": [f"{repository}@{digest}"]})
+            images.append({"repoTags": [f"{repository}:v3.32.2"], "repoDigests": [f"{repository}@{digest}"]})
 
         class Executor:
             def run(self, argv, *, timeout, input_text=None):
@@ -156,7 +163,7 @@ class ImageProvenanceTests(unittest.TestCase):
         result = collect_cluster_component_images(
             Executor(), RunIdentity("0123456789ab"), execute=True
         )
-        self.assertEqual(result["cni_version"], "v3.33.0")
+        self.assertEqual(result["cni_version"], "v3.32.2")
         self.assertEqual(len(result["kubernetes_control_plane_images"]), 7)
         self.assertEqual(len(result["calico_images"]), 3)
 
