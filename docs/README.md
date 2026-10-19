@@ -9,6 +9,9 @@ Start with the root [README](../README.md) for the project overview.
   outstanding runtime validation, and links to historical results.
 - [External acceptance handoff](external-acceptance-handoff.md) — delivered
   scope, operator preparation, and acceptance boundaries.
+- [External Acceptance Tutorial](acceptance-tutorial.md) — beginner-friendly
+  execution and decision path; canonical commands remain in the operating
+  guides, while the handoff records outstanding work and evidence boundaries.
 - [Implementation summary](implementation-ledger.md) — design decisions,
   important contracts, safety measures, and verification limits.
 - [Repository layout](repository-layout.md) — code ownership and stable paths.

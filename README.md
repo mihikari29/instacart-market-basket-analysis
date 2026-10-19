@@ -123,6 +123,8 @@ The Kubernetes demonstration uses a fresh run identity, profile, context, namesp
 
 For an executable procedure, use the canonical runbooks rather than copying a command into this overview: [Module 1](docs/docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [Module 2](docs/docker.md#module-2-batch-processing-and-benchmarks), [Module 3](docs/docker.md#module-3-streaming-operations), [Module 4A/4B](docs/docker.md#module-4a4b-operation-and-full-data-acceptance), and [Kubernetes](docs/kubernetes-demo-runbook.md). Test selection and service-backed exclusions are recorded in the [acceptance handoff](docs/external-acceptance-handoff.md); implementation files are mapped in the [repository layout](docs/repository-layout.md).
 
+Start the [External Acceptance Tutorial](docs/acceptance-tutorial.md) for a beginner-friendly path through preparation, execution decisions, evidence, and handoff.
+
 ## Results and limits
 
 Historical full-data, streaming and Module 4 acceptance evidence is linked above and indexed in [docs/evidence](docs/evidence/README.md). Those documents retain their original dates, code/environment identities and experiment boundaries. The project status page reports offline development checks associated with the reviewed source revision: 803 passed and 7 Spark-dependent modules skipped in the broad non-service selection, plus focused selections of 59 and 134 passes, repository Ruff, and compilation of 190 files. The independent source-code review is a separate outcome and does not imply runtime behavior. None of these are new results from this documentation update.
