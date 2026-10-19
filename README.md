@@ -12,7 +12,7 @@ flowchart LR
   m1 --> hdfs[("HDFS curated Parquet")]
   hdfs --> m2["Module 2 batch analytics"]
   hdfs -->|"prior interactions"| als["Module 4A ALS"]
-  hdfs -->|"prior interactions"| graph["Module 4B product graph"]
+  hdfs -->|"prior interactions"| productGraph["Module 4B product graph"]
   m2 --> batch[("MongoDB batch metrics")]
   batch --> api["Module 4D FastAPI read API"]
   m2 --> features[("HDFS prior-only user_features")]
@@ -20,7 +20,7 @@ flowchart LR
   als --> alsStore[("MongoDB versioned ALS snapshots")]
   alsStore --> hybrid["Module 4C Hybrid"]
   alsStore --> api
-  graph --> graphStore[("MongoDB graph snapshots")]
+  productGraph --> graphStore[("MongoDB graph snapshots")]
   graphStore --> hybrid
   m1 -->|"synthetic events"| kafka[("Kafka")]
   kafka --> m3["Module 3 event-time processing"]
