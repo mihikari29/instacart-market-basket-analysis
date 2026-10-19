@@ -258,9 +258,10 @@ runtime acceptance. The test matrix and evidence scope are recorded in
 
 ## Known limitations
 
-- Runtime acceptance requires image build and load, profile creation, workload
-  execution, browser demonstration, and verified teardown evidence in the
-  selected operator environment.
+- Runtime acceptance for the selected fixture or full-data scope requires the
+  pinned images, isolated profile, workload execution, B4 checks, and retained
+  identity-bound evidence. Teardown is a separate lifecycle action and is not
+  part of the B4 runtime-pass receipt.
 - WSL backing disk is operator-supplied evidence and is not independently
   inspected by the CLI.
 - Automatic resume is intentionally disabled. The runner requires a new run
@@ -273,3 +274,8 @@ runtime acceptance. The test matrix and evidence scope are recorded in
   mode implies a speedup; scheduling and caches affect timing.
 - The run keeps resources after success or failure. Teardown needs a separate
   review and explicit `--execute`.
+
+The coordinator's `runtime_pass` state means that B4 returned a complete
+passing receipt for the declared scope; it does not mean the profile or
+namespace was deleted. The offline `verify` command checks saved receipts
+without contacting the cluster and reports `teardown_performed: false`.

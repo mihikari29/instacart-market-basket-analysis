@@ -12,6 +12,8 @@ and script directory map.
 | `api` | Internal `spark` stage | FastAPI/C5/C6 and fixture validation; Python sources/tests, selected scripts, five curated reports |
 | `ui` | Python 3.14 slim | Streamlit 1.65.0; only UI Python code and its two manifests; UID/GID 10001 |
 | `browser` | Playwright Python 1.63.0 noble | Separate Chromium E2E runtime; browser manifest and accepted E2E script; `pwuser` |
+| `k8s-runner` | Internal `spark` stage | Bounded Module 4 API/runtime sources, registered evidence files, and Kubernetes API-readiness probe; UID/GID 10001 |
+| `pipeline` | Internal `spark` stage | Module 1–4 pipeline sources, Kubernetes tasks, evidence fixtures and runtime inventory; UID/GID 10001 |
 
 The external base digests are unchanged:
 
@@ -521,9 +523,12 @@ python3 -m uvicorn src.module4.dashboard.api:app \
 ```
 
 This is a host development-environment recipe using existing manifests; it
-adds no dependency manifest. The API import graph includes PyMongo and imports
-the Module 3 Spark-backed trend reader, so the API-only manifest is not enough
-for this host command. Importing PySpark does not start a Spark session.
+adds no dependency manifest. The API uses PyMongo. Pure trend-bundle validation
+does not eagerly import PySpark: the `DataFrame` type is imported only for type
+checking, and the Spark writer imports PySpark when that writer is called. This
+host API procedure does not create a Spark session. The API image still inherits
+the `spark` stage for the accepted C5 imports and fixture validation described
+above.
 
 The API process may also set `MODULE4D_APP_ROOT` to the application or
 repository root containing `docs/evidence/`; the default is the packaged source
@@ -849,10 +854,14 @@ Every browser expectation and curated evidence artifact remains unchanged.
 
 ## Historical Docker validation — 14 October 2026
 
-The recorded validation used `refactor/unified-docker-build` at
-`d44bb14615f57e78b1611a64954b9f2ead6709ad`. It is evidence for that revision,
-not a fresh result for the current implementation. The four runtime targets
-and UI development target built successfully, passed `pip check`, and matched
+The archived validation notes identify `refactor/unified-docker-build` at
+`d44bb14615f57e78b1611a64954b9f2ead6709ad` as the starting baseline. The
+repository tree at that commit does not contain the root `Dockerfile`, which
+was introduced later; the recorded baseline therefore does not by itself
+identify the exact copied Docker build context. Preserve this provenance limit
+when citing the archived result. It is not a fresh result for the current
+implementation. The four runtime targets and UI development target built
+successfully, passed `pip check`, and matched
 their pinned base, dependency, and jar digests. The context exporter admitted
 127 files (1,568,612 bytes), including five registered evidence files and six
 scripts; protected exclusions were rejected. Staged file names and SHA-256

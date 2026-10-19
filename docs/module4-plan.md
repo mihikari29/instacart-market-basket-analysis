@@ -12,8 +12,8 @@ ALS did not outperform personal frequency. The search tested one bounded baselin
 - [2. Mục tiêu nghiệm thu](#2-mục-tiêu-nghiệm-thu)
 - [3. Hợp đồng dữ liệu](#3-hợp-đồng-dữ-liệu)
 - [4. Cấu trúc mã đề xuất](#4-cấu-trúc-mã-đề-xuất)
-- [5. Module 4A — ALS Recommendation](#5-module-4a--als-recommendation)
-- [6. Module 4B — Product Co-purchase Graph](#6-module-4b--product-co-purchase-graph)
+- [5. Module 4A — ALS Recommendation](#module4a-als-recommendation)
+- [6. Module 4B — Product Co-purchase Graph](#module4b-product-co-purchase-graph)
 - [7. Chiến lược kiểm thử](#7-chiến-lược-kiểm-thử)
 - [8. Ma trận đánh giá/nghiệm thu](#8-ma-trận-đánh-giánghiệm-thu)
 - [9. Evidence bắt buộc](#9-evidence-bắt-buộc)
@@ -145,6 +145,8 @@ docs/evidence/module4/<run_id>/
 
 Docker image phải pin GraphFrames Python package và JAR tương thích Spark
 3.5/Scala 2.12. Worker không nên tải dependency từ Maven trong lúc demo.
+
+<a id="module4a-als-recommendation"></a>
 
 ## 5. Module 4A — ALS Recommendation
 
@@ -298,6 +300,8 @@ index(model_version, user_id)
 
 Publish vào collection tạm rồi rename. Chạy lại cùng input/config/version phải
 không tạo document hoặc rank trùng.
+
+<a id="module4b-product-co-purchase-graph"></a>
 
 ## 6. Module 4B — Product Co-purchase Graph
 
@@ -913,9 +917,10 @@ arbitrary external hosts, paths, queries, and fragments.
 
 The API reads only the fixed collections
 `module4_snapshot_readiness`, `final_recommendations`,
-`realtime_trending_windows`, `batch_product_metrics`, and
-`department_metrics`. The account needs read and index-metadata inspection
-privileges only. It cannot publish, write, create indexes, rename, or drop.
+`realtime_trending_windows`, `batch_product_metrics`, `department_metrics`,
+`user_recommendations`, `product_graph_metrics`, and `streaming_metrics`. The
+account needs read and index-metadata inspection privileges only. It cannot
+publish, write, create indexes, rename, or drop.
 The Streamlit UI accepts only `MODULE4D_API_BASE_URL` and the matching exact
 trend namespace allowlist. For local use the API and UI ports bind to
 `127.0.0.1`; credentials remain on the API side.
@@ -989,9 +994,11 @@ final_recommendations:
 ```
 
 The default Mongo `_id_` indexes and the accepted A/B indexes must also remain
-available. Module 2 replaces the product collection and its indexes on
-publication, so administrators recreate the two D1B product indexes afterward.
-The API itself never provisions or repairs indexes.
+available. Module 2 creates both required D1B product-ranking indexes on the
+replacement collection before promoting it. Administrators provision initial
+indexes for empty or externally managed collections; they do not need to
+recreate the indexes after each Module 2 publication. The API itself never
+provisions or repairs indexes.
 
 ### 20.3. Dashboard views and interaction rules
 

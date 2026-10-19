@@ -12,6 +12,8 @@ Start with the root [README](../README.md) for the project overview.
 - [Implementation summary](implementation-ledger.md) — design decisions,
   important contracts, safety measures, and verification limits.
 - [Repository layout](repository-layout.md) — code ownership and stable paths.
+- [Synthetic event generation](generate.md) — timestamp construction, scenario
+  parameters, reproducibility and feed provenance.
 
 ## Technical and operating guides
 

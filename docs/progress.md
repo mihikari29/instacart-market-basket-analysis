@@ -1,105 +1,63 @@
-# Project status
+# Project progress and requirements coverage
 
-This page records the current implementation and the boundary of the checks
-already completed. The approved [Proposal](Proposal.md) remains the requirements
-baseline. Detailed behavior and commands are documented in the
-[Module 3 contract](module3-contracts.md), [Module 4 plan](module4-plan.md),
-[Docker guide](docker.md), and [Kubernetes runbook](kubernetes-demo-runbook.md).
+This report describes the current implementation in the reviewed source revision and separates it from historical measurements and runtime work still pending. The approved [Proposal](Proposal.md) remains the requirements baseline. Detailed command ownership belongs to the [Docker guide](docker.md) and [Kubernetes runbook](kubernetes-demo-runbook.md); contracts belong to the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [implementation ledger](implementation-ledger.md).
 
 ## Current status
 
-**Code complete; external runtime acceptance is pending.** The final independent
-source-code review passed on the reviewed implementation revision. The offline
-development results below are historical results for that source revision;
-they do not describe this documentation-only update.
+**Code complete; external runtime acceptance is pending.** The final independent source-code review passed at `a5fe5003134efb26f2a8826ce51e98bc291a2ff9`. Historical offline results below are attributed to that source revision. No tests, service runs, fresh measurements, or acceptance checks are claimed for this documentation revision.
 
-| Area | Implemented functionality | Verified development checks | Still requires external validation |
+| Area | Implemented scope | Recorded development verification | Still requires external validation |
 |---|---|---|---|
-| [Module 1](#module-1--ingestion--storage) | Six-file input validation, cleaning, deterministic synthetic event generation, and HDFS/Kafka staging. | The broad offline suite included bounded synthetic-input cleaning and source-package checks. | Pinned runtime integration and full-data processing. |
-| [Module 2](#3-module-2--batch-layer) | Spark batch analytics, prior-history user features, and executor comparison tools. | Offline unit and source checks are included in the recorded suite. | Spark/HDFS execution and actual performance and executor experiments. |
-| [Module 3](#module3-status) | Event-time streaming, bounded replay, checkpoint handling, finalized trends, and completed-batch telemetry. | Focused telemetry/BSON checks and offline streaming tests passed in the recorded checks. | Pinned Kafka/Spark/MongoDB integration, runtime checkpoint recovery, and full-feed execution. |
-| **Modules 4A–4B** | Prior-history ALS recommendations, product graph metrics, and versioned snapshots. | Offline ranking, publication, and contract checks are included in the recorded suite. | Pinned Spark integration and a fresh full-data run. Historical acceptance is linked below. |
-| [Module 4C](#progress-module4c) | Readiness-aware Hybrid recommendations and versioned publication from batch and trend sources. | Offline reader, ranking, and publication checks are included in the recorded suite. | Runtime integration and a leakage-safe Hybrid quality result. |
-| [Module 4D](#progress-module4d) | Read-only FastAPI endpoints and a Streamlit dashboard for recommendations, metrics, trends, and evidence. | API, UI client, and AppTest checks are included in the recorded suite. | Browser checks against the pinned runtime and live services. |
-| **Kubernetes** | Isolated B2 serving, B3 pipeline, B4 acceptance, and guarded teardown workflows. | Offline fake-client, static validation, runner, and local rendering checks passed. | Container builds/package verification and an isolated B2/B3/B4 runtime. |
+| Module 1 | Six-file fail-closed preflight, cleaning, deterministic replay event generation, HDFS handoff and Kafka producer. | Broad offline suite included bounded fixture cleaning and source-package checks; historical full-data processing is separately recorded. | Pinned runtime integration, exact six-file full-data execution and fresh receipts. |
+| Module 2 | Prior-history Spark analytics, descriptive user features, Mongo publication, local thread comparison and standalone executor benchmark tooling. | Offline suite and source review; dated full-data analytics and benchmark results retain their original environment and code identity. | Pinned Spark/HDFS execution and new performance/executor experiments. |
+| Module 3 | Kafka validation, event-time aggregation, bounded replay reconciliation, versioned checkpoints, optional immutable trend bundles and executed-batch telemetry. | Focused telemetry/BSON and API/UI checks; historical live Kafka/Spark/Mongo measurements are linked below. | Pinned service integration, restart/recovery, full-feed execution and fresh latency evidence. |
+| Modules 4A–4B | Prior-only implicit ALS, catalog-wide product graph, evaluation and versioned publication. | Offline ranking, publication and contract checks; historical 21/21 full-data gates from 10 October 2026. | Pinned Spark/GraphFrames/Mongo integration and a fresh full-data run. |
+| Module 4C | Readiness-aware Hybrid source selection, deterministic ranking, versioned publication and prior-only evaluation tooling. | Offline reader/ranking/publication checks; synthetic C8A/C8B integration evidence remains bounded. | Runtime integration and a leakage-safe Hybrid quality result based on an evaluation design that is valid for the chosen trend source. |
+| Module 4D | Read-only FastAPI routes, bounded Mongo readers and four-page Streamlit dashboard. | API, UI client and AppTest checks; browser job records are historical and keep their own source identity. | Browser checks against pinned runtime and live services. |
+| Kubernetes | Isolated B2 serving, B3 processing, B4 acceptance, one-session runner, private receipts and separately gated teardown. | Offline fake-client/static checks, local rendering, runner and packaging/source checks. | Image build/import verification and a dedicated isolated B2/B3/B4 runtime. |
 
-The reviewed source revision is `a5fe500`; its full identity is recorded in the
-[implementation ledger](implementation-ledger.md#reviewed-source-revision).
-The recorded broad offline suite reported **803 passed, 7 skipped**; repository
-Ruff passed and Python compilation passed for 190 files. The skips and excluded
-service-backed tests are described in the [acceptance handoff](external-acceptance-handoff.md).
-No new test run or CI result is attributed to this documentation update.
+The broad recorded non-service suite reported **803 passed, 7 skipped**. The seven skips were Spark-dependent modules; eight live MongoDB modules and two PySpark-importing integration suites were excluded by selection. They were not seven skipped individual test cases. The exact selection and exclusions are preserved in the [acceptance handoff](external-acceptance-handoff.md). Focused checks reported **59 passed** for telemetry/BSON regressions and **134 passed** for the telemetry, API, and UI selection. Repository Ruff passed and Python compilation covered 190 files. Offline Kubernetes fake-client, static and packaging checks also passed. These are development checks on host Python with temporary lightweight dependencies, not pinned Spark/Java or live-service acceptance.
 
-## External acceptance still required
-
-- Run Spark and MongoDB integration tests in the pinned runtime; complete the
-  browser checks and verify the container build and package imports.
-- Execute Kubernetes B2/B3/B4 in a dedicated environment and retain fresh
-  identity-bound evidence.
-- Run the full-data workflow with the six reviewed source files.
-- Exercise streaming checkpoint/recovery behavior at runtime.
-- Measure actual streaming latency and run both the local comparison and the
-  standalone executor-layout experiment.
-- Record fresh runtime acceptance results with their exact input, source,
-  environment, and scope.
-
-The [acceptance handoff](external-acceptance-handoff.md) summarizes operator
-preparation and points to the existing runbooks. **Code complete does not mean
-runtime accepted.**
-
-## Historical results
-
-Historical results remain tied to their recorded inputs and environments:
-
-| Result | Record |
-|---|---|
-| Full-data input counts, Module 1 processing, and Module 2 measurements | [Full-data evidence](evidence/full/README.md) |
-| Bounded Kafka, Spark, MongoDB, watermark, and checkpoint observations | [Module 3 evidence](evidence/module3/README.md) |
-| Module 4A/4B full-data acceptance, 21 of 21 gates, 10 October 2026 | [Dated acceptance record](evidence/module4/acceptance-20261010/README.md) |
-| Module 4C/4D design and release records | [Evidence index](evidence/README.md) |
-| Earlier style-refactor comparison and its explicit limitations | [Style regression report](style-regression-validation.md) |
-
-The historical Module 4A/4B result predates later code changes; it is not a
-fresh full-data result for the reviewed revision. The named synthetic-feed
-measurements below are also historical, not new measurements.
-
-<a id="23-synthetic-feed-configurations"></a>
-
-### Synthetic feed measurements
-
-| Historical preset | Scatter | Span | Peak events/day | Mean events/day | Crowding |
-|---|---|---:|---:|---:|---:|
-| `scatter_1w` | 1 week | 372 days | 428,965 | 90,912 | 4.72× |
-| `scatter_1m` | 1 month | 393 days | 241,413 | 86,054 | 2.80× |
-| `scatter_3m` (default) | 3 months | 456 days | 208,674 | 74,165 | 2.81× |
-
-These figures came from earlier named feed runs. The separate 3 October 2026
-full-data manifest records a peak of 212,714 events/day for its 13-week feed;
-that scope and configuration are preserved in the
-[full-data evidence](evidence/full/README.md).
+## Module 1 — ingestion and storage
 
 <a id="module-1--ingestion--storage"></a>
+<a id="22-cleaning-and-reconstruction-results"></a>
 
-## Module 1 — Ingestion and storage
+**Objective.** Admit the six related source tables as a coherent dataset, produce typed curated tables, reconstruct usable replay time, and stage input and output with enough provenance to validate later processing.
 
-Module 1 validates the six source tables, builds curated data, generates
-synthetic event time for replay, stages data in HDFS, and can publish events to
-Kafka. The feed includes prior and train orders; event time alone does not
-separate evaluation truth. See the [Module 3 provenance contract](module3-contracts.md#kafka-event-contract-and-provenance)
-and the [Module 1 operating guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay).
+**Flow and contracts.** `orders.csv`, `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, and `departments.csv` are required. The cleaner checks exact column sets and duplicate headers, parses rows initially as strings, then validates canonical integer spellings, ranges, evaluation-set labels, primary/foreign keys, order-level consistency, unique product/cart positions, and contiguous `1..N` cart order before coercion. Empty, unreadable, missing, malformed or inconsistent input fails with sanitized diagnostics. First-order missing inter-order gaps become zero; capped 30-day values are reconstructed to the minimum weekday-compatible value in `[30, 36]`. Product names replace nonbreaking spaces and collapse surrounding/repeated whitespace.
+
+The cleaner emits six typed Parquet files and `.it4931-clean-output.json`. It stages every result, then replaces only a directory bearing the expected ownership manifest and file set. Unsafe symlink/path overlap and unknown output entries fail closed. If validation or staging fails, the existing recognized publication remains. This procedure assumes one writer; it is not a multi-process transaction.
+
+The event generator selects `prior` and `train` orders and excludes the official `test` set. Stable hash-derived values use the seed and entity keys for user anchor weeks, order minute/second and within-cart gaps; they do not use Python's salted hash. The 2024-01-01 Monday base aligns `order_dow` with calendar offsets. It adds cleaned inter-order gaps, recorded hour and generated within-order item intervals, then enforces strictly increasing event time along each user's order/cart sequence. `--batch-users` bounds processing memory and does not change generated values for the same source and seed. Parquet carries `order_number` and `synthetic_date`; Kafka messages do not.
+
+HDFS staging writes `_sources.json` for the curated tables and `_handoff.json` for the partitioned interaction feed. The six-file source receipt is retained as separate input/run evidence. Curated order and dimension tables are staged separately from the interaction handoff. The producer emits one denormalized JSON message per product event, keyed by `user_id`, with stable `event_id`, order/product/basket attributes, synthetic event time and send-time ingestion time. It omits `eval_set`, so the ordinary stream combines prior and train orders and is unsuitable for official-train temporal evaluation.
+
+**Inputs and outputs.** Six raw CSV tables lead to six cleaned Parquet tables; generation produces Parquet or JSONL replay files and a feed manifest; HDFS receives raw/curated data, receipts and the interactions handoff; Kafka receives the generated product-event records.
+
+**Verification and historical findings.** A bounded synthetic fixture was included in the offline suite. The 3 October 2026 full-data record reconciled 33,819,106 events across source facts, local feed and HDFS readback, with 456 daily files/partitions and zero recorded per-user monotonicity violations. The 8 October source-preparation receipt recorded 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names. These records remain historical and are tied to their archived inputs and runtime.
+
+**Limitations and remaining acceptance.** The generated dates describe replay only. The Kafka event schema does not preserve evaluation-set membership. Runtime HDFS/Kafka integration, fresh six-file full-data processing and identity-bound output receipts remain acceptance tasks. See the [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation reference](generate.md) and [full-data evidence](evidence/full/README.md).
+
+## Module 2 — batch layer
 
 <a id="3-module-2--batch-layer"></a>
 
-## Module 2 — Batch layer
+**Objective.** Produce reproducible historical aggregates and descriptive user features from curated HDFS data, then make validated outputs available to read-only consumers.
 
-Module 2 computes historical product and user metrics from curated HDFS data
-and writes prior-history user features. Its current benchmark procedures and
-measurement boundaries are in the [executor benchmark guide](module2-executor-benchmark.md)
-and [Docker guide](docker.md#module-2-batch-processing-and-benchmarks).
+**Flow and interfaces.** Module 2 verifies handoff receipts, row counts, nulls, keys, foreign keys, domains, relevant partition values and exact fact/event multisets before computing. Historical analytics use prior interactions. The resulting `user_features` schema has `user_id`, `order_count`, `purchase_count`, `unique_products`, `reorder_rate`, and `avg_basket_size`, with `module2_run_id`, `feature_scope=prior_only` and `generated_at_utc` metadata. The Module 4 reader checks the expected schema, bounds the lookup to a user, and detects duplicate rows; the returned features are descriptive and are not inputs to ALS fitting. The optional local source-event hash check is separate and narrower than verifying a hash for every staged input. Module 4 staged-Parquet hash checks are another independent boundary.
+
+Spark analytics include product and department aggregates, user features, order weekday/hour distributions and department-hour pivot/unpivot totals. Mongo publication writes bounded batches to temporary collections, validates output and indexes, then promotes each collection. Each collection has a publication boundary, but a set of collections is not a cross-collection transaction. Readers must validate run identity instead of assuming every collection changed as one unit.
+
+**Optimization experiments.** The benchmark suite measures requested join plans, date-column versus partition-column filters, cached aggregate reuse and uncached recomputation. It records the cache materialization cost separately. A local `local[1]`/`local[2]` comparison tests thread configurations; a distinct standalone mode attaches to an existing Spark master and records actual executor allocation and task/shuffle data. Neither configuration knobs alone nor a local-thread comparison proves executor-layout speedup.
+
+**Verification and historical findings.** The 3 October full-data run verified exact fact/event reconciliation, prior-only aggregates, pivot/unpivot totals, equal outputs across join strategies and filter strategies, and Mongo publication of 49,677 product and 21 department documents. Eleven catalog products had no prior purchases. Recorded prior-only reorder rate was 58.9697%, with average basket size 10.0889. Median times included Sort-Merge Join 17.581934 s and Broadcast Hash Join 2.304046 s; all-date scan 3.497363 s, date-filtered 1.666808 s and partition-filtered 0.074906 s; uncached aggregate 2.110284 s, cache materialization 2.175583 s and cached reuse 0.088085 s. These were one-host, one-executor measurements with warm OS/HDFS caches; the all-date scan had a different scope. They do not establish cluster-scale performance.
+
+**Limitations and remaining acceptance.** Current runtime Spark/HDFS execution and fresh publication checks remain pending. The standalone executor-layout experiment has tooling but no new measured result. See the [full-data report](evidence/full/README.md), [benchmark guide](module2-executor-benchmark.md), and [Module 2 Docker procedure](docker.md#module-2-batch-processing-and-benchmarks).
+
+## Module 3 — speed layer and Structured Streaming
 
 <a id="module3-status"></a>
-
-<!-- Compatibility anchors for references to the former Module 3 status sections. -->
 <a id="41-final-streaming-architecture"></a>
 <a id="42-event-time-watermark-and-trending"></a>
 <a id="43-mongodb-serving-and-idempotency"></a>
@@ -110,29 +68,94 @@ and [Docker guide](docker.md#module-2-batch-processing-and-benchmarks).
 <a id="48-validation-results"></a>
 <a id="49-current-technical-status-and-known-limitations"></a>
 
-## Module 3 — Speed layer
+**Objective and flow.** Module 3 consumes the keyed Kafka event feed, validates JSON schema and field domains, accounts for invalid messages and deduplicates by `event_id` while state remains within the configured watermark. One 120-minute sliding stateful aggregation produces the short 30-minute and long 120-minute windows. Windows slide every five minutes, the watermark is ten minutes, and the configured short/long weights are 0.7/0.3. After a window is complete, the full product population is normalized and deterministically ranked, then limited to Top-20.
 
-Module 3 consumes Kafka events, aggregates by event time, and publishes trend
-results. Its parsing, ranking, checkpoint, telemetry, and publication contracts
-are in the [Module 3 guide](module3-contracts.md). Operating steps are in the
-[Docker guide](docker.md#module-3-streaming-operations); historical measurements
-are in the [Module 3 evidence archive](evidence/module3/README.md).
+**Outputs and operations.** The legacy `realtime_trending` collection is mutable and replaces a complete window before upserting its rows; it is not a transaction for readers. Optional `realtime_trending_windows` stores immutable finalized product/window documents with a namespace and bundle identity. Retries of identical documents are accepted while conflicts fail; atomicity is per document, not across a set of windows. TTL is based on expiry metadata and is distinct from event-time filtering. Module 4C reads finalized bundles; no open-window leaderboard is implied.
+
+Checkpoint continuity is bound to a versioned path such as `checkpoint/<id>/ingestion-latency-v1`. Unversioned legacy telemetry state is rejected without mutation. A checkpoint is reusable only with matching query/topic/config identity. The Kubernetes runner disables automatic resume and requires a fresh run identity.
+
+Finite replay completion requires successful producer delivery, consistent generated/attempted/acknowledged counts, and consumed terminal offsets across all partitions. A completed Kafka read may leave an event-time tail in checkpoint state because the pipeline does not fabricate future events. Telemetry pairs each executed Spark batch (identified by the `durationMs.addBatch` marker) with its same-batch sink receipt. Idle progress does not count as an executed batch; zero-input cleanup batches do. The bounded receipt queue applies backpressure instead of dropping records, and missing receipts or gaps fail visibly. Shutdown stops the query before signaling the progress logger to perform its final drain.
+
+For each finalized product/window output row, the latency source is the latest contributing ingestion timestamp. The summary reports ingestion-to-output-completion delay after enabled publishers; it is constant-memory and records min/mean/max and skew status. Producer and output host clocks may be unsynchronized, values may be negative from skew, and the metric includes watermark delay. It is not acknowledgement, trigger, sink-only, Kafka lag, or dashboard latency. The metrics document is bounded and read-only at the API boundary; malformed BSON integer values fail closed.
+
+**Historical verification.** The 3 October 2026 bounded integration ran one Kafka broker with four partitions and Spark 3.5.5/Java 17/Python 3.10.12 on a two-core setup. A 5,000-event smoke acknowledged and consumed all events, reported 79,970 Mongo documents, no duplicate window/product or window/rank keys, and 374.20 processed rows/s. In a separate 50,000-event run, all 50,000 events were acknowledged and valid; observed processed rate was 3,203.90 rows/s, 35,701 finalized windows produced 580,342 documents, aggregate state reached 1,174,010 rows, and final sink batch time was 62,021.821 ms. Kafka was preloaded, so input rows/s was not meaningful; each event could fan out to as many as 24 five-minute windows.
+
+The same evidence records bounded late-data and watermark behavior, two-process checkpoint continuation (three records in the first process and two new records in the second), plus throughput arms at 100/s, 500/s and bulk and a partition comparison. Two partitions performed best in that small test; this does not imply a general optimum. See the [Module 3 evidence report](evidence/module3/README.md).
+
+**Limitations and remaining acceptance.** Watermark deduplication is not permanent uniqueness. One broker does not demonstrate high availability. The legacy mutable snapshot can be transiently empty/partial to concurrent readers. Bounded rates do not establish production throughput, and the historic trigger/addBatch/sink durations are not the defined ingestion-to-finalized-output latency. Pinned runtime integration, checkpoint restart at runtime, full-feed execution and new latency evidence remain pending. See the [Module 3 contract](module3-contracts.md) and [streaming operations](docker.md#module-3-streaming-operations).
+
+## Modules 4A and 4B — prior-only recommendations and product graph
+
+**Objective.** Module 4A produces personalized implicit-feedback recommendations from prior history and evaluates ranking against held-out data. Module 4B produces catalog-wide co-purchase and graph metrics from prior baskets. Both publish versioned outputs with a readiness identity so downstream readers can avoid mixing incompatible generations.
+
+**Processing and data boundaries.** ALS uses prior user/product purchase counts as implicit preference input. Its internal holdout supports model checks among eligible prior-history users; official train baskets are not used to fit ALS or select its fit parameters. Evaluation reports ALS and baseline results across K values and warm-user cohorts. A separate global-popularity and personal-frequency baseline supports comparisons. Module 4B deduplicates products inside each basket, canonicalizes unordered pairs, applies declared co-purchase thresholds, preserves all catalog vertices and calculates neighbors, weighted degree and PageRank over symmetric topology. The PageRank run uses graph topology, not co-purchase weights as weighted PageRank.
+
+**Historical verification.** The 10 October 2026 acceptance report records 21/21 historical gates for its exact data and source scope. It records 4,124,180 recommendation documents for 206,209 users, 49,688 graph vertices, 3,492,837 undirected edges, 6,985,674 directed rows and 21,164 isolated catalog products. ALS Recall@10 was 0.121472 versus 0.319232 for personal frequency, so this run does not demonstrate an ALS quality improvement. Threshold-specific graph counts and failed/interrupted attempts remain in the dated report. This result predates later changes and is not fresh full-data acceptance for `a5fe500`.
+
+**Limitations and remaining acceptance.** Full-data Spark/GraphFrames/Mongo verification on the reviewed source revision remains pending. Historical quality measures describe their recorded holdout and cohort; they do not establish general recommendation quality. See the [Module 4 acceptance report](evidence/module4/acceptance-20261010/README.md) and [Module 4 plan](module4-plan.md).
+
+## Module 4C — Hybrid serving and offline evaluation
 
 <a id="progress-module4c"></a>
 
-## Module 4C — Hybrid serving
+**Objective.** Combine eligible versioned batch sources and finalized trend bundles while preserving source identity, deterministic ranking and read consistency.
 
-Module 4C combines eligible batch recommendation sources with finalized trend
-bundles. Its evaluation boundary and serving contract are in
-[Module 4 §19](module4-plan.md#module4c-spec), and its preserved records are in
-the [Module 4C evidence archive](evidence/module4c/README.md).
+**Processing and inputs/outputs.** The service captures a ready ALS/graph generation, checks bounded source reads and readiness identities, selects the newest eligible immutable trend bundle at an explicit event-time cutoff, normalizes the selected ALS and trend scores, unions candidate sets, and publishes versioned per-user recommendation snapshots. The output generation is immutable; a per-user readiness pointer promotes the serving version. A/B snapshots are separate Mongo promotions and do not form one multi-collection transaction. Endpoint candidate behavior is explicit at lambda boundaries, including cold-user trend fallback, and ties use stable product identity.
 
-<a id="progress-module4d"></a>
+The prior-only evaluation command uses a fixed global-frequency Top-20 candidate source and a preregistered lambda sweep (`0`, `0.5`, `0.7`, `0.9`, `1`) at K=5/10/20. It reports all official-train and warm-user truth cohorts and records source hashes. Official train labels are used only for evaluation, not fitting, tuning, candidate creation or trend source generation. This experiment is not equivalent to chronological trend evaluation. The ordinary stream combines prior and train orders, so a leakage-safe trend evaluation needs an appropriately separated source and chronology.
+
+**Recorded checks.** The bounded C8A controlled synthetic shift changed Top-1 at lambda 0.0 and 0.5, but not at default lambda 0.7, 0.9 or 1.0; Top-20 overlap stayed 20/20, and accuracy was not measured. C8B reconciled 48 planned, acknowledged and consumed events with zero invalid records and observed 36 bundle documents; checkpoint restart was not demonstrated. These are integration observations, not quality or capacity results. See the [Module 4C archive](evidence/module4c/README.md).
+
+**Limitations and remaining acceptance.** Runtime publisher/reader integration and an evaluation source that isolates trend chronology remain to be validated. No leakage-safe Hybrid accuracy result or production capacity claim exists. See [Module 4 §19](module4-plan.md#module4c-spec).
 
 ## Module 4D — API and dashboard
 
-Module 4D exposes read-only recommendation, batch, trend, and evidence views.
-The [Module 4 §20 contract](module4-plan.md#module4d-spec) defines its API and
-dashboard behavior; the [Docker guide](docker.md) owns setup and validation
-commands. The dashboard reads through FastAPI and does not connect directly to
-MongoDB.
+<a id="progress-module4d"></a>
+<a id="d3-local-integration-and-release-validation"></a>
+
+**Objective and flow.** Module 4D offers a bounded read surface over versioned recommendation and graph outputs, batch metrics, order distributions, finalized trends, streaming metrics and an allowlisted set of historical evidence. Mongo indexes are provisioned by an administrator; API database credentials are read-only. FastAPI validates current readiness/source identities and uses indexed bounded queries. Streamlit calls the API and has no MongoDB client.
+
+The four UI pages cover Overview, Realtime & Batch, Hybrid recommendations, and Evaluation & Performance. ALS and Hybrid provenance remain separate. The API distinguishes unavailable, empty, malformed and error states; it does not silently turn missing values into zero. Health/liveness checks do not establish data readiness. A refresh action only re-reads a snapshot; it does not prove the streaming job is running.
+
+**Recorded checks.** API, client, AppTest and browser checks have their own dated workflow/evidence scope. The independent review's offline suite includes the read contracts and UI selection; the browser/runtime environment is not part of the 803-pass host suite unless explicitly listed in a recorded workflow. The earlier four-chart browser assertion failure remains in historical CI records; later passing runs do not explain its original cause. See the [Module 4D evidence index](evidence/module4d/README.md).
+
+**Limitations and remaining acceptance.** Pinned browser validation against live services and a fresh container build/package check remain pending. Read-only API behavior and fixture tests do not establish production authentication, scale or availability. See [Module 4 §20](module4-plan.md#module4d-spec) and [Docker API/UI operations](docker.md#run-the-api-and-dashboard-against-existing-data).
+
+## Kubernetes demonstration
+
+**Objective and flow.** The demonstration is isolated from the persistent Compose environment. A run has a generated identity, private output directory, dedicated profile/context/namespace, run-owned storage and locked image/toolchain identities. B2 starts serving services; B3 runs the input, Module 1, Module 2, Module 4 and replay pipeline; B4 verifies runtime evidence. Jobs do not retry automatically. The HDFS lifecycle creates only a fresh run root and refuses to reuse it. MongoDB admin, publisher and API-read roles are separate; API/UI access is read-only. Secrets are passed through memory/stdin. Network policy starts from deny-by-default with only declared paths enabled.
+
+The host reserves at least six physical cores, 12 GiB available RAM and 40 GiB free disk for the full workflow. Full-data input is capped at 4 GiB with an explicit storage budget; fixture input is bounded to 50 users and 5,000 events. The runtime lock is a template until actual host, cluster, storage, image and Python inventory identities are measured. Automatic resume is disabled. Success or failure retains resources and evidence; teardown is separate and rechecks ownership.
+
+**Verification and remaining work.** Offline fake-client, static, rendering and runner checks were recorded, but no container build, image load, Minikube profile, Kubernetes workload, B2/B3/B4 acceptance or teardown was run for the reviewed source revision. Source state `runtime_pass` records completion of B4 and retained runtime resources; the separate `verify` command is offline and reports `teardown_performed: false`. Acceptance still requires image/package checks and an isolated live run with fresh identity-bound receipts. See the [Kubernetes runbook](kubernetes-demo-runbook.md).
+
+## Historical synthetic-feed measurements
+
+<a id="23-synthetic-feed-configurations"></a>
+
+The following values are historical measurements from named feeds in the earlier documentation. They are not the 3 October full-data manifest described below and should not be treated as regenerated results.
+
+| Preset | Scatter window | Span | Peak events/day | Mean events/day | Peak/mean |
+|---|---:|---:|---:|---:|---:|
+| `scatter_1w` | 1 week | 372 days | 428,965 | 90,912 | 4.72× |
+| `scatter_1m` | 1 month (4 weeks) | 393 days | 241,413 | 86,054 | 2.80× |
+| `scatter_3m` (default) | 3 months (13 weeks) | 456 days | 208,674 | 74,165 | 2.81× |
+
+The separate 3 October 2026 full-data run used seed 42, 13-week scatter and 2,000 users per batch; its tracked manifest records a 212,714-event daily peak. Older prose used a different peak value, so this report follows the receipt-backed manifest and does not merge the two scopes. The generator's current `--batch-users` default is 20,000; that runtime memory setting is not the historical 2,000 value and does not affect generated events. See [feed generation](generate.md) and the [full-data manifest](evidence/full/manifest.json).
+
+## Historical benchmark and acceptance findings
+
+The 3 October batch benchmark used Spark 3.5.5, Java 17.0.14 and Python 3.10.12 on one two-core standalone executor, 32 shuffle partitions, seed 42, 13-week scatter and one warm-up plus three measured repetitions. Equivalent arms were checked for plan/row/checksum conditions. The report records the measurements and their cache/scan caveats in [full-data evidence](evidence/full/README.md). These results are not cluster performance claims.
+
+The 3 October streaming report used one broker, four Kafka partitions and a two-core Spark setup. Its bounded throughput and partition measurements are detailed in [Module 3 evidence](evidence/module3/README.md); the small test's two-partition arm was fastest, without establishing a generally optimal partition count. The 10 October Module 4 acceptance report recorded 21/21 gates for its exact historical run, but its ALS metrics trailed the personal-frequency baseline and do not imply model superiority.
+
+## Reproduction and operator references
+
+<a id="d3-local-integration-and-release-validation"></a>
+
+- Persistent services, isolated dashboard demo, Module 1–4 operating procedures and current validation command ownership: [Docker guide](docker.md).
+- Kubernetes prerequisites, run stages, recovery, evidence capture and separately gated teardown: [Kubernetes runbook](kubernetes-demo-runbook.md).
+- Exact offline test selection, exclusions and runtime work still required: [external acceptance handoff](external-acceptance-handoff.md).
+- Contract and algorithm detail: [implementation ledger](implementation-ledger.md), [Module 3 guide](module3-contracts.md), and [Module 4 plan](module4-plan.md).
+
+This page preserves the former reproduction anchors for existing links. It does not duplicate the detailed runbook commands.

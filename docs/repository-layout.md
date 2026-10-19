@@ -7,7 +7,7 @@ are grouped under `deploy/module4/` and `scripts/module4/`.
 ## Canonical structure
 
 ```text
-Dockerfile                         shared multi-stage image definition
+Dockerfile                         spark, api, ui, browser, k8s-runner, pipeline targets
 compose.yaml                       persistent pipeline services
 requirements.txt                   shared runtime dependencies
 requirements-dev.txt               shared development/test dependencies
@@ -48,6 +48,7 @@ no compatibility packages at `src.module4c` or `src.module4d`.
 | [Progress](progress.md) | Current implementation and the boundary of completed checks and pending acceptance. |
 | [External acceptance handoff](external-acceptance-handoff.md) | Operator preparation, delivered scope, and external validation tasks. |
 | [Implementation summary](implementation-ledger.md) | Design decisions, important contracts, safety, and verification boundaries. |
+| [Synthetic event generation](generate.md) | Timestamp construction, scenario configuration, determinism, and feed provenance. |
 | [Module 3 contracts](module3-contracts.md) | Kafka, event-time aggregation, Mongo publication, bundles, and Module 4C boundary. |
 | [Module 4 plan](module4-plan.md) | Module 4A–4D algorithms, data, ranking, evaluation, API, and dashboard contracts. |
 | [Docker guide](docker.md) | Image targets, runtime prerequisites, operational procedures, and scoped cleanup. |
@@ -60,18 +61,26 @@ the record.
 
 ## Application and deployment paths
 
-- `src/module1/` contains cleaning, deterministic synthetic event generation,
-  HDFS staging, and the Kafka producer.
-- `src/module2/` contains Spark batch analytics, feature extraction, publication,
-  and benchmarks.
-- `src/module3/` contains Structured Streaming parsing, finalized trend
-  publication, and checkpoint management; see the [Module 3 contract guide](module3-contracts.md).
+- `src/module1/clean.py`, `config.py`, `generate.py`, `producer.py`, and
+  `stage_hdfs.py` own raw validation, synthetic timing, Kafka payloads, and
+  HDFS handoff behavior; see the [generation guide](generate.md).
+- `src/module2/` contains Spark handoff validation, analytics, prior-only
+  feature extraction, Mongo publication, and local/standalone benchmarks; see
+  the [executor benchmark guide](module2-executor-benchmark.md).
+- `src/module3/` contains Kafka parsing, Structured Streaming, legacy and
+  immutable trend writers, finite replay, checkpoint versioning, and completed
+  batch telemetry; see the [Module 3 contract guide](module3-contracts.md).
 - `src/module4/` contains ALS, graph, Hybrid serving, API, and dashboard code.
   The retired `src.module4c` and `src.module4d` packages are not valid imports.
 - `deploy/module4/requirements/` separates API, UI, UI-development, and browser
   dependencies. The UI development manifest includes the runtime UI pins.
-- `scripts/module4/` groups the Module 4C experiments and Module 4D demo,
-  validation, and browser tools. Core project runners stay in `scripts/`.
+- `scripts/module4/` groups the Module 4C evaluation/streaming experiments and
+  Module 4D demo, validation and browser tools. `scripts/k8s/` owns run identity,
+  image provenance, pipeline and acceptance coordination. Core project runners
+  stay in `scripts/`.
+- `tests/` separates unit and contract tests from Spark, MongoDB, API/UI and
+  browser/runtime selections. The [acceptance handoff](external-acceptance-handoff.md)
+  records the exact historic broad-suite selection and its exclusions.
 
 The main `compose.yaml` owns persistent Kafka, Spark, HDFS, and MongoDB
 services. The isolated `deploy/module4/compose.demo.yaml` uses disposable
