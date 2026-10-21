@@ -69,7 +69,7 @@ class SubprocessExecutor:
         return CommandResult(result.returncode, result.stdout, result.stderr)
 
 
-def _checked(executor: CommandExecutor, argv: Sequence[str], *, timeout: int = 30) -> CommandResult:
+def checked(executor: CommandExecutor, argv: Sequence[str], *, timeout: int = 30) -> CommandResult:
     result = executor.run(argv, timeout=timeout)
     if result.returncode != 0:
         executable = Path(argv[0]).name
@@ -77,7 +77,7 @@ def _checked(executor: CommandExecutor, argv: Sequence[str], *, timeout: int = 3
     return result
 
 
-def _json_output(result: CommandResult, description: str) -> Any:
+def json_output(result: CommandResult, description: str) -> Any:
     try:
         return json.loads(result.stdout)
     except (TypeError, json.JSONDecodeError) as exc:
@@ -123,8 +123,8 @@ def _profile_entries(raw: str) -> dict[str, dict[str, Any]]:
 
 def preflight_dedicated_target(executor: CommandExecutor, identity: RunIdentity) -> dict[str, Any]:
     """Reject profile/context collisions before any cluster creation or apply."""
-    profile_output = _checked(executor, ["minikube", "profile", "list", "-o", "json"])
-    context_output = _checked(executor, ["kubectl", "config", "get-contexts", "-o", "name"])
+    profile_output = checked(executor, ["minikube", "profile", "list", "-o", "json"])
+    context_output = checked(executor, ["kubectl", "config", "get-contexts", "-o", "name"])
     profiles = _profile_names(profile_output.stdout)
     contexts = {line.strip() for line in context_output.stdout.splitlines() if line.strip()}
     if identity.profile in profiles:
@@ -230,11 +230,11 @@ def collect_cluster_identity(
     """Collect a running profile's cluster marker before creating a namespace."""
     if execute is not True:
         raise RuntimePreflightError("cluster identity discovery requires explicit execute=True authorization")
-    profile_result = _checked(executor, ["minikube", "status", "-p", identity.profile, "--output=json"])
-    profile_status = _json_output(profile_result, "Minikube status")
+    profile_result = checked(executor, ["minikube", "status", "-p", identity.profile, "--output=json"])
+    profile_status = json_output(profile_result, "Minikube status")
     if not isinstance(profile_status, dict) or profile_status.get("Host") != "Running":
         raise RuntimePreflightError("dedicated Minikube profile is not running")
-    profile_listing = _checked(executor, ["minikube", "profile", "list", "-o", "json"])
+    profile_listing = checked(executor, ["minikube", "profile", "list", "-o", "json"])
     profile_config = _profile_entries(profile_listing.stdout).get(identity.profile)
     if not isinstance(profile_config, dict):
         raise RuntimePreflightError("dedicated Minikube profile configuration could not be found")
@@ -246,19 +246,19 @@ def collect_cluster_identity(
     configured_kubernetes_version = kube_config.get("KubernetesVersion")
     if not all(isinstance(value, str) and value for value in (driver, configured_runtime, cni, configured_kubernetes_version)):
         raise RuntimePreflightError("dedicated profile configuration is incomplete")
-    kube_system = _json_output(
-        _checked(executor, kubectl(identity, "get", "namespace", "kube-system", "-o", "json")),
+    kube_system = json_output(
+        checked(executor, kubectl(identity, "get", "namespace", "kube-system", "-o", "json")),
         "kube-system identity",
     )
-    version = _json_output(_checked(executor, kubectl(identity, "version", "-o", "json")), "Kubernetes version")
+    version = json_output(checked(executor, kubectl(identity, "version", "-o", "json")), "Kubernetes version")
     if not all(isinstance(item, dict) for item in (kube_system, version)):
         raise RuntimePreflightError("Kubernetes identity response is invalid")
     cluster_uid = kube_system.get("metadata", {}).get("uid")
     git_version = version.get("serverVersion", {}).get("gitVersion")
     if not all(isinstance(value, str) and value for value in (cluster_uid, git_version)):
         raise RuntimePreflightError("Kubernetes identity is incomplete")
-    nodes = _json_output(
-        _checked(executor, kubectl(identity, "get", "nodes", "-o", "json")), "Kubernetes node inventory"
+    nodes = json_output(
+        checked(executor, kubectl(identity, "get", "nodes", "-o", "json")), "Kubernetes node inventory"
     )
     node_items = nodes.get("items") if isinstance(nodes, dict) else None
     if not isinstance(node_items, list) or len(node_items) != 1 or not isinstance(node_items[0], dict):
@@ -293,8 +293,8 @@ def collect_namespace_identity(
     """Read back the run namespace after creation and require all ownership labels."""
     if execute is not True:
         raise RuntimePreflightError("namespace identity discovery requires explicit execute=True authorization")
-    namespace = _json_output(
-        _checked(executor, kubectl(identity, "get", "namespace", identity.namespace, "-o", "json")),
+    namespace = json_output(
+        checked(executor, kubectl(identity, "get", "namespace", identity.namespace, "-o", "json")),
         "run namespace identity",
     )
     if not isinstance(namespace, dict):
@@ -323,13 +323,13 @@ def collect_toolchain_identity(executor: CommandExecutor, *, execute: bool = Fal
             minikube_sha = hashlib.sha256(handle.read()).hexdigest()
     except OSError as exc:
         raise RuntimePreflightError("Minikube binary checksum could not be measured") from exc
-    minikube = _json_output(
-        _checked(executor, ["minikube", "version", "--output=json"]), "Minikube version"
+    minikube = json_output(
+        checked(executor, ["minikube", "version", "--output=json"]), "Minikube version"
     )
-    kubectl_version = _json_output(
-        _checked(executor, ["kubectl", "version", "--client", "-o", "json"]), "kubectl client version"
+    kubectl_version = json_output(
+        checked(executor, ["kubectl", "version", "--client", "-o", "json"]), "kubectl client version"
     )
-    docker = _checked(executor, ["docker", "version", "--format", "{{.Server.Version}}"])
+    docker = checked(executor, ["docker", "version", "--format", "{{.Server.Version}}"])
     minikube_version = minikube.get("minikubeVersion") if isinstance(minikube, dict) else None
     client = kubectl_version.get("clientVersion") if isinstance(kubectl_version, dict) else None
     kubectl_git_version = client.get("gitVersion") if isinstance(client, dict) else None
@@ -354,8 +354,8 @@ def collect_storage_class_identity(
     """Read and validate the unique default profile-local StorageClass."""
     if execute is not True:
         raise RuntimePreflightError("StorageClass discovery requires explicit execute=True authorization")
-    payload = _json_output(
-        _checked(executor, kubectl(identity, "get", "storageclass", "-o", "json")),
+    payload = json_output(
+        checked(executor, kubectl(identity, "get", "storageclass", "-o", "json")),
         "StorageClass inventory",
     )
     items = payload.get("items") if isinstance(payload, dict) else None

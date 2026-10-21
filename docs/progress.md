@@ -1,6 +1,6 @@
 # Project progress and requirements coverage
 
-This report describes the current implementation in the reviewed source revision and separates it from historical measurements and runtime work still pending. The approved [Proposal](Proposal.md) remains the requirements baseline. Detailed command ownership belongs to the [Docker guide](docker.md) and [Kubernetes runbook](kubernetes-demo-runbook.md); contracts belong to the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [implementation ledger](implementation-ledger.md).
+This report describes the current implementation in the reviewed source revision and separates it from historical measurements and runtime work still pending. The approved [Proposal](Proposal.md) remains the requirements baseline. Detailed command ownership belongs to the [Docker guide](docker.md) and [Kubernetes guide](kubernetes.md); contracts belong to the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [implementation ledger](implementation-ledger.md).
 
 ## Current status
 
@@ -16,7 +16,7 @@ This report describes the current implementation in the reviewed source revision
 | Module 4D | Read-only FastAPI routes, bounded Mongo readers and four-page Streamlit dashboard. | API, UI client and AppTest checks; browser job records are historical and keep their own source identity. | Browser checks against pinned runtime and live services. |
 | Kubernetes | Isolated B2 serving, B3 processing, B4 acceptance, one-session runner, private receipts and separately gated teardown. | Offline fake-client/static checks, local rendering, runner and packaging/source checks. | Image build/import verification and a dedicated isolated B2/B3/B4 runtime. |
 
-The broad recorded non-service suite reported **803 passed, 7 skipped**. The seven skips were Spark-dependent modules; eight live MongoDB modules and two PySpark-importing integration suites were excluded by selection. They were not seven skipped individual test cases. The exact selection and exclusions are preserved in the [acceptance handoff](external-acceptance-handoff.md). Focused checks reported **59 passed** for telemetry/BSON regressions and **134 passed** for the telemetry, API, and UI selection. Repository Ruff passed and Python compilation covered 190 files. Offline Kubernetes fake-client, static and packaging checks also passed. These are development checks on host Python with temporary lightweight dependencies, not pinned Spark/Java or live-service acceptance.
+The broad recorded non-service suite reported **803 passed, 7 skipped**. The seven skips were Spark-dependent modules; eight live MongoDB modules and two PySpark-importing integration suites were excluded by selection. They were not seven skipped individual test cases. The exact selection and exclusions are preserved in the [acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries). Focused checks reported **59 passed** for telemetry/BSON regressions and **134 passed** for the telemetry, API, and UI selection. Repository Ruff passed and Python compilation covered 190 files. Offline Kubernetes fake-client, static and packaging checks also passed. These are development checks on host Python with temporary lightweight dependencies, not pinned Spark/Java or live-service acceptance.
 
 ## Module 1 — ingestion and storage
 
@@ -37,7 +37,7 @@ HDFS staging writes `_sources.json` for the curated tables and `_handoff.json` f
 
 **Verification and historical findings.** A bounded synthetic fixture was included in the offline suite. The 3 October 2026 full-data record reconciled 33,819,106 events across source facts, local feed and HDFS readback, with 456 daily files/partitions and zero recorded per-user monotonicity violations. The 8 October source-preparation receipt recorded 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names. These records remain historical and are tied to their archived inputs and runtime.
 
-**Limitations and remaining acceptance.** The generated dates describe replay only. The Kafka event schema does not preserve evaluation-set membership. Runtime HDFS/Kafka integration, fresh six-file full-data processing and identity-bound output receipts remain acceptance tasks. See the [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation reference](generate.md) and [full-data evidence](evidence/full/README.md).
+**Limitations and remaining acceptance.** The generated dates describe replay only. The Kafka event schema does not preserve evaluation-set membership. Runtime HDFS/Kafka integration, fresh six-file full-data processing and identity-bound output receipts remain acceptance tasks. See the [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation reference](docker.md#synthetic-event-generation) and [full-data evidence](evidence/full/README.md).
 
 ## Module 2 — batch layer
 
@@ -53,7 +53,7 @@ Spark analytics include product and department aggregates, user features, order 
 
 **Verification and historical findings.** The 3 October full-data run verified exact fact/event reconciliation, prior-only aggregates, pivot/unpivot totals, equal outputs across join strategies and filter strategies, and Mongo publication of 49,677 product and 21 department documents. Eleven catalog products had no prior purchases. Recorded prior-only reorder rate was 58.9697%, with average basket size 10.0889. Median times included Sort-Merge Join 17.581934 s and Broadcast Hash Join 2.304046 s; all-date scan 3.497363 s, date-filtered 1.666808 s and partition-filtered 0.074906 s; uncached aggregate 2.110284 s, cache materialization 2.175583 s and cached reuse 0.088085 s. These were one-host, one-executor measurements with warm OS/HDFS caches; the all-date scan had a different scope. They do not establish cluster-scale performance.
 
-**Limitations and remaining acceptance.** Current runtime Spark/HDFS execution and fresh publication checks remain pending. The standalone executor-layout experiment has tooling but no new measured result. See the [full-data report](evidence/full/README.md), [benchmark guide](module2-executor-benchmark.md), and [Module 2 Docker procedure](docker.md#module-2-batch-processing-and-benchmarks).
+**Limitations and remaining acceptance.** Current runtime Spark/HDFS execution and fresh publication checks remain pending. The standalone executor-layout experiment has tooling but no new measured result. See the [full-data report](evidence/full/README.md), [benchmark guide](docker.md#spark-executor-layout-experiment), and [Module 2 Docker procedure](docker.md#module-2-batch-processing-and-benchmarks).
 
 ## Module 3 — speed layer and Structured Streaming
 
@@ -126,7 +126,7 @@ The four UI pages cover Overview, Realtime & Batch, Hybrid recommendations, and 
 
 The host reserves at least six physical cores, 12 GiB available RAM and 40 GiB free disk for the full workflow. Full-data input is capped at 4 GiB with an explicit storage budget; fixture input is bounded to 50 users and 5,000 events. The runtime lock is a template until actual host, cluster, storage, image and Python inventory identities are measured. Automatic resume is disabled. Success or failure retains resources and evidence; teardown is separate and rechecks ownership.
 
-**Verification and remaining work.** Offline fake-client, static, rendering and runner checks were recorded, but no container build, image load, Minikube profile, Kubernetes workload, B2/B3/B4 acceptance or teardown was run for the reviewed source revision. Source state `runtime_pass` records completion of B4 and retained runtime resources; the separate `verify` command is offline and reports `teardown_performed: false`. Acceptance still requires image/package checks and an isolated live run with fresh identity-bound receipts. See the [Kubernetes runbook](kubernetes-demo-runbook.md).
+**Verification and remaining work.** Offline fake-client, static, rendering and runner checks were recorded, but no container build, image load, Minikube profile, Kubernetes workload, B2/B3/B4 acceptance or teardown was run for the reviewed source revision. Source state `runtime_pass` records completion of B4 and retained runtime resources; the separate `verify` command is offline and reports `teardown_performed: false`. Acceptance still requires image/package checks and an isolated live run with fresh identity-bound receipts. See the [Kubernetes guide](kubernetes.md).
 
 ## Historical synthetic-feed measurements
 
@@ -140,7 +140,7 @@ The following values are historical measurements from named feeds in the earlier
 | `scatter_1m` | 1 month (4 weeks) | 393 days | 241,413 | 86,054 | 2.80× |
 | `scatter_3m` (default) | 3 months (13 weeks) | 456 days | 208,674 | 74,165 | 2.81× |
 
-The separate 3 October 2026 full-data run used seed 42, 13-week scatter and 2,000 users per batch; its tracked manifest records a 212,714-event daily peak. Older prose used a different peak value, so this report follows the receipt-backed manifest and does not merge the two scopes. The generator's current `--batch-users` default is 20,000; that runtime memory setting is not the historical 2,000 value and does not affect generated events. See [feed generation](generate.md) and the [full-data manifest](evidence/full/manifest.json).
+The separate 3 October 2026 full-data run used seed 42, 13-week scatter and 2,000 users per batch; its tracked manifest records a 212,714-event daily peak. Older prose used a different peak value, so this report follows the receipt-backed manifest and does not merge the two scopes. The generator's current `--batch-users` default is 20,000; that runtime memory setting is not the historical 2,000 value and does not affect generated events. See [feed generation](docker.md#synthetic-event-generation) and the [full-data manifest](evidence/full/manifest.json).
 
 ## Historical benchmark and acceptance findings
 
@@ -148,13 +148,90 @@ The 3 October batch benchmark used Spark 3.5.5, Java 17.0.14 and Python 3.10.12 
 
 The 3 October streaming report used one broker, four Kafka partitions and a two-core Spark setup. Its bounded throughput and partition measurements are detailed in [Module 3 evidence](evidence/module3/README.md); the small test's two-partition arm was fastest, without establishing a generally optimal partition count. The 10 October Module 4 acceptance report recorded 21/21 gates for its exact historical run, but its ALS metrics trailed the personal-frequency baseline and do not imply model superiority.
 
+## Repository maintenance
+
+A structural audit of the source tree, the scripts, the documentation and the
+continuous integration definitions was performed against the reviewed
+revision. The audit produced a module dependency graph, a list of duplicated
+definition bodies, a list of cross-module private imports and an inventory of
+unreferenced symbols. The changes below are behaviour-preserving except where
+a measured improvement is stated.
+
+**Shared layer.** A new `src/common/` package owns the building blocks that
+every module had re-implemented: environment readers (`env.py`), credential
+redaction (`redaction.py`), run identity and JSON report writing
+(`run_context.py`), the shared Spark session contract (`spark_session.py`),
+numeric and record guards (`type_guards.py`) and source identity
+(`source_identity.py`). The three Module 2/3/4 Spark session modules now
+differ only in their application name and their module-specific settings, and
+the three configuration modules share their path and environment handling.
+
+**Dependency direction.** Every implementation-to-implementation private
+import was removed. The helpers that cross module boundaries are now public
+(`locked_image`, `validate_pipeline_lock`, `checked`, `json_output`,
+`read_receipt`, `build_document`, `hdfs_sha256`, `snapshot_validation`,
+`readiness_identity` and the rest). The only remaining private cross-module
+references are test-to-implementation ones, which is the normal shape of a
+white-box test.
+
+**Duplication.** Nine duplicated definition bodies were unified: the positive
+integer, stored-UTC and BSON-millisecond guards, the canonical JSON writer,
+the environment boolean parser, the bound-PV capacity reader, the required
+environment reader, the JSON report writer, and the five Module 3 Compose
+harness helpers, which now live in `scripts/module3_harness.py`. Four
+unreferenced functions were deleted.
+
+**Layout.** `scripts/module4/` mixed the live Module 4D dashboard tools with
+the archived Module 4C experiment harnesses; the tools are now `scripts/dashboard/`
+and the harnesses `scripts/experiments/`. `deploy/module4/` is now
+`deploy/dashboard/`. The Kubernetes package gained `scripts/k8s/io.py` for
+hashing, atomic receipt writing, redaction and `kubectl` JSON access, and
+`scripts/k8s/constants.py` for the ports, claim sizes and name builders that
+were previously written out in five places.
+
+**Documentation.** The eighteen top-level documents were reduced to twelve by
+merging the Kubernetes runbook into the Kubernetes guide, the external
+acceptance handoff into the acceptance tutorial, the synthetic-generation and
+executor-benchmark guides into the Docker guide, and the repository layout
+guide into the root README. The evidence archive keeps every original byte
+and gained a Module 4 run-directory index, compact summaries of the largest
+raw artifacts, a checksum manifest and an explicit list of the five files that
+live code registers. Every local markdown link resolves.
+
+**Build context.** The `.dockerignore` allow-list carried twenty-five
+per-file entries that a single directory rule already admitted; the redundant
+lines were removed and the resulting build context was verified to be
+unchanged. The tests now assert the admission outcome rather than the
+spelling of an allow-list line.
+
+**Measured improvements.**
+
+| Change | Measurement |
+|---|---|
+| Zstandard Parquet for the generated feed, cleaned tables and staged interactions | 40% smaller than Snappy on the 33.8M event feed, at roughly the same write cost |
+| Popularity baselines computed once per run instead of once per cohort | Removes about seven full aggregations of the 32.4M-row interaction table from a Module 4 evaluation |
+| Spark task counters accumulated instead of retained | The event-log parser no longer holds every task event in driver memory |
+| Kafka log retention configured | The topic no longer keeps every replayed event for the default seven days |
+| The build-context allow-list and the CI branch triggers | Dead rules and triggers on branches that no longer exist were removed, and the CI workflows no longer repeat each other's selections |
+
+**Still open.** The `final_recommendations` collection grows by a new
+serving version per publication and has no retention rule. The Module 4 HDFS
+checkpoint directory is declared as retained for audit and is never cleaned.
+The Spark event log is still written uncompressed: Spark emits a compressed
+log as a sequence of independent zstd frames and the only decoder available
+to the project reads a single frame, so a compressed log cannot be parsed
+back into the published benchmark metrics. The Kafka partition and
+executor-layout experiments still have to run in the owner environment. These
+are recorded rather than changed, because each one alters a published
+contract or a recorded acceptance gate.
+
 ## Reproduction and operator references
 
 <a id="d3-local-integration-and-release-validation"></a>
 
 - Persistent services, isolated dashboard demo, Module 1–4 operating procedures and current validation command ownership: [Docker guide](docker.md).
-- Kubernetes prerequisites, run stages, recovery, evidence capture and separately gated teardown: [Kubernetes runbook](kubernetes-demo-runbook.md).
-- Exact offline test selection, exclusions and runtime work still required: [external acceptance handoff](external-acceptance-handoff.md).
+- Kubernetes prerequisites, run stages, recovery, evidence capture and separately gated teardown: [Kubernetes guide](kubernetes.md).
+- Exact offline test selection, exclusions and runtime work still required: [external acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries).
 - Contract and algorithm detail: [implementation ledger](implementation-ledger.md), [Module 3 guide](module3-contracts.md), and [Module 4 plan](module4-plan.md).
 
 This page preserves the former reproduction anchors for existing links. It does not duplicate the detailed runbook commands.

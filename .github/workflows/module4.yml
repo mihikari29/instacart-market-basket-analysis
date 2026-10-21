@@ -38,26 +38,6 @@ jobs:
             --ignore=tests/test_module4d_ui_client.py \
             --ignore=tests/test_module4d_ui_evaluation.py 2>&1 | tee module4-pytest.log
 
-      - name: Run Streamlit UI regressions in the UI development image
-        run: |
-          image="instacart-module4d-ui-dev:module4-${GITHUB_RUN_ID}"
-          docker build --label com.codex.task=module4d-d3-release \
-            --build-arg MODULE4D_UI_DEV=1 -f Dockerfile --target ui -t "$image" .
-          docker run --rm \
-            --label com.codex.task=module4d-d3-release \
-            --label com.codex.resource=ui-regression-tests \
-            -v "$PWD:/workspace:ro" -w /workspace \
-            -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
-            -e PYTEST_ADDOPTS="-p no:cacheprovider" "$image" \
-            python -m pytest -q \
-            tests/test_module4d_ui_app.py \
-            tests/test_module4d_ui_client.py \
-            tests/test_module4d_ui_evaluation.py
-      - name: Run D1A/D1B API and isolated MongoDB tests
-        run: |
-          set -o pipefail
-          python3 scripts/module4/module4d_api_validation.py --mode all 2>&1 | tee module4d-api-validation.log
-
       - name: Verify staged flow and same-version A/B publication replay
         run: |
           set -o pipefail

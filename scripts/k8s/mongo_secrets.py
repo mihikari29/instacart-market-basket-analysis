@@ -8,6 +8,7 @@ import secrets
 from typing import Any
 from urllib.parse import quote
 
+from .constants import demo_database
 from .ownership import OWNER_LABEL, OWNER_VALUE, RUN_LABEL, RunIdentity
 from .runtime import CommandExecutor, RuntimePreflightError, kubectl
 
@@ -58,7 +59,7 @@ def build_mongo_secret_bundle(identity: RunIdentity) -> MongoSecretBundle:
     """Generate independent admin, application, API-read, and publisher credentials."""
     if not isinstance(identity, RunIdentity):
         raise RuntimePreflightError("a validated run identity is required")
-    database = f"module4d_demo_{identity.run_id}"
+    database = demo_database(identity.run_id)
     admin_user = f"root_{identity.run_id}"
     read_user = f"api_read_{identity.run_id}"
     publisher_user = f"publisher_{identity.run_id}"

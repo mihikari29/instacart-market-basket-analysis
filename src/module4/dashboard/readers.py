@@ -1,6 +1,7 @@
 """Fail-closed, read-only readers for published Module 4D snapshots."""
 
 from __future__ import annotations
+from ...common.type_guards import stored_utc
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -147,16 +148,6 @@ class _ValidatedPointer:
         return tuple(self.document.get(field) for field in _POINTER_IDENTITY_FIELDS)
 
 
-def _stored_utc(value: Any, field: str) -> datetime:
-    if not isinstance(value, datetime):
-        raise SnapshotNotReady(f"pointer {field} is not a BSON datetime")
-    try:
-        if value.tzinfo is None or value.utcoffset() is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-    except (OverflowError, ValueError) as exc:
-        raise SnapshotNotReady(f"pointer {field} is not a valid UTC instant") from exc
-
 
 def _finite_number(value: Any, field: str, *, minimum: float | None = None, maximum: float | None = None) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
@@ -252,10 +243,10 @@ def _validated_pointer(document: Any, user_id: int) -> _ValidatedPointer:
     normalized["trend_window_end"] = (
         None
         if document.get("trend_window_end") is None
-        else _stored_utc(document.get("trend_window_end"), "trend_window_end")
+        else stored_utc(document.get("trend_window_end"), "trend_window_end", error=SnapshotNotReady)
     )
-    normalized["as_of_event_time"] = _stored_utc(document.get("as_of_event_time"), "as_of_event_time")
-    normalized["updated_at"] = _stored_utc(document.get("updated_at"), "updated_at")
+    normalized["as_of_event_time"] = stored_utc(document.get("as_of_event_time"), "as_of_event_time", error=SnapshotNotReady)
+    normalized["updated_at"] = stored_utc(document.get("updated_at"), "updated_at", error=SnapshotNotReady)
     if normalized["trend_window_end"] is not None and normalized["trend_window_end"] > normalized[
         "as_of_event_time"
     ]:

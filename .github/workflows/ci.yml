@@ -1,8 +1,10 @@
 name: Fast validation
+# Runs on every push and every pull request. It owns the offline lint,
+# repository test, API harness, UI and browser selections, so the
+# service-backed workflow does not repeat them.
 on:
   pull_request:
   push:
-    branches: [main, module2-spark-batch-layer, module3-speed-layer, fix/module3-hardening]
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,7 +35,7 @@ jobs:
           --ignore=tests/test_module4d_ui_client.py
           --ignore=tests/test_module4d_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
-        run: python3 scripts/module4/module4d_api_validation.py --mode all
+        run: python3 scripts/dashboard/api_validation.py --mode all
 
   module4d-demo-browser:
     needs: fixtures
@@ -68,7 +70,7 @@ jobs:
           env_file="$RUNNER_TEMP/module4d-demo-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.env"
           project="module4d-d3-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           browser_image="instacart-module4d-demo-browser:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          compose=(docker compose --project-name "$project" --env-file "$env_file" -f deploy/module4/compose.demo.yaml)
+          compose=(docker compose --project-name "$project" --env-file "$env_file" -f deploy/dashboard/compose.demo.yaml)
           cleanup() {
             "${compose[@]}" down --remove-orphans >/dev/null 2>&1 || true
             rm -f "$env_file"
@@ -80,7 +82,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          python3 scripts/module4/module4d_demo_env.py --output "$env_file"
+          python3 scripts/dashboard/demo_env.py --output "$env_file"
           chmod 600 "$env_file"
           "${compose[@]}" config --quiet
           "${compose[@]}" build module4d-api module4d-ui

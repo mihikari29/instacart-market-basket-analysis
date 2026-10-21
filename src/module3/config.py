@@ -9,6 +9,10 @@ from dataclasses import dataclass
 import os
 import re
 
+# Re-exported so `from .config import parse_bool` keeps working for callers
+# that treat the Module 3 configuration module as the owner of the flag.
+from ..common.env import parse_bool
+
 DEFAULT_TOPIC = "instacart-purchase-events"
 DEFAULT_MONGO_TOP_K = 20
 DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -27,20 +31,6 @@ def _validate_stable_label(value: str | None, field: str, maximum: int) -> None:
             f"{field} must use 1-{maximum} letters, digits, '.', '_', ':', '/', or '-'; "
             "it must start with a letter or digit"
         )
-
-
-def parse_bool(value: str | bool) -> bool:
-    """Parse an explicit environment/CLI boolean without truthy-string traps."""
-    if isinstance(value, bool):
-        return value
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(
-        "Boolean value must be one of: true, false, 1, 0, yes, no, on, off"
-    )
 
 
 @dataclass(frozen=True)

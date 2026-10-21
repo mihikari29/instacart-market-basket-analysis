@@ -17,6 +17,13 @@ from typing import Any, Mapping, Protocol
 
 import yaml
 
+from .constants import (
+    PIPELINE_STORAGE_BUDGET,
+    claim_names,
+    demo_database,
+    expected_claim_requests,
+    pipeline_job_name,
+)
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
 from .runtime import containerd_image_inventory_command, kubectl
 
@@ -354,12 +361,12 @@ def load_pipeline_images(
     """Load four digest-locked B3 images only into the explicitly named profile."""
     if execute is not True:
         raise PipelineError("B3 image loading requires explicit execute=True authorization")
-    _validate_pipeline_lock(lock)
+    validate_pipeline_lock(lock)
     if lock["cluster"].get("profile") != identity.profile or lock["cluster"].get("context") != identity.profile:
         raise PipelineError("B3 version lock does not identify the requested profile")
     expected = {}
     for role in PIPELINE_IMAGE_ROLES:
-        reference = _locked_image(lock, role)
+        reference = locked_image(lock, role)
         image_digest = lock["images"][role]["immutable_digest"]
         provenance = lock.get("pipeline_image_provenance", {}) if role == "pipeline_application_image" else {}
         config_digest = (
@@ -461,7 +468,7 @@ def plan_pipeline(
     )
 
 
-def _locked_image(lock: Mapping[str, Any], role: str) -> str:
+def locked_image(lock: Mapping[str, Any], role: str) -> str:
     images = lock.get("images")
     item = images.get(role) if isinstance(images, Mapping) else None
     if not isinstance(item, Mapping):
@@ -480,13 +487,13 @@ def _locked_image(lock: Mapping[str, Any], role: str) -> str:
     return f"{base}@{digest}"
 
 
-def _validate_pipeline_lock(lock: Mapping[str, Any]) -> None:
+def validate_pipeline_lock(lock: Mapping[str, Any]) -> None:
     try:
         validate_version_lock(lock)
     except Exception as exc:
         raise PipelineError("B3 requires a finalized, complete B2 runtime lock") from exc
     for role in PIPELINE_IMAGE_ROLES:
-        _locked_image(lock, role)
+        locked_image(lock, role)
     component_provenance = lock.get("pipeline_component_image_provenance")
     if not isinstance(component_provenance, Mapping) or set(component_provenance) != set(PIPELINE_COMPONENT_IMAGE_ROLES):
         raise PipelineError("B3 lock is missing component image digest, config, and platform provenance")
@@ -576,8 +583,7 @@ def validate_pipeline_manifest_sources(manifest_directory: Path | str = PIPELINE
         for item in platform if item.get("kind") == "PersistentVolumeClaim"
     }
     expected_claims = {
-        "it4931-hdfs-namenode", "it4931-hdfs-datanode", "it4931-kafka-data",
-        "it4931-pipeline-data", "it4931-pipeline-checkpoints",
+        *claim_names(),
     }
     if claims != expected_claims:
         raise PipelineError("B3 pipeline storage claims do not match the isolated storage contract")
@@ -585,14 +591,8 @@ def validate_pipeline_manifest_sources(manifest_directory: Path | str = PIPELINE
         item.get("metadata", {}).get("name"): item.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
         for item in platform if item.get("kind") == "PersistentVolumeClaim"
     }
-    if claim_requests != {
-        "it4931-hdfs-namenode": "1Gi",
-        "it4931-hdfs-datanode": "16Gi",
-        "it4931-kafka-data": "2Gi",
-        "it4931-pipeline-data": "16Gi",
-        "it4931-pipeline-checkpoints": "2Gi",
-    }:
-        raise PipelineError("B3 PVC requests do not match the 39 GiB run storage budget")
+    if claim_requests != expected_claim_requests():
+        raise PipelineError(f"B3 PVC requests do not match the {PIPELINE_STORAGE_BUDGET} run storage budget")
     kafka = next(
         item for item in platform
         if item.get("kind") == "StatefulSet" and item.get("metadata", {}).get("name") == "kafka"
@@ -693,7 +693,7 @@ def render_pipeline_assets(
 ) -> Path:
     """Write digest-pinned B3 manifests beneath an existing private B2 render."""
     validate_pipeline_manifest_sources()
-    _validate_pipeline_lock(lock)
+    validate_pipeline_lock(lock)
     plan = plan_pipeline(
         identity, mode=mode, host_capacity=host_capacity,
         source_receipt_sha256=source_receipt_sha256,
@@ -701,7 +701,7 @@ def render_pipeline_assets(
     as_of_event_time = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     root = Path(render_root)
     _validate_render_root(root, identity)
-    images = {role: _locked_image(lock, role) for role in PIPELINE_IMAGE_ROLES}
+    images = {role: locked_image(lock, role) for role in PIPELINE_IMAGE_ROLES}
     output = root / "pipeline"
     output.mkdir(mode=0o700, exist_ok=False)
     for source_name in ("platform.yaml", "network-policies.yaml"):
@@ -740,7 +740,7 @@ def render_pipeline_assets(
                 pod_labels.update(owner_labels)
         _dump_yaml(output / name, documents)
 
-    database = f"module4d_demo_{identity.run_id}"
+    database = demo_database(identity.run_id)
 
     template = _load_yaml(PIPELINE_MANIFESTS / "job.yaml")[0]
     for step in plan.steps:
@@ -887,7 +887,7 @@ def validate_pipeline_plan(
     input_directory: Path | str | None,
 ) -> dict[str, Any]:
     """Validate the private rendered plan using the same contract as execution."""
-    _validate_pipeline_lock(lock)
+    validate_pipeline_lock(lock)
     directory = Path(pipeline_directory).resolve(strict=True)
     render_root = directory.parent
     _validate_render_root(render_root, identity)
@@ -983,11 +983,11 @@ def validate_pipeline_plan(
 def _direct_pipeline_resources(identity: RunIdentity) -> set[tuple[str, str]]:
     return {
         *{("ConfigMap", "it4931-pipeline-config"), ("ServiceAccount", "module4d-pipeline")},
-        *{("PersistentVolumeClaim", name) for name in ("it4931-hdfs-namenode", "it4931-hdfs-datanode", "it4931-kafka-data", "it4931-pipeline-data", "it4931-pipeline-checkpoints")},
+        *{("PersistentVolumeClaim", name) for name in claim_names()},
         *{("Service", name) for name in ("namenode", "datanode", "kafka")},
         *{("StatefulSet", name) for name in ("hdfs-namenode", "hdfs-datanode", "kafka")},
         *{("NetworkPolicy", name) for name in PIPELINE_POLICY_NAMES},
-        *{("Job", f"it4931-{step}-{identity.run_id}") for step in PIPELINE_STEPS},
+        *{("Job", pipeline_job_name(step, identity.run_id)) for step in PIPELINE_STEPS},
         *{("Pod", f"{name}-0") for name in ("hdfs-namenode", "hdfs-datanode", "kafka")},
     }
 
@@ -1007,7 +1007,7 @@ def execute_pipeline(
     """Apply isolated platform resources and run Jobs in their strict dependency order."""
     if execute is not True:
         raise PipelineError("B3 execution requires explicit execute=True authorization")
-    _validate_pipeline_lock(lock)
+    validate_pipeline_lock(lock)
     from .runtime import RuntimePreflightError, validate_host_capacity
 
     try:
@@ -1065,7 +1065,7 @@ def execute_pipeline(
     execution_receipt_path = directory / "execution-receipt.json"
     _checked(executor, kubectl(identity, "apply", "-f", str(directory / "platform.yaml")), "pipeline platform apply", 120)
     _checked(executor, kubectl(identity, "apply", "-f", str(directory / "network-policies.yaml")), "pipeline network-policy apply", 120)
-    for claim in ("it4931-hdfs-namenode", "it4931-hdfs-datanode", "it4931-kafka-data", "it4931-pipeline-data", "it4931-pipeline-checkpoints"):
+    for claim in claim_names():
         _checked(
             executor,
             kubectl(identity, "--namespace", identity.namespace, "wait", "--for=jsonpath={.status.phase}=Bound", f"pvc/{claim}", "--timeout=900s"),
@@ -1214,5 +1214,5 @@ def finalize_pipeline_lock(
         validate_static_lock(result)
     except Exception as exc:
         raise PipelineError("B3 lock evidence does not satisfy the static lock contract") from exc
-    _validate_pipeline_lock(result)
+    validate_pipeline_lock(result)
     return result

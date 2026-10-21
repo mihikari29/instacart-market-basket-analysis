@@ -1,9 +1,10 @@
 """Bounded read-only access to Module 2's published MongoDB snapshots."""
 
 from __future__ import annotations
+from ...common.type_guards import stored_utc
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime
 import math
 from numbers import Integral, Real
 from typing import Any
@@ -80,16 +81,6 @@ def _finite_number(value: Any, field: str, *, minimum: float, maximum: float) ->
     return result
 
 
-def _stored_utc(value: Any, field: str) -> datetime:
-    if not isinstance(value, datetime):
-        raise InvalidBatchDocument(f"{field} must be a BSON datetime")
-    try:
-        if value.tzinfo is None or value.utcoffset() is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-    except (OverflowError, ValueError) as exc:
-        raise InvalidBatchDocument(f"{field} is not a valid UTC instant") from exc
-
 
 def _run_id(value: Any) -> str:
     if not isinstance(value, str) or not value or len(value) > 128 or value != value.strip():
@@ -117,7 +108,7 @@ def _validated_product(document: Mapping[str, Any]) -> dict[str, Any]:
         "reorder_count": reorder_count,
         "reorder_rate": reorder_rate,
         "run_id": _run_id(document.get("run_id")),
-        "last_batch_time": _stored_utc(document.get("last_batch_time"), "last_batch_time"),
+        "last_batch_time": stored_utc(document.get("last_batch_time"), "last_batch_time", error=InvalidBatchDocument),
     }
 
 
@@ -136,7 +127,7 @@ def _validated_department(document: Mapping[str, Any]) -> dict[str, Any]:
         "unique_users": unique_users,
         "reorder_rate": _finite_number(document.get("reorder_rate"), "reorder_rate", minimum=0, maximum=1),
         "run_id": _run_id(document.get("run_id")),
-        "last_batch_time": _stored_utc(document.get("last_batch_time"), "last_batch_time"),
+        "last_batch_time": stored_utc(document.get("last_batch_time"), "last_batch_time", error=InvalidBatchDocument),
     }
 
 

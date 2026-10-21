@@ -14,7 +14,7 @@ import pytest
 from pymongo import MongoClient
 from pymongo.uri_parser import parse_uri
 
-from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, _build_document
+from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, build_document
 from src.module4.hybrid.data import READINESS_COLLECTION
 from src.module4.hybrid.sink_mongo import FINAL_RECOMMENDATIONS_COLLECTION
 
@@ -187,7 +187,7 @@ def _bundle_document(
         }
         for rank, (product_id, score) in enumerate(specifications, start=1)
     ]
-    return _build_document(
+    return build_document(
         {
             "window_start": window_start,
             "window_end": window_end,

@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .ownership import OWNER_LABEL, OWNER_VALUE, RUN_LABEL, RunIdentity
-from .runtime import CommandExecutor, RuntimePreflightError, _json_output, _checked, kubectl
+from .runtime import CommandExecutor, RuntimePreflightError, json_output, checked, kubectl
 from .pipeline import PIPELINE_POLICY_NAMES, PipelineError, validate_pipeline_policy_inventory
 
 
@@ -152,8 +152,8 @@ def collect_network_policy_inventory(
     if execute is not True:
         raise NetworkPolicyError("live policy discovery requires explicit execute=True authorization")
     try:
-        payload = _json_output(
-            _checked(executor, kubectl(identity, "--namespace", identity.namespace, "get", "networkpolicies", "-o", "json")),
+        payload = json_output(
+            checked(executor, kubectl(identity, "--namespace", identity.namespace, "get", "networkpolicies", "-o", "json")),
             "NetworkPolicy inventory",
         )
     except RuntimePreflightError:

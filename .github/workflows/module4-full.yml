@@ -67,7 +67,7 @@ jobs:
       - name: Run D1A/D1B API and isolated MongoDB tests
         run: |
           set -o pipefail
-          python3 scripts/module4/module4d_api_validation.py --mode all \
+          python3 scripts/dashboard/api_validation.py --mode all \
             2>&1 | tee results/module4/acceptance-ci/module4d-api-validation.txt
       - name: Validate full input through host wrapper
         run: |

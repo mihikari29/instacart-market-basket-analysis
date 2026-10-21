@@ -7,7 +7,6 @@ the B2 and B3 ownership receipts. This module never tears resources down.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -15,8 +14,10 @@ from typing import Any, Mapping, Protocol
 
 import yaml
 
+from .constants import acceptance_job_name, demo_database
+from .io import redact_secrets, sha256_bytes, sha256_json
 from .ownership import RunIdentity
-from .pipeline import PIPELINE_MANIFESTS, PipelineError, _locked_image, _validate_pipeline_lock
+from .pipeline import PIPELINE_MANIFESTS, PipelineError, locked_image, validate_pipeline_lock
 from .pipeline_receipts import (
     assert_pipeline_receipt_matches_live,
     collect_pipeline_receipt,
@@ -27,7 +28,7 @@ from .receipts import (
     collect_runtime_ownership_receipt,
     receipt_from_document,
 )
-from .runtime import _checked, _json_output, kubectl
+from .runtime import checked, json_output, kubectl
 
 
 ACCEPTANCE_SCENARIOS = frozenset({
@@ -49,8 +50,6 @@ ACCEPTANCE_SCENARIOS = frozenset({
 RUNTIME_SCOPES = frozenset({"fixture_runtime", "full_data_runtime"})
 SCOPE_VALUES = frozenset({"static", "offline", "ci", *RUNTIME_SCOPES})
 _HEX_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_MONGO_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
-_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
 class AcceptanceError(RuntimeError):
@@ -62,15 +61,7 @@ class AcceptanceExecutor(Protocol):
 
 
 def _safe_text(value: str) -> str:
-    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", _MONGO_URI.sub("mongodb://<redacted>", value))
-
-
-def _sha256_bytes(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
-
-
-def _sha256_json(value: Any) -> str:
-    return _sha256_bytes(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode())
+    return redact_secrets(value)
 
 
 def classify_acceptance(scope: str, checks: list[Mapping[str, Any]], *, runtime_identity_complete: bool) -> str:
@@ -152,7 +143,7 @@ def render_acceptance_job(
     pipeline_directory: Path | str,
 ) -> Path:
     """Render the B4 Job into the private B2/B3 run tree with immutable images."""
-    _validate_pipeline_lock(lock)
+    validate_pipeline_lock(lock)
     root = Path(pipeline_directory).resolve(strict=True)
     if root.name != "pipeline" or not (root / "plan.json").is_file():
         raise AcceptanceError("B4 Job must be rendered beneath the private completed B3 plan")
@@ -167,11 +158,11 @@ def render_acceptance_job(
         raise AcceptanceError("B4 Job manifest already exists for this run")
     if not isinstance(template, dict) or template.get("kind") != "Job":
         raise AcceptanceError("B4 Job template has an unsupported structure")
-    database = f"module4d_demo_{identity.run_id}"
+    database = demo_database(identity.run_id)
     replacements = {
         "__K8S_RENDER_REQUIRED__": identity.namespace,
         "__RUN_ID__": identity.run_id,
-        "__PIPELINE_IMAGE__": _locked_image(lock, "pipeline_application_image"),
+        "__PIPELINE_IMAGE__": locked_image(lock, "pipeline_application_image"),
         "__DATABASE__": database,
     }
     document = json.loads(json.dumps(template))
@@ -188,7 +179,7 @@ def render_acceptance_job(
     return output
 
 
-def _read_receipt(source: Path | str | Mapping[str, Any], description: str) -> tuple[dict[str, Any], str]:
+def read_receipt(source: Path | str | Mapping[str, Any], description: str) -> tuple[dict[str, Any], str]:
     try:
         if isinstance(source, Mapping):
             value = dict(source)
@@ -201,13 +192,13 @@ def _read_receipt(source: Path | str | Mapping[str, Any], description: str) -> t
         raise AcceptanceError(f"{description} receipt could not be read") from exc
     if not isinstance(value, dict):
         raise AcceptanceError(f"{description} receipt is malformed")
-    return value, _sha256_bytes(encoded)
+    return value, sha256_bytes(encoded)
 
 
 def _get_json(executor: AcceptanceExecutor, identity: RunIdentity, command: list[str], description: str) -> dict[str, Any]:
     try:
-        result = _checked(executor, command)
-        value = _json_output(result, description)
+        result = checked(executor, command)
+        value = json_output(result, description)
     except Exception as exc:
         raise AcceptanceError(f"{description} could not be collected") from exc
     if not isinstance(value, dict):
@@ -265,7 +256,7 @@ def _probe_api_ui(executor: AcceptanceExecutor, identity: RunIdentity) -> str:
         or payload.get("ui_status") != 200 or payload.get("api_paths", 0) < 1
     ):
         raise AcceptanceError("B4 API/UI probe returned an unexpected HTTP contract")
-    return _sha256_json({"api_readiness": api_output, "ui_api_probe": payload})
+    return sha256_json({"api_readiness": api_output, "ui_api_probe": payload})
 
 
 def _validate_task_result(value: Any, identity: RunIdentity, mode: str) -> list[dict[str, Any]]:
@@ -310,11 +301,11 @@ def run_acceptance(
     if mode not in {"fixture", "full"}:
         raise AcceptanceError("B4 mode must be fixture or full")
     try:
-        _validate_pipeline_lock(lock)
+        validate_pipeline_lock(lock)
     except (PipelineError, KeyError, TypeError) as exc:
         raise AcceptanceError("B4 requires a complete B3 lock") from exc
-    b2_document, b2_sha = _read_receipt(b2_receipt, "B2")
-    b3_document, b3_sha = _read_receipt(b3_receipt, "B3")
+    b2_document, b2_sha = read_receipt(b2_receipt, "B2")
+    b3_document, b3_sha = read_receipt(b3_receipt, "B3")
     try:
         recorded_b2 = receipt_from_document(b2_document)
         live_b2 = collect_runtime_ownership_receipt(executor, identity, lock, execute=True)
@@ -342,7 +333,7 @@ def run_acceptance(
     )}
     locked_images["pipeline_image_provenance"] = lock["pipeline_image_provenance"]
     locked_images["pipeline_component_image_provenance"] = lock["pipeline_component_image_provenance"]
-    expected_lock_digest = _sha256_bytes(json.dumps(locked_images, sort_keys=True).encode())
+    expected_lock_digest = sha256_bytes(json.dumps(locked_images, sort_keys=True).encode())
     if (
         plan.get("mode") != mode or plan.get("run_id") != identity.run_id
         or plan.get("profile") != identity.profile or plan.get("namespace") != identity.namespace
@@ -350,7 +341,7 @@ def run_acceptance(
     ):
         raise AcceptanceError("B4 mode or image lock differs from the private B3 run plan")
     job_path = render_acceptance_job(identity, lock, pipeline_root)
-    job_name = f"it4931-acceptance-{identity.run_id}"
+    job_name = acceptance_job_name(identity.run_id)
     task_result_path = pipeline_root / "acceptance-task-result.json"
     job_log_path = pipeline_root / "acceptance-job.log"
     if any(path.exists() or path.is_symlink() for path in (task_result_path, job_log_path)):
@@ -404,7 +395,7 @@ def run_acceptance(
         container_status = next(
             (item for item in pod_status.get("containerStatuses", []) if item.get("name") == "acceptance"), None,
         )
-        expected_image = _locked_image(lock, "pipeline_application_image")
+        expected_image = locked_image(lock, "pipeline_application_image")
         if (
             job_status.get("succeeded") != 1 or job_status.get("failed", 0) != 0
             or job_status.get("active", 0) != 0 or pod_status.get("phase") != "Succeeded"
@@ -436,31 +427,31 @@ def run_acceptance(
         api_digest = _probe_api_ui(executor, identity)
         checks.append({"name": "api_ui_smoke", "status": "passed", "evidence_sha256": api_digest})
         storage_identity = {
-            "b2": _sha256_json(b2_document),
-            "b3": _sha256_json(b3_document),
+            "b2": sha256_json(b2_document),
+            "b3": sha256_json(b3_document),
             "b2_matches_live": True,
             "b3_matches_live": True,
         }
-        checks.append({"name": "storage_provenance", "status": "passed", "evidence_sha256": _sha256_json(storage_identity)})
+        checks.append({"name": "storage_provenance", "status": "passed", "evidence_sha256": sha256_json(storage_identity)})
         cluster_uid = live_b3.cluster_uid
         namespace_uid = live_b3.namespace_uid
-        lock_sha = _sha256_json(lock)
+        lock_sha = sha256_json(lock)
         receipt = build_acceptance_receipt(
             identity=identity, scope=task_result["scope"], checks=checks,
             cluster_uid=cluster_uid, namespace_uid=namespace_uid,
             acceptance_job_uid=job_meta["uid"], acceptance_pod_uid=pod_meta["uid"],
             lock_sha256=lock_sha, b2_receipt_sha256=b2_sha, b3_receipt_sha256=b3_sha,
         )
-        receipt["task_result_sha256"] = _sha256_json(task_result)
-        receipt["sanitized_job_log_sha256"] = _sha256_bytes(log_output.encode())
+        receipt["task_result_sha256"] = sha256_json(task_result)
+        receipt["sanitized_job_log_sha256"] = sha256_bytes(log_output.encode())
         task_result_path.write_text(json.dumps(task_result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         task_result_path.chmod(0o600)
         job_log_path.write_text(log_output, encoding="utf-8")
         job_log_path.chmod(0o600)
         receipt["task_result_path"] = str(task_result_path)
-        receipt["task_result_file_sha256"] = _sha256_bytes(task_result_path.read_bytes())
+        receipt["task_result_file_sha256"] = sha256_bytes(task_result_path.read_bytes())
         receipt["job_log_path"] = str(job_log_path)
-        receipt["job_log_file_sha256"] = _sha256_bytes(job_log_path.read_bytes())
+        receipt["job_log_file_sha256"] = sha256_bytes(job_log_path.read_bytes())
         receipt["runtime_status_note"] = (
             "fixture runtime evidence only; it is not full-data acceptance"
             if mode == "fixture" else "full-data runtime scope"
@@ -548,4 +539,4 @@ def collect_failure_evidence(
     encoded = json.dumps(evidence, sort_keys=True, indent=2).encode() + b"\n"
     destination.write_bytes(encoded)
     destination.chmod(0o600)
-    return {"path": str(destination), "sha256": _sha256_bytes(encoded), "pods": len(pod_names), "status": "captured"}
+    return {"path": str(destination), "sha256": sha256_bytes(encoded), "pods": len(pod_names), "status": "captured"}

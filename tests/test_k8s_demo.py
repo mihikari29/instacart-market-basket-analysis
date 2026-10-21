@@ -12,9 +12,9 @@ from contextlib import redirect_stdout
 from scripts.k8s.demo import (
     DemoError,
     REPOSITORY_ROOT,
-    _plan_document,
-    _require_absent_namespace,
-    _acceptance_passed,
+    plan_document,
+    require_absent_namespace,
+    acceptance_passed,
     _validate_mode_inputs,
     main,
     run_demo,
@@ -22,7 +22,7 @@ from scripts.k8s.demo import (
 )
 from scripts.k8s.ownership import RunIdentity
 from scripts.k8s.runtime import CommandResult
-from tests.test_k8s_pipeline import _complete_b3_lock
+from tests.test_k8s_pipeline import complete_b3_lock
 from scripts.k8s.fixture_data import write_fixture
 
 
@@ -39,7 +39,7 @@ class FakeCommandExecutor:
 class DemoRunnerOfflineTests(unittest.TestCase):
     def test_plan_records_stable_dependency_order_and_fixture_bounds(self):
         identity = RunIdentity("0123456789ab")
-        plan = _plan_document(identity, "fixture", host_capacity={"cpu_cores": 8})
+        plan = plan_document(identity, "fixture", host_capacity={"cpu_cores": 8})
         self.assertEqual(plan["stages"][:5], [
             "local_identity", "profile_creation", "application_images", "pipeline_images", "lock_finalization",
         ])
@@ -83,20 +83,20 @@ class DemoRunnerOfflineTests(unittest.TestCase):
             self.assertEqual(status, 2)
 
     def test_full_data_acceptance_scope_matches_runtime_receipt(self):
-        self.assertTrue(_acceptance_passed("full", {
+        self.assertTrue(acceptance_passed("full", {
             "status": "full_data_runtime_pass", "scope": "full_data_runtime",
         }))
-        self.assertTrue(_acceptance_passed("fixture", {
+        self.assertTrue(acceptance_passed("fixture", {
             "status": "fixture_runtime_pass", "scope": "fixture_runtime",
         }))
-        self.assertFalse(_acceptance_passed("full", {
+        self.assertFalse(acceptance_passed("full", {
             "status": "full_data_runtime_pass", "scope": "full_runtime",
         }))
 
     def test_namespace_preflight_uses_only_explicit_profile_and_rejects_collisions(self):
         identity = RunIdentity("0123456789ab")
         executor = FakeCommandExecutor(CommandResult(0, '{"items":[]}'))
-        _require_absent_namespace(executor, identity)
+        require_absent_namespace(executor, identity)
         command = executor.calls[0][0]
         self.assertEqual(command[:3], ["kubectl", "--context", identity.profile])
         self.assertNotIn("current-context", command)
@@ -105,7 +105,7 @@ class DemoRunnerOfflineTests(unittest.TestCase):
             {"metadata": {"name": identity.namespace}},
         ]})))
         with self.assertRaisesRegex(DemoError, "already exists"):
-            _require_absent_namespace(collision, identity)
+            require_absent_namespace(collision, identity)
 
     def test_run_requires_explicit_authorization_before_any_external_call(self):
         executor = FakeCommandExecutor(CommandResult(0, '{"items":[]}'))
@@ -161,7 +161,7 @@ class DemoRunnerOfflineTests(unittest.TestCase):
 
     def test_synthetic_runtime_pass_without_real_shaped_receipts_is_rejected(self):
         identity = RunIdentity("0123456789ab")
-        lock = _complete_b3_lock()
+        lock = complete_b3_lock()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "private-run"
             root.mkdir(mode=0o700)

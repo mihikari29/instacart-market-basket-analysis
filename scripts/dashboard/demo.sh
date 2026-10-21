@@ -24,7 +24,7 @@ down_demo() {
     return 1
   fi
   if ! docker compose --project-name "$project" --env-file "$env_file" \
-    -f deploy/module4/compose.demo.yaml down --remove-orphans; then
+    -f deploy/dashboard/compose.demo.yaml down --remove-orphans; then
     echo "Could not stop demo ${run_id}; keeping its private environment file." >&2
     return 1
   fi
@@ -81,9 +81,9 @@ cleanup_failed_start() {
 }
 trap cleanup_failed_start ERR INT TERM
 
-python3 scripts/module4/module4d_demo_env.py --output "$env_file"
+python3 scripts/dashboard/demo_env.py --output "$env_file"
 chmod 600 "$env_file"
-compose=(docker compose --project-name "$project" --env-file "$env_file" -f deploy/module4/compose.demo.yaml)
+compose=(docker compose --project-name "$project" --env-file "$env_file" -f deploy/dashboard/compose.demo.yaml)
 "${compose[@]}" config --quiet
 "${compose[@]}" build module4d-api module4d-ui
 "${compose[@]}" up -d module4d-mongo
@@ -95,4 +95,4 @@ trap - ERR INT TERM
 echo "Module 4D demo is available at http://127.0.0.1:18501"
 echo "API health: http://127.0.0.1:18000/health"
 echo "Run ID: ${run_id}"
-echo "Stop and discard the demo with: bash scripts/module4/module4d_demo.sh down ${run_id}"
+echo "Stop and discard the demo with: bash scripts/dashboard/demo.sh down ${run_id}"

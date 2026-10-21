@@ -25,13 +25,13 @@ from scripts.k8s.receipts import assert_receipt_matches_lock_and_live, validate_
 from scripts.k8s.pipeline_receipts import assert_pipeline_receipt_matches_live, validate_pipeline_receipt
 from scripts.k8s.teardown import (
     TeardownError,
-    _failure_evidence,
-    _verify_acceptance_artifacts,
-    _validate_complete_profile_inventory,
+    failure_evidence,
+    verify_acceptance_artifacts,
+    validate_complete_profile_inventory,
     teardown_run,
 )
-from tests.test_k8s_ownership import _complete_lock, _valid_runtime_receipt
-from tests.test_k8s_pipeline import _complete_b3_lock, _valid_pipeline_receipt
+from tests.test_k8s_ownership import complete_lock, valid_runtime_receipt
+from tests.test_k8s_pipeline import complete_b3_lock, valid_pipeline_receipt
 
 
 def _canonical_sha(value: object) -> str:
@@ -376,7 +376,7 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "failed")
 
     def test_acceptance_manifest_uses_locked_pipeline_image_and_run_identity(self):
-        lock = _complete_b3_lock()
+        lock = complete_b3_lock()
         identity = self.identity
         with tempfile.TemporaryDirectory() as temporary:
             pipeline = Path(temporary) / "pipeline"
@@ -440,7 +440,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 "namespace": self.identity.namespace,
             }))
             with self.assertRaisesRegex(TeardownError, "SHA-256"):
-                _failure_evidence({"path": str(evidence), "sha256": "0" * 64}, identity=self.identity)
+                failure_evidence({"path": str(evidence), "sha256": "0" * 64}, identity=self.identity)
 
             task = root / "task.json"
             log = root / "job.log"
@@ -454,10 +454,10 @@ class AcceptanceContractTests(unittest.TestCase):
                 "job_log_path": str(log),
                 "job_log_file_sha256": hashlib.sha256(log.read_bytes()).hexdigest(),
             }
-            _verify_acceptance_artifacts(receipt)
+            verify_acceptance_artifacts(receipt)
             log.write_text("changed\n")
             with self.assertRaisesRegex(TeardownError, "changed"):
-                _verify_acceptance_artifacts(receipt)
+                verify_acceptance_artifacts(receipt)
 
     def _inventory_receipts(self):
         owned = SimpleNamespace(
@@ -477,7 +477,7 @@ class AcceptanceContractTests(unittest.TestCase):
         b2, b3 = self._inventory_receipts()
         executor = FakeProfileInventoryExecutor(self.identity)
 
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
         )
 
@@ -525,14 +525,14 @@ class AcceptanceContractTests(unittest.TestCase):
 
         self_identity = self.identity
         valid = RevisionExecutor("mongo-sts-uid")
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             valid, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
         )
         self.assertFalse(any("delete" in call for call in valid.calls))
 
         foreign = RevisionExecutor("foreign-sts-uid")
         with self.assertRaisesRegex(TeardownError, "owner chain"):
-            _validate_complete_profile_inventory(
+            validate_complete_profile_inventory(
                 foreign, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
             )
         self.assertFalse(any("delete" in call for call in foreign.calls))
@@ -552,7 +552,7 @@ class AcceptanceContractTests(unittest.TestCase):
             }
             executor = FakeProfileInventoryExecutor(self.identity, foreign=foreign)
             with self.subTest(labels=labels), self.assertRaisesRegex(TeardownError, "foreign resource"):
-                _validate_complete_profile_inventory(
+                validate_complete_profile_inventory(
                     executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
             self.assertFalse(any("delete" in call for call in executor.calls))
@@ -564,7 +564,7 @@ class AcceptanceContractTests(unittest.TestCase):
             (FakeProfileInventoryExecutor(self.identity, stale_uid=True), "differs from its receipt"),
         ):
             with self.subTest(message=message), self.assertRaisesRegex(TeardownError, message):
-                _validate_complete_profile_inventory(
+                validate_complete_profile_inventory(
                     executor, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
             self.assertFalse(any("delete" in call for call in executor.calls))
@@ -574,9 +574,9 @@ class AcceptanceContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "teardown.json"
             with (
-                patch("scripts.k8s.teardown._validate_pipeline_lock"),
-                patch("scripts.k8s.teardown._read_receipt", side_effect=[({}, "a" * 64), ({}, "b" * 64)]),
-                patch("scripts.k8s.teardown._failure_evidence", return_value=({}, "c" * 64)),
+                patch("scripts.k8s.teardown.validate_pipeline_lock"),
+                patch("scripts.k8s.teardown.read_receipt", side_effect=[({}, "a" * 64), ({}, "b" * 64)]),
+                patch("scripts.k8s.teardown.failure_evidence", return_value=({}, "c" * 64)),
                 patch("scripts.k8s.teardown.receipt_from_document", return_value=object()),
                 patch("scripts.k8s.teardown.collect_runtime_ownership_receipt", return_value=object()),
                 patch("scripts.k8s.teardown.assert_receipt_matches_lock_and_live"),
@@ -589,7 +589,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 patch("scripts.k8s.teardown._live_acceptance_job", return_value=(None, None)),
                 patch("scripts.k8s.teardown._acceptance_job_identity_from_failure", return_value=(None, None)),
                 patch(
-                    "scripts.k8s.teardown._validate_complete_profile_inventory",
+                    "scripts.k8s.teardown.validate_complete_profile_inventory",
                     side_effect=TeardownError("foreign resource detected"),
                 ) as validate_inventory,
             ):
@@ -600,7 +600,7 @@ class AcceptanceContractTests(unittest.TestCase):
                         {},
                         b2_receipt={},
                         b3_receipt={},
-                        failure_evidence={},
+                        failure_evidence_path={},
                         teardown_receipt_path=output,
                         execute=True,
                     )
@@ -609,9 +609,9 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual(executor.calls, [])
 
     def _genuine_b2_b3_receipts(self):
-        b2_lock = _complete_lock()
-        b3_lock = _complete_b3_lock()
-        b2 = _valid_runtime_receipt(self.identity)
+        b2_lock = complete_lock()
+        b3_lock = complete_b3_lock()
+        b2 = valid_runtime_receipt(self.identity)
         b2 = replace(
             b2,
             objects=tuple(
@@ -624,7 +624,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 for item in b2.objects
             ),
         )
-        b3 = _valid_pipeline_receipt(self.identity, b3_lock)
+        b3 = valid_pipeline_receipt(self.identity, b3_lock)
         b3 = replace(b3, namespace_uid=b2.namespace_uid)
         validate_collected_receipt(b2, b2_lock)
         assert_receipt_matches_lock_and_live(b2, b2, b2_lock, self.identity)
@@ -676,7 +676,7 @@ class AcceptanceContractTests(unittest.TestCase):
             self.identity, b2, b3, acceptance_job_uid=job_uid, acceptance_pod_uid=pod_uid,
         )
 
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             executor, self.identity, b2, b3,
             acceptance_job_uid=job_uid, acceptance_pod_uid=pod_uid,
         )
@@ -698,7 +698,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 self.identity, b2, b3, derived_mutation=mutation,
             )
             with self.subTest(mutation=mutation), self.assertRaisesRegex(TeardownError, expected):
-                _validate_complete_profile_inventory(
+                validate_complete_profile_inventory(
                     executor, self.identity, b2, b3,
                     acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
@@ -710,14 +710,14 @@ class AcceptanceContractTests(unittest.TestCase):
         valid = ReceiptInventoryExecutor(self.identity, b2, b3)
         endpoints = valid.resources["endpoints"][0]
         self.assertEqual(endpoints["metadata"]["ownerReferences"], [])
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             valid, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
         )
 
         multiple_groups = ReceiptInventoryExecutor(
             self.identity, b2, b3, endpoint_mutation="multiple_subsets_valid",
         )
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             multiple_groups, self.identity, b2, b3, acceptance_job_uid=None, acceptance_pod_uid=None,
         )
         self.assertEqual(len(multiple_groups.resources["endpoints"][0]["subsets"]), 2)
@@ -740,7 +740,7 @@ class AcceptanceContractTests(unittest.TestCase):
                 self.identity, b2, b3, endpoint_mutation=mutation,
             )
             with self.subTest(mutation=mutation), self.assertRaisesRegex(TeardownError, message):
-                _validate_complete_profile_inventory(
+                validate_complete_profile_inventory(
                     executor, self.identity, b2, b3,
                     acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
@@ -782,7 +782,7 @@ class AcceptanceContractTests(unittest.TestCase):
         )
         for executor, message in cases:
             with self.subTest(message=message), self.assertRaisesRegex(TeardownError, message):
-                _validate_complete_profile_inventory(
+                validate_complete_profile_inventory(
                     executor, self.identity, b2, b3,
                     acceptance_job_uid=None, acceptance_pod_uid=None,
                 )
@@ -791,7 +791,7 @@ class AcceptanceContractTests(unittest.TestCase):
         executor = ReceiptInventoryExecutor(self.identity, b2, b3)
         executor.resources["deployments.apps"].append(foreign_workload)
         with self.assertRaisesRegex(TeardownError, "foreign resource"):
-            _validate_complete_profile_inventory(
+            validate_complete_profile_inventory(
                 executor, self.identity, b2, b3,
                 acceptance_job_uid=None, acceptance_pod_uid=None,
             )
@@ -847,7 +847,7 @@ class AcceptanceContractTests(unittest.TestCase):
                     teardown_run(
                         executor, self.identity, b3_lock,
                         b2_receipt=b2_doc, b3_receipt=b3_doc,
-                        acceptance_receipt=b4, failure_evidence=evidence,
+                        acceptance_receipt=b4, failure_evidence_path=evidence,
                         teardown_receipt_path=root / "teardown.json", execute=True,
                     )
             self.assertFalse(any("delete" in call for call in executor.calls))

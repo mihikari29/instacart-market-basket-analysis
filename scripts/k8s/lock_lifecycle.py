@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-import hashlib
 import os
 from pathlib import Path
 import re
@@ -234,12 +233,3 @@ def write_finalized_lock(path: Path | str, lock: Mapping[str, Any]) -> Path:
     return destination
 
 
-def sha256_file(path: Path | str) -> str:
-    digest = hashlib.sha256()
-    try:
-        with Path(path).open("rb") as handle:
-            for block in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(block)
-    except OSError as exc:
-        raise LockLifecycleError("build metadata file could not be hashed") from exc
-    return digest.hexdigest()

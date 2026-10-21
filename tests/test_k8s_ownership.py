@@ -29,12 +29,11 @@ from scripts.k8s.ownership import (
     validate_target,
     validate_version_lock,
 )
-from scripts.k8s.pipeline_receipts import PipelineReceiptError, _pv_spec_capacity as _pipeline_pv_spec_capacity
 from scripts.k8s.receipts import (
     ReceiptCollectionError,
     _locked_image_digest,
-    _pv_spec_capacity,
     _validate_mongo_claim_template,
+    pv_spec_capacity,
     receipt_from_document,
     receipt_json,
 )
@@ -45,7 +44,7 @@ _DIGEST_A = "sha256:" + "a" * 64
 _DIGEST_B = "sha256:" + "b" * 64
 
 
-def _complete_lock() -> dict:
+def complete_lock() -> dict:
     return {
         "schema_version": 1,
         "status": "complete",
@@ -132,10 +131,10 @@ def _complete_lock() -> dict:
     }
 
 
-def _valid_runtime_receipt(identity: RunIdentity | None = None) -> RuntimeOwnershipReceipt:
+def valid_runtime_receipt(identity: RunIdentity | None = None) -> RuntimeOwnershipReceipt:
     """Build genuine B2 dataclasses for cross-layer offline ownership tests."""
     identity = identity or RunIdentity("0123456789ab")
-    lock = _complete_lock()
+    lock = complete_lock()
     direct = ALLOWED_RESOURCE_INVENTORY | frozenset(
         {
             ("ConfigMap", "module4d-mongo-bootstrap"),
@@ -325,7 +324,7 @@ class OwnershipTests(unittest.TestCase):
             validate_receipt(identity, replace(receipt, storage=(bad_storage,)))
 
     def test_version_lock_requires_complete_coherent_deployment_identity(self) -> None:
-        validate_version_lock(_complete_lock())
+        validate_version_lock(complete_lock())
         with self.assertRaisesRegex(OwnershipError, "incomplete"):
             validate_version_lock({"schema_version": 1, "status": "incomplete", "unresolved": ["host capacity"]})
 
@@ -336,56 +335,56 @@ class OwnershipTests(unittest.TestCase):
             validate_version_lock(committed)
 
         cases: list[tuple[str, dict]] = []
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["cluster"]["driver"] = "unknown"
         cases.append(("placeholder driver", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["cluster"]["architecture"] = "unknown-host-architecture"
         cases.append(("placeholder architecture", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["images"]["ui_application_image"]
         cases.append(("missing application image role", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["images"]["mongo"]["reference"] = "mongo:7.0.16@sha256:bad"
         cases.append(("malformed base image digest", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["images"]["api_application_image"]["reference"] = f"registry.local/api:b1@{_DIGEST_A}"
         candidate["images"]["api_application_image"]["immutable_digest"] = _DIGEST_B
         cases.append(("contradictory image identity", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["python_dependencies"]["resolved_environment_digests"]["spark_parent"] = "unresolved"
         cases.append(("unresolved dependency digest", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["toolchain"]["calico_images"]["node"]
         cases.append(("missing Calico image role", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["toolchain"]["kubernetes_control_plane_images"]["etcd"]
         cases.append(("missing control-plane image role", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["storage"]["provisioner"]
         cases.append(("missing storage declaration", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["host_capacity"]["memory_gib"] = float("nan")
         cases.append(("non-finite host measurement", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["image_provenance"]["api_application_image"]
         cases.append(("missing image provenance", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["cluster"]["cluster_uid"] = "unresolved-cluster-uid"
         cases.append(("unresolved cluster identity", candidate))
 
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         del candidate["storage"]["storage_class_uid"]
         cases.append(("missing StorageClass UID", candidate))
 
@@ -414,13 +413,13 @@ class OwnershipTests(unittest.TestCase):
         )
         for section, field, value in cases:
             with self.subTest(field=f"{section}.{field}"):
-                candidate = deepcopy(_complete_lock())
+                candidate = deepcopy(complete_lock())
                 candidate[section][field] = value
                 with self.assertRaises(OwnershipError):
                     validate_version_lock(candidate)
 
     def test_version_lock_accepts_concrete_identities_containing_underscores(self) -> None:
-        candidate = deepcopy(_complete_lock())
+        candidate = deepcopy(complete_lock())
         candidate["storage"]["default_storage_class"] = "fast_ssd"
         candidate["images"]["api_application_image"]["reference"] = (
             "registry.local/my_service/api_image:b1"
@@ -467,8 +466,8 @@ class OwnershipTests(unittest.TestCase):
 
     def test_public_receipt_validators_accept_reference_only_mongo_digest(self) -> None:
         identity = RunIdentity("0123456789ab")
-        receipt = _valid_runtime_receipt(identity)
-        lock = _complete_lock()
+        receipt = valid_runtime_receipt(identity)
+        lock = complete_lock()
 
         from scripts.k8s.receipts import assert_receipt_matches_lock_and_live, validate_collected_receipt
 
@@ -491,12 +490,11 @@ class OwnershipTests(unittest.TestCase):
             "spec": {"capacity": {"storage": "16Gi"}},
             "status": {"capacity": {"storage": "999Gi"}},
         }
-        self.assertEqual(_pv_spec_capacity(volume), "16Gi")
-        self.assertEqual(_pipeline_pv_spec_capacity(volume), "16Gi")
+        # The B2 and B3 receipt modules share one PV capacity reader, so the
+        # two paths cannot drift apart.
+        self.assertEqual(pv_spec_capacity(volume), "16Gi")
         with self.assertRaisesRegex(ReceiptCollectionError, "spec"):
-            _pv_spec_capacity({"status": {"capacity": {"storage": "16Gi"}}})
-        with self.assertRaisesRegex(PipelineReceiptError, "spec"):
-            _pipeline_pv_spec_capacity({"status": {"capacity": {"storage": "16Gi"}}})
+            pv_spec_capacity({"status": {"capacity": {"storage": "16Gi"}}})
 
     def test_complete_live_receipt_binds_children_storage_and_running_images(self) -> None:
         identity = RunIdentity("0123456789ab")
@@ -556,10 +554,10 @@ class OwnershipTests(unittest.TestCase):
             RuntimeImageIdentity("api_application_image", uid_by_key[("Pod", "module4d-api-hash-pod")], "api", f"registry.local/api:b1@{api_digest}", "containerd://sha256:" + "2" * 64, api_digest, "sha256:" + "2" * 64),
             RuntimeImageIdentity("ui_application_image", uid_by_key[("Pod", "module4d-ui-hash-pod")], "ui", f"registry.local/ui:b1@{ui_digest}", "containerd://sha256:" + "3" * 64, ui_digest, "sha256:" + "3" * 64),
         )
-        complete_lock = _complete_lock()
+        lock_document = complete_lock()
         cluster_images = {
-            **complete_lock["toolchain"]["kubernetes_control_plane_images"],
-            **complete_lock["toolchain"]["calico_images"],
+            **lock_document["toolchain"]["kubernetes_control_plane_images"],
+            **lock_document["toolchain"]["calico_images"],
         }
         receipt = RuntimeOwnershipReceipt(
             profile=identity.profile,
@@ -638,7 +636,7 @@ class OwnershipTests(unittest.TestCase):
 
     def test_retained_mongo_pvc_rejects_foreign_owner_reference_identity(self) -> None:
         identity = RunIdentity("0123456789ab")
-        receipt = _valid_runtime_receipt(identity)
+        receipt = valid_runtime_receipt(identity)
         validate_runtime_receipt(
             identity, receipt,
             expected_images={"mongo": _DIGEST_A, "api_application_image": _DIGEST_A, "ui_application_image": _DIGEST_A},

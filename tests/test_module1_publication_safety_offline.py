@@ -18,7 +18,7 @@ def _load_clean_module():
     fake_pandas.DataFrame = object
     fake_pandas.errors = SimpleNamespace(ParserError=type("ParserError", (Exception,), {}))
     spec = importlib.util.spec_from_file_location(
-        "module1_clean_publication_safety_test", ROOT / "src/module1/clean.py"
+        "src.module1.clean", ROOT / "src/module1/clean.py"
     )
     module = importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules, {"pandas": fake_pandas}):
@@ -30,9 +30,11 @@ class _ParquetFixture:
     def __init__(self, value: bytes = b"published"):
         self.value = value
 
-    def to_parquet(self, path, index=False):
+    def to_parquet(self, path, index=False, compression=None):
         if index is not False:
             raise AssertionError("Module 1 publication must omit DataFrame indexes")
+        if compression is None:
+            raise AssertionError("Module 1 publication must pin the Parquet codec")
         Path(path).write_bytes(self.value)
 
 
@@ -152,7 +154,7 @@ class Module1PublicationSafetyTests(unittest.TestCase):
             previous = {name: (output / name).read_bytes() for name in self.clean._CLEAN_OUTPUT_FILES}
 
             class FailingFixture(_ParquetFixture):
-                def to_parquet(self, path, index=False):
+                def to_parquet(self, path, index=False, compression=None):
                     raise OSError("synthetic staging failure")
 
             frames = _outputs(self.clean)

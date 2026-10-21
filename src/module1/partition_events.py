@@ -10,6 +10,8 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
+from .contracts import PARQUET_COMPRESSION
+
 PARTITION_COLUMNS = ["synthetic_year", "synthetic_month", "synthetic_day"]
 
 
@@ -59,11 +61,15 @@ def partition_events(source: Path, destination: Path) -> dict:
                 table = table.append_column(name, pc.cast(values, pa.int32()))
             yield from table.to_batches()
 
+    # The codec belongs on the Parquet format, not on write_dataset itself.
+    parquet_format = ds.ParquetFileFormat()
+    parquet_format = parquet_format.make_write_options(compression=PARQUET_COMPRESSION)
     ds.write_dataset(
         batches(),
         str(destination),
         schema=schema,
-        format="parquet",
+        format=ds.ParquetFileFormat(),
+        file_options=parquet_format,
         partitioning=PARTITION_COLUMNS,
         partitioning_flavor="hive",
         existing_data_behavior="error",

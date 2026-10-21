@@ -15,6 +15,8 @@ import re
 import sys
 from typing import Any
 
+from scripts.dashboard import required
+
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure
 from pymongo.uri_parser import parse_uri
@@ -61,11 +63,6 @@ GRAPH_VERSION = "module4d-demo-graph-v1"
 SCOPE = "synthetic-demonstration-window"
 
 
-def _required(name: str) -> str:
-    value = os.environ.get(name, "")
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
 
 
 def _validate_target(uri: str, database_name: str) -> None:
@@ -411,11 +408,11 @@ def _verify_readonly_role(client: MongoClient, database_name: str) -> None:
 
 
 def seed() -> dict[str, Any]:
-    database_name = _required("MODULE4D_DEMO_DATABASE")
-    namespace = _required("MODULE4D_DEMO_TREND_NAMESPACE")
-    root_uri = _required("MODULE4D_DEMO_ROOT_URI")
-    reader_name = _required("MODULE4D_DEMO_READONLY_USERNAME")
-    reader_password = _required("MODULE4D_DEMO_READONLY_PASSWORD")
+    database_name = required("MODULE4D_DEMO_DATABASE")
+    namespace = required("MODULE4D_DEMO_TREND_NAMESPACE")
+    root_uri = required("MODULE4D_DEMO_ROOT_URI")
+    reader_name = required("MODULE4D_DEMO_READONLY_USERNAME")
+    reader_password = required("MODULE4D_DEMO_READONLY_PASSWORD")
     if not NAMESPACE_RE.fullmatch(namespace):
         raise RuntimeError("demo trend namespace contains unsupported characters")
     _validate_target(root_uri, database_name)

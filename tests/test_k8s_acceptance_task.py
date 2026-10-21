@@ -14,10 +14,10 @@ from unittest.mock import patch
 
 from scripts.k8s.acceptance_task import (
     TaskError,
-    _controlled_trend_rows,
-    _check_executor_benchmark,
-    _check_kafka_round_trip,
-    _check_module2_experiments,
+    controlled_trend_rows,
+    check_executor_benchmark,
+    check_kafka_round_trip,
+    check_module2_experiments,
 )
 
 
@@ -53,7 +53,7 @@ def _module2_receipt(source_sha="a" * 64):
 
 class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
     def test_accepts_two_measured_same_source_local_arms(self):
-        result = _check_executor_benchmark(_module2_receipt())
+        result = check_executor_benchmark(_module2_receipt())
         self.assertEqual(set(result["arms"]), {"local[1]", "local[2]"})
         self.assertFalse(result["executor_scaling_claimed"])
 
@@ -61,7 +61,7 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
         receipt = _module2_receipt()
         receipt["executor_benchmark"]["arms"][1]["validation"]["source_receipt"]["source_sha256"] = "b" * 64
         with self.assertRaisesRegex(TaskError, "same measured source"):
-            _check_executor_benchmark(receipt)
+            check_executor_benchmark(receipt)
 
     def test_module2_performance_receipt_requires_all_three_source_bound_experiments(self):
         source_sha = "a" * 64
@@ -98,11 +98,11 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
                 "source_sha256": source_sha,
             }}
             with patch("scripts.k8s.acceptance_task.RUNTIME_ROOT", root):
-                result = _check_module2_experiments(receipt)
+                result = check_module2_experiments(receipt)
                 self.assertEqual(set(result["join_medians_seconds"]), {"sort_merge", "broadcast_hash"})
                 path.write_text("{}", encoding="utf-8")
                 with self.assertRaisesRegex(TaskError, "does not match"):
-                    _check_module2_experiments(receipt)
+                    check_module2_experiments(receipt)
 
     def test_kafka_round_trip_decodes_the_wire_json_bytes(self):
         state = {"raw": None, "consumer_options": None}
@@ -183,7 +183,7 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
         with patch.dict(os.environ, {"PIPELINE_KAFKA_BOOTSTRAP": "kafka:29092"}), patch.dict(
             sys.modules, {"kafka": kafka, "kafka.admin": admin, "kafka.errors": errors}
         ):
-            result = _check_kafka_round_trip("0123456789ab")
+            result = check_kafka_round_trip("0123456789ab")
         self.assertEqual(json.loads(state["raw"].decode("utf-8"))["probe"], "kafka-round-trip")
         self.assertIn("value_deserializer", state["consumer_options"])
         self.assertEqual(result["topic"], "instacart-b4-0123456789ab")
@@ -247,7 +247,7 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
         )
         controlled_rows = [
             call for call in calls
-            if isinstance(call.func, ast.Name) and call.func.id == "_controlled_trend_rows"
+            if isinstance(call.func, ast.Name) and call.func.id == "controlled_trend_rows"
         ]
         self.assertEqual(len(controlled_rows), 1)
         self.assertEqual(keyword(controlled_rows[0], "trend_weight_short"), "stream_config.weight_short")
@@ -255,10 +255,10 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
     def test_controlled_trend_rows_match_module3_short_window_score(self):
         start = datetime(2026, 10, 17, 8, 0, tzinfo=timezone.utc)
         end = datetime(2026, 10, 17, 10, 0, tzinfo=timezone.utc)
-        first_leads = _controlled_trend_rows(
+        first_leads = controlled_trend_rows(
             [101, 202], start, end, trend_leader_index=0, trend_weight_short=0.7,
         )
-        second_leads = _controlled_trend_rows(
+        second_leads = controlled_trend_rows(
             [101, 202], start, end, trend_leader_index=1, trend_weight_short=0.7,
         )
         self.assertEqual(
@@ -274,7 +274,7 @@ class ExecutorBenchmarkAcceptanceTests(unittest.TestCase):
         receipt = _module2_receipt()
         del receipt["executor_benchmark"]["arms"][0]["workload"]["trials"][0]["task_metrics"]["shuffle_write_bytes"]
         with self.assertRaisesRegex(TaskError, "shuffle/task metrics"):
-            _check_executor_benchmark(receipt)
+            check_executor_benchmark(receipt)
 
 
 if __name__ == "__main__":

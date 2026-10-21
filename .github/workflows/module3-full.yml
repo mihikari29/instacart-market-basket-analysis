@@ -3,8 +3,7 @@ on:
   push:
     branches:
       - main
-      - module3-speed-layer
-      - fix/module3-hardening
+      - 'feat/**'
     paths:
       - 'src/module3/**'
       - 'src/module1/producer.py'
@@ -12,9 +11,9 @@ on:
       - 'src/module1/generate.py'
       - 'src/module1/config.py'
       - 'scripts/module3*.py'
-      - 'scripts/module4/module4d_demo_fixture.py'
-      - 'scripts/module4/module4d_demo_validate.py'
-      - 'deploy/module4/compose.demo.yaml'
+      - 'scripts/dashboard/demo_fixture.py'
+      - 'scripts/dashboard/demo_validate.py'
+      - 'deploy/dashboard/compose.demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -32,9 +31,9 @@ on:
       - 'src/module1/event_reader.py'
       - 'src/module1/generate.py'
       - 'scripts/module3*.py'
-      - 'scripts/module4/module4d_demo_fixture.py'
-      - 'scripts/module4/module4d_demo_validate.py'
-      - 'deploy/module4/compose.demo.yaml'
+      - 'scripts/dashboard/demo_fixture.py'
+      - 'scripts/dashboard/demo_validate.py'
+      - 'deploy/dashboard/compose.demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -100,7 +99,7 @@ jobs:
             tests/test_module4d_ui_client.py \
             tests/test_module4d_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
-        run: python3 scripts/module4/module4d_api_validation.py --mode all
+        run: python3 scripts/dashboard/api_validation.py --mode all
       - name: Start services (Spark, Kafka, Mongo)
         run: |
           docker compose up -d --wait spark-master spark-worker kafka mongodb

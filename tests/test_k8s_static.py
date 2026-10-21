@@ -12,8 +12,9 @@ import yaml
 from scripts.k8s import api_readiness, render as k8s_render
 from scripts.k8s.api_readiness import IndexRequirement
 from scripts.k8s.render import MANAGED_MARKER, _validate_output_path, render_overlay
+from tests.build_context import admitted, context_paths
 from scripts.k8s.pipeline import TREND_SOURCE_NAMESPACE
-from tests.test_k8s_ownership import _complete_lock
+from tests.test_k8s_ownership import complete_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -608,29 +609,38 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertIn("COPY tests/", dockerfile)
         self.assertIn("FROM spark AS k8s-runner", dockerfile)
         self.assertIn('CMD ["python3", "-c", "print(', dockerfile)
-        for source_path in (
+        admitted_paths = context_paths(ROOT / ".dockerignore", [
             "scripts/module4.py",
             "scripts/module4_runtime_smoke.py",
             "scripts/module4_flow_smoke.py",
             "scripts/module4_cross_module_smoke.py",
             "compose.yaml",
-        ):
+        ])
+        for source_path, is_admitted in admitted_paths.items():
             with self.subTest(source_path=source_path):
+                self.assertTrue(is_admitted, f"{source_path} must enter the build context")
                 self.assertIn(f"COPY {source_path} ", dockerfile)
-                self.assertIn(f"!{source_path}", ignore_lines)
+        for excluded in sorted(path.name for path in (ROOT / "tests").glob("test_k8s_*.py")):
+            self.assertFalse(
+                admitted(ROOT / ".dockerignore", f"tests/{excluded}"),
+                f"{excluded} must stay out of the build context",
+            )
         self.assertIn("**/.env", ignore_lines)
         self.assertIn("**/secrets/**", ignore_lines)
         self.assertNotIn("COPY data/", dockerfile)
 
     def test_pipeline_task_build_context_contains_all_runtime_imports(self) -> None:
-        allowlisted = {line[1:] for line in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines() if line.startswith("!")}
         required = {
             "scripts/k8s/__init__.py", "scripts/k8s/pipeline.py",
             "scripts/k8s/pipeline_task.py", "scripts/k8s/acceptance_task.py",
             "scripts/k8s/data_receipts.py", "scripts/k8s/fixture_data.py",
             "scripts/k8s/runtime.py", "scripts/k8s/ownership.py",
         }
-        self.assertTrue(required.issubset(allowlisted))
+        admitted = context_paths(ROOT / ".dockerignore", sorted(required))
+        for source_path, is_admitted in admitted.items():
+            with self.subTest(source_path=source_path):
+                self.assertTrue(is_admitted, f"{source_path} must enter the build context")
+                self.assertTrue((ROOT / source_path).is_file())
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn("COPY scripts/ /workspace/scripts/", dockerfile)
 
@@ -684,7 +694,7 @@ class StaticFoundationTests(unittest.TestCase):
             self.assertFalse(output.exists())
 
     def test_complete_lock_render_accepts_workloads_without_init_containers(self) -> None:
-        lock = _complete_lock()
+        lock = complete_lock()
         for role, image in lock["images"].items():
             image.setdefault("source", f"offline render test fixture for {role}")
         with tempfile.TemporaryDirectory() as temporary:
@@ -710,7 +720,7 @@ class StaticFoundationTests(unittest.TestCase):
             self.assertEqual(ui["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
 
     def test_browser_assertions_match_recommendation_ui_and_keep_five_chart_gate(self) -> None:
-        browser = (ROOT / "scripts/module4/module4d_browser_e2e.py").read_text(encoding="utf-8")
+        browser = (ROOT / "scripts/dashboard/browser_e2e.py").read_text(encoding="utf-8")
         recommendations = (
             ROOT / "src/module4/dashboard/ui/pages/recommendations.py"
         ).read_text(encoding="utf-8")

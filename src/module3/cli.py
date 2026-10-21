@@ -13,16 +13,14 @@ Subcommands:
 import argparse
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
 import platform
-import re
-import subprocess
-import uuid
-from urllib.parse import urlsplit, urlunsplit
 
+from ..common.redaction import redact_uri, safe_error_text
+from ..common.run_context import new_run_id, validate_run_id
+from ..common.source_identity import code_digest, git_revision
 from .config import Config, parse_bool
 from .spark import session
 from .validate import validate_kafka, validate_mongo
@@ -33,37 +31,12 @@ def save(path, value):
 
 
 def revision():
-    try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        status = subprocess.check_output(["git", "status", "--porcelain"], text=True)
-        return {"commit": sha, "dirty": bool(status)}
-    except (OSError, subprocess.CalledProcessError):
-        return {"commit": os.environ.get("MODULE3_COMMIT", "unavailable"), "dirty": None}
-
-
-def code_digest():
-    digest = hashlib.sha256()
-    for path in sorted(Path("src").rglob("*.py")):
-        digest.update(path.as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+    return git_revision("MODULE3_COMMIT")
 
 
 def _redact_mongodb_uri(uri: str) -> str:
     """Keep the Mongo host and database visible without recording credentials."""
-    try:
-        parsed = urlsplit(uri)
-        if not parsed.scheme:
-            return "<redacted>"
-        hostname = parsed.hostname or ""
-        if ":" in hostname and not hostname.startswith("["):
-            hostname = f"[{hostname}]"
-        if parsed.port:
-            hostname = f"{hostname}:{parsed.port}"
-        authority = f"***@{hostname}" if parsed.username or parsed.password else hostname
-        return urlunsplit((parsed.scheme, authority, parsed.path, "<redacted>" if parsed.query else "", ""))
-    except (TypeError, ValueError):
-        return "<redacted>"
+    return redact_uri(uri)
 
 
 def main(argv=None):
@@ -230,9 +203,11 @@ def main(argv=None):
         trend_source_scope=args.trend_source_scope,
     )
 
-    run_id = args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8])
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
-        parser.error("--run-id must be a 1-80 character path-safe identifier")
+    run_id = args.run_id or new_run_id()
+    try:
+        validate_run_id(run_id)
+    except ValueError as exc:
+        parser.error(str(exc))
     output = args.output / run_id
     output.mkdir(parents=True, exist_ok=False)
     report = {
@@ -351,7 +326,7 @@ def main(argv=None):
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
         return 0
     except Exception as exc:
-        report.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+        report.update(status="failed", error=safe_error_text(exc))
         save(output / "summary.json", report)
         raise
     finally:

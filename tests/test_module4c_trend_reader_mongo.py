@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.mongo_fakes import FindCommandRecorder
+
 from datetime import datetime, timedelta, timezone
 import hashlib
 import os
@@ -9,13 +11,12 @@ import uuid
 
 import pytest
 from pymongo import MongoClient
-from pymongo.monitoring import CommandListener
 from pymongo.uri_parser import parse_uri
 
 from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     BUNDLE_SCHEMA_VERSION,
-    _build_document,
+    build_document,
 )
 from src.module4.hybrid import (
     ALSRecommendation,
@@ -42,19 +43,6 @@ PUBLISHED_AT = datetime(2026, 1, 1, tzinfo=timezone.utc)
 BASE_START = datetime(2024, 3, 1, 12, 0, tzinfo=timezone.utc)
 
 
-class _FindCommandRecorder(CommandListener):
-    def __init__(self):
-        self.find_commands = []
-
-    def started(self, event):
-        if event.command_name == "find":
-            self.find_commands.append(dict(event.command))
-
-    def succeeded(self, event):
-        pass
-
-    def failed(self, event):
-        pass
 
 
 def _dedicated_uri() -> str:
@@ -105,7 +93,7 @@ def test_uri_guard_skips_clearly_when_environment_variable_is_absent(monkeypatch
 @pytest.fixture
 def live_database():
     uri = _dedicated_uri()
-    recorder = _FindCommandRecorder()
+    recorder = FindCommandRecorder()
     client = MongoClient(
         uri,
         serverSelectionTimeoutMS=5000,
@@ -162,7 +150,7 @@ def _bundle_document(
         }
         for rank, (product_id, score) in enumerate(zip(product_ids, scores), start=1)
     ]
-    return _build_document(
+    return build_document(
         {
             "window_start": window_start,
             "window_end": window_end,

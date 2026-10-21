@@ -17,11 +17,13 @@ import time
 from typing import Any
 
 from .data_receipts import REQUIRED_HEADERS, source_manifest_digest
-from .pipeline_task import RUNTIME_ROOT, TaskError, _runtime_values, _write_json
+from .constants import als_model_version, graph_version
+from .io import sha256_json
+from .pipeline_task import RUNTIME_ROOT, TaskError, runtime_values, write_json
 
 
 def _canonical_digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
+    return sha256_json(value)
 
 
 def _check(name: str, evidence: Any) -> dict[str, Any]:
@@ -93,7 +95,7 @@ def _check_hdfs_readback(run_id: str) -> dict[str, Any]:
     return {"tables": len(payload), "manifest_sha256": _canonical_digest(payload)}
 
 
-def _check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]:
+def check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]:
     """Require same-source local[1]/local[2] measurements and shuffle evidence."""
     benchmark = module2_receipt.get("executor_benchmark")
     if (
@@ -166,7 +168,7 @@ def _check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]
     return {"scope": benchmark["execution_scope"], "arms": summaries, "executor_scaling_claimed": False}
 
 
-def _check_module2_experiments(module2_receipt: dict[str, Any]) -> dict[str, Any]:
+def check_module2_experiments(module2_receipt: dict[str, Any]) -> dict[str, Any]:
     """Reconcile all three Spark query experiments to their saved performance receipt."""
     experiment = module2_receipt.get("module2_experiments")
     if not isinstance(experiment, dict) or experiment.get("status") != "passed":
@@ -229,7 +231,7 @@ def _check_module2_experiments(module2_receipt: dict[str, Any]) -> dict[str, Any
     }
 
 
-def _controlled_trend_rows(
+def controlled_trend_rows(
     product_ids: list[int],
     window_start: datetime,
     window_end: datetime,
@@ -272,7 +274,7 @@ def _controlled_trend_rows(
     return rows
 
 
-def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
+def check_kafka_round_trip(run_id: str) -> dict[str, Any]:
     from kafka import KafkaConsumer, KafkaProducer, TopicPartition
     from kafka.admin import KafkaAdminClient, NewTopic
     from kafka.errors import TopicAlreadyExistsError
@@ -325,7 +327,7 @@ def _check_kafka_round_trip(run_id: str) -> dict[str, Any]:
 
 def _check_checkpoint_recovery(run_id: str, config, spark) -> dict[str, Any]:
     from kafka import KafkaAdminClient
-    from src.module3.demo import _event
+    from src.module3.demo import build_event
     from src.module3.kafka_utils import create_topic, produce_json_events, safe_topic_name
     from src.module3.stream import run_stream
 
@@ -346,7 +348,7 @@ def _check_checkpoint_recovery(run_id: str, config, spark) -> dict[str, Any]:
     receipts = []
     for sequence in (1, 2):
         event_time = datetime(2030, 1, 1, 0, sequence * 5, tzinfo=timezone.utc)
-        event = _event(f"b4-checkpoint-{run_id}-{sequence}", 970000 + sequence, event_time)
+        event = build_event(f"b4-checkpoint-{run_id}-{sequence}", 970000 + sequence, event_time)
 
         def publish_after_start(_query, current=event):
             return {"published_events": produce_json_events(recovery_config.bootstrap_servers, topic, [current])}
@@ -442,8 +444,8 @@ def _check_als_graph_readback(run_id: str) -> dict[str, Any]:
 
     uri = os.environ.get("MONGODB_URI")
     database = os.environ.get("MODULE4D_MONGO_DATABASE")
-    model = f"als-k8s-{run_id}"
-    graph = f"graph-k8s-{run_id}"
+    model = als_model_version(run_id)
+    graph = graph_version(run_id)
     client = MongoClient(uri, serverSelectionTimeoutMS=10000)
     try:
         db = client[database]
@@ -470,7 +472,7 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     from pyspark.sql.types import DoubleType, IntegerType, LongType, StructField, StructType, TimestampType
     import requests
 
-    values = _runtime_values()
+    values = runtime_values()
     user_id = int(os.environ.get("PIPELINE_DEMO_USER_ID", "1"))
     uri = os.environ["MONGODB_URI"]
     database = os.environ["MODULE4D_MONGO_DATABASE"]
@@ -557,7 +559,7 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
     changed_as_of = max(as_of, trend_result.window_end) + timedelta(milliseconds=1)
     changed_window_start = changed_as_of - (trend_result.window_end - trend_result.window_start)
     trend_leader_index = 1 if float(baseline_trend_score) > 0.5 else 0
-    changed_rows = _controlled_trend_rows(
+    changed_rows = controlled_trend_rows(
         selected,
         changed_window_start,
         changed_as_of,
@@ -641,7 +643,7 @@ def _check_hybrid_trend_sensitivity(spark) -> dict[str, Any]:
 
 
 def run() -> dict[str, Any]:
-    values = _runtime_values()
+    values = runtime_values()
     if os.environ.get("PIPELINE_MODE") not in {"fixture", "full"}:
         raise TaskError("B4 requires a known fixture or full-data mode")
     for step in ("input", "module1", "module2", "module4", "replay", "hybrid"):
@@ -667,8 +669,8 @@ def run() -> dict[str, Any]:
     for label, value in (("Module 2", module2_receipt), ("Module 4", module4_receipt)):
         if not isinstance(value.get("artifacts"), list) or not value["artifacts"]:
             raise TaskError(f"{label} did not leave a hashed output artifact inventory")
-    module2_experiments = _check_module2_experiments(module2_receipt)
-    executor_benchmark = _check_executor_benchmark(module2_receipt)
+    module2_experiments = check_module2_experiments(module2_receipt)
+    executor_benchmark = check_executor_benchmark(module2_receipt)
     replay_receipt = _load_step("replay")["receipt"]
     producer = replay_receipt.get("producer") if isinstance(replay_receipt, dict) else None
     if not isinstance(producer, dict) or producer.get("failed_events") != 0 or producer.get("acked_events") != producer.get("attempted_events"):
@@ -700,7 +702,7 @@ def run() -> dict[str, Any]:
     details = {
         "input_provenance": _check_input_provenance(values["PIPELINE_RUN_ID"], values["PIPELINE_MODE"]),
         "hdfs_readback": _check_hdfs_readback(values["PIPELINE_RUN_ID"]),
-        "kafka_delivery": _check_kafka_round_trip(values["PIPELINE_RUN_ID"]),
+        "kafka_delivery": check_kafka_round_trip(values["PIPELINE_RUN_ID"]),
         "batch_outputs": {"module2": module2_receipt, "module4": module4_receipt},
         "executor_benchmark": executor_benchmark,
         "module2_experiments": module2_experiments,
@@ -740,13 +742,13 @@ def run() -> dict[str, Any]:
 def main() -> int:
     try:
         receipt = run()
-        _write_json(RUNTIME_ROOT / "evidence" / "acceptance-task.json", receipt)
+        write_json(RUNTIME_ROOT / "evidence" / "acceptance-task.json", receipt)
         print("IT4931_ACCEPTANCE_JSON=" + json.dumps(receipt, sort_keys=True, default=str), flush=True)
         return 0
     except Exception as exc:
         failure = {"schema_version": 1, "status": "failed", "failure_type": type(exc).__name__, "message": "B4 runtime acceptance task failed; see sanitized Job logs"}
         try:
-            _write_json(RUNTIME_ROOT / "evidence" / "acceptance-task-failure.json", failure)
+            write_json(RUNTIME_ROOT / "evidence" / "acceptance-task-failure.json", failure)
         except Exception:
             pass
         print(f"B4 acceptance task failed ({type(exc).__name__}); sensitive details redacted", flush=True)

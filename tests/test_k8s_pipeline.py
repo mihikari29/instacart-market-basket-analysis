@@ -42,14 +42,14 @@ from scripts.k8s.pipeline_receipts import (
     validate_pipeline_receipt,
 )
 from scripts.k8s import pipeline_task
-from tests.test_k8s_ownership import _complete_lock
+from tests.test_k8s_ownership import complete_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _complete_b3_lock():
-    lock = _complete_lock()
+def complete_b3_lock():
+    lock = complete_lock()
     for role, image in lock["images"].items():
         image.setdefault("source", f"synthetic offline lock fixture for {role}")
     component_images = {}
@@ -86,7 +86,7 @@ def _complete_b3_lock():
     return finalize_pipeline_lock(lock, component_images=component_images, pipeline_image=pipeline_image)
 
 
-def _valid_pipeline_receipt(identity, lock):
+def valid_pipeline_receipt(identity, lock):
     objects = []
     next_uid = 0
 
@@ -404,7 +404,7 @@ class PipelinePlannerTests(unittest.TestCase):
             (root / "run" / "namespace.json").write_text(
                 json.dumps({"metadata": {"name": self.identity.namespace}}), encoding="utf-8"
             )
-            output = render_pipeline_assets(self.identity, root, _complete_b3_lock(), mode="fixture")
+            output = render_pipeline_assets(self.identity, root, complete_b3_lock(), mode="fixture")
             plan = json.loads((output / "plan.json").read_text())
             self.assertEqual(len(plan["steps"]), 6)
             self.assertTrue(plan["as_of_event_time"].endswith("Z"))
@@ -426,7 +426,7 @@ class PipelinePlannerTests(unittest.TestCase):
             validate_full_data_storage_budget(4 * 1024**3 + 1)
 
     def test_pipeline_image_loader_verifies_all_four_locked_identities(self):
-        lock = _complete_b3_lock()
+        lock = complete_b3_lock()
         expected_images = []
         for role in ("pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"):
             image = lock["images"][role]
@@ -454,7 +454,7 @@ class PipelinePlannerTests(unittest.TestCase):
         self.assertEqual(executor.calls[4][0][:3], ["minikube", "-p", self.identity.profile])
 
     def test_pipeline_executes_verified_image_load_before_workload_apply_without_api_restart(self):
-        lock = _complete_b3_lock()
+        lock = complete_b3_lock()
         images = []
         for role in ("pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"):
             item = lock["images"][role]
@@ -488,7 +488,7 @@ class PipelinePlannerTests(unittest.TestCase):
             )
             b2_path = root / "b2-ownership-receipt.json"
             b2_path.write_text("{}", encoding="utf-8")
-            valid_receipt = _valid_pipeline_receipt(self.identity, lock)
+            valid_receipt = valid_pipeline_receipt(self.identity, lock)
             with (
                 patch("scripts.k8s.receipts.receipt_from_document", return_value=object()),
                 patch("scripts.k8s.receipts.validate_collected_receipt"),
@@ -549,8 +549,8 @@ class PipelinePlannerTests(unittest.TestCase):
             _require_pipeline_namespace_clear(executor, self.identity)
 
     def test_pipeline_receipt_round_trip_binds_jobs_storage_and_images(self):
-        lock = _complete_b3_lock()
-        receipt = _valid_pipeline_receipt(self.identity, lock)
+        lock = complete_b3_lock()
+        receipt = valid_pipeline_receipt(self.identity, lock)
         validate_pipeline_receipt(self.identity, receipt, lock)
         decoded = pipeline_receipt_from_document(pipeline_receipt_document(receipt))
         self.assertEqual(decoded, receipt)

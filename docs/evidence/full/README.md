@@ -117,4 +117,4 @@ and the measurements do not establish cluster-scale performance.
 - Module 3 streaming validation is reported separately, and Module 4 has not yet
   been implemented.
 
-See the [technical runbook](../../progress.md) for reproduction commands.
+See the [technical runbook](../../docker.md) for reproduction commands.

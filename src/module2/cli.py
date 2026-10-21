@@ -3,15 +3,14 @@
 import argparse
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
-import json
 import os
 from pathlib import Path
 import platform
 import re
-import subprocess
-import uuid
 
+from ..common.redaction import safe_error_text
+from ..common.run_context import new_run_id, save_json
+from ..common.source_identity import code_digest, git_revision
 from .config import Config
 from .spark import session
 from .data import read_tables, validate, require
@@ -20,29 +19,12 @@ from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache
 from .eventlog import parse_event_logs, attach_metrics
 
 
-_MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
-_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
-
-
 def save(path, value):
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    save_json(path, value)
 
 
 def revision():
-    try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        status = subprocess.check_output(["git", "status", "--porcelain"], text=True)
-        return {"commit": sha, "dirty": bool(status)}
-    except (OSError, subprocess.CalledProcessError):
-        return {"commit": os.environ.get("MODULE2_COMMIT", "unavailable"), "dirty": None}
-
-
-def code_digest():
-    digest = hashlib.sha256()
-    for path in sorted(Path("src").rglob("*.py")):
-        digest.update(path.as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+    return git_revision("MODULE2_COMMIT")
 
 
 def main(argv=None):
@@ -68,7 +50,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     require(args.min_support >= 1, "min-support must be positive")
     config = Config(args.root, args.master, args.shuffle_partitions, args.repetitions, args.warmups)
-    run_id = args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8])
+    run_id = args.run_id or new_run_id()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
         parser.error("--run-id must be a 1-80 character path-safe identifier")
     output = args.output / run_id
@@ -150,8 +132,7 @@ def main(argv=None):
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
         return 0
     except Exception as exc:
-        safe_error = _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", _MONGODB_URI.sub("mongodb://<redacted>", str(exc)))
-        report.update(status="failed", error=f"{type(exc).__name__}: {safe_error}")
+        report.update(status="failed", error=safe_error_text(exc))
         save(output / "summary.json", report)
         raise
     finally:

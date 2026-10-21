@@ -5,55 +5,21 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
-import re
-import shlex
-import subprocess
+
+from module3_harness import (
+    archive_checkpoint,
+    artifact_path,
+    compose_python,
+    ensure_output,
+    run_command,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run(command: list[str], capture: bool = False) -> subprocess.CompletedProcess:
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        check=True,
-        text=True,
-        capture_output=capture,
-    )
-    if capture:
-        print(result.stdout, end="", flush=True)
-        if result.stderr:
-            print(result.stderr, end="", flush=True)
-    return result
 
-
-def _compose_python(arguments: list[str], capture: bool = False) -> subprocess.CompletedProcess:
-    return _run(
-        [
-            "docker",
-            "compose",
-            "--profile",
-            "tools",
-            "run",
-            "--rm",
-            "--no-deps",
-            "--entrypoint",
-            "python3",
-            "module3",
-            *arguments,
-        ],
-        capture=capture,
-    )
-
-
-def _artifact_path(output: str) -> Path:
-    match = re.search(r"\[ARTIFACTS\]\s+(/workspace/\S+)", output)
-    if not match:
-        raise RuntimeError(f"Could not locate artifact path in output:\n{output}")
-    return ROOT / Path(match.group(1)).relative_to("/workspace")
 
 
 def _progress(path: Path) -> list[dict]:
@@ -65,43 +31,6 @@ def _non_empty_total(rows: list[dict]) -> int:
     return sum(int(row.get("numInputRows") or 0) for row in rows)
 
 
-def _ensure_output(path: Path) -> None:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        return
-    except PermissionError:
-        pass
-    container_path = Path("/workspace") / path.relative_to(ROOT)
-    command = (
-        f"mkdir -p {shlex.quote(str(container_path))} && "
-        f"chown {os.getuid()}:{os.getgid()} {shlex.quote(str(container_path))}"
-    )
-    _run(
-        [
-            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
-            "--entrypoint", "sh", "module3", "-c", command,
-        ]
-    )
-
-
-def _archive_checkpoint(checkpoint: Path, archived: Path) -> None:
-    try:
-        checkpoint.rename(archived)
-        return
-    except PermissionError:
-        pass
-    checkpoint_container = Path("/workspace") / checkpoint.relative_to(ROOT)
-    archived_container = Path("/workspace") / archived.relative_to(ROOT)
-    command = (
-        f"mv {shlex.quote(str(checkpoint_container))} {shlex.quote(str(archived_container))} && "
-        f"chown -R {os.getuid()}:{os.getgid()} {shlex.quote(str(archived_container.parent))}"
-    )
-    _run(
-        [
-            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
-            "--entrypoint", "sh", "module3", "-c", command,
-        ]
-    )
 
 
 def main(argv=None) -> int:
@@ -115,15 +44,15 @@ def main(argv=None) -> int:
     topic = "instacart-module3-recovery-smoke"
     checkpoint_id = "recovery-smoke"
     output = (ROOT / args.output).resolve()
-    _ensure_output(output)
+    ensure_output(output)
     checkpoint = output / "checkpoint" / checkpoint_id
     archived_checkpoint = None
     if checkpoint.exists():
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         archived_checkpoint = checkpoint.with_name(f"{checkpoint_id}.previous-{suffix}")
-        _archive_checkpoint(checkpoint, archived_checkpoint)
+        archive_checkpoint(checkpoint, archived_checkpoint)
 
-    _run(
+    run_command(
         [
             "docker",
             "compose",
@@ -137,7 +66,7 @@ def main(argv=None) -> int:
         ]
     )
 
-    first_send = _compose_python(
+    first_send = compose_python(
         [
             "-m",
             "src.module3.scenario",
@@ -148,7 +77,7 @@ def main(argv=None) -> int:
         ],
         capture=True,
     )
-    first_run = _run(
+    first_run = run_command(
         [
             "python3",
             "scripts/module3.py",
@@ -166,13 +95,13 @@ def main(argv=None) -> int:
         ],
         capture=True,
     )
-    first_artifact = _artifact_path(first_run.stdout)
+    first_artifact = artifact_path(first_run.stdout)
 
-    second_send = _compose_python(
+    second_send = compose_python(
         ["-m", "src.module3.scenario", "recovery-second", "--topic", topic],
         capture=True,
     )
-    second_run = _run(
+    second_run = run_command(
         [
             "python3",
             "scripts/module3.py",
@@ -190,7 +119,7 @@ def main(argv=None) -> int:
         ],
         capture=True,
     )
-    second_artifact = _artifact_path(second_run.stdout)
+    second_artifact = artifact_path(second_run.stdout)
 
     first_summary = json.loads((first_artifact / "summary.json").read_text(encoding="utf-8"))
     second_summary = json.loads((second_artifact / "summary.json").read_text(encoding="utf-8"))
@@ -224,7 +153,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
     print(json.dumps({'documents': col.count_documents({'product_id': {'$in': [5101, 5102, 5199]}}),
                       'duplicate_groups': duplicates}, default=str))
 """
-    mongo_result = _compose_python(["-c", mongo_code], capture=True)
+    mongo_result = compose_python(["-c", mongo_code], capture=True)
     mongo = json.loads(mongo_result.stdout.strip().splitlines()[-1])
     if mongo["documents"] <= 0 or mongo["duplicate_groups"]:
         raise RuntimeError(f"Mongo recovery verification failed: {mongo}")

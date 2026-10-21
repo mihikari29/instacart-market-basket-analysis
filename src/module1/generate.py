@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from .config import SyntheticConfig, preset_summary
-from .contracts import validate_cart_position_range
+from .contracts import PARQUET_COMPRESSION, validate_cart_position_range
 
 BASE_TIMESTAMP = pd.Timestamp("2024-01-01")  # Monday; order_dow 0..6 aligns with +dow days
 DAY_MS = 86_400_000
@@ -271,7 +271,9 @@ class EventWriter:
 
         table = pa.Table.from_pandas(batch_df)
         if self._parquet_writer is None:
-            self._parquet_writer = pq.ParquetWriter(self.path, table.schema)
+            self._parquet_writer = pq.ParquetWriter(
+                self.path, table.schema, compression=PARQUET_COMPRESSION
+            )
         self._parquet_writer.write_table(table)
 
     def close(self) -> None:

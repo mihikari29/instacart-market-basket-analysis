@@ -1,46 +1,38 @@
 # Documentation index
 
-Start with the root [README](../README.md) for the project overview.
+The repository root [README](../README.md) is the front door: it explains what
+the project is, how the modules fit together and where every artifact lives.
+This page lists the documents that own a specific subject.
 
 ## Project and status
 
-- [Proposal](Proposal.md) — approved goals, requirements, and architecture.
-- [Project status](progress.md) — current implementation, recorded checks,
-  outstanding runtime validation, and links to historical results.
-- [External acceptance handoff](external-acceptance-handoff.md) — delivered
-  scope, operator preparation, and acceptance boundaries.
-- [External Acceptance Tutorial](acceptance-tutorial.md) — beginner-friendly
-  execution and decision path; canonical commands remain in the operating
-  guides, while the handoff records outstanding work and evidence boundaries.
-- [Implementation summary](implementation-ledger.md) — design decisions,
-  important contracts, safety measures, and verification limits.
-- [Repository layout](repository-layout.md) — code ownership and stable paths.
-- [Synthetic event generation](generate.md) — timestamp construction, scenario
-  parameters, reproducibility and feed provenance.
+| Document | Owns |
+|---|---|
+| [Proposal](Proposal.md) | The approved assignment requirements and architecture baseline. Immutable. |
+| [Project progress](progress.md) | The team record: what is implemented, what was measured, what is still open, and the dated evidence for each claim. |
+| [Implementation ledger](implementation-ledger.md) | Design decisions, safety measures and the limits of each implementation choice. |
+| [External acceptance](acceptance.md) | The operator path from preparation to an evidence-backed acceptance report, plus the delivered scope and the boundaries of what has not been verified. |
 
-## Technical and operating guides
+## Operating guides
 
-- [Docker guide](docker.md) — image builds, setup, module commands, validation,
-  and service safety.
-- [Kubernetes demonstration runbook](kubernetes-demo-runbook.md) — capacity,
-  isolated execution, evidence collection, recovery, and teardown.
-- [Module 3 contracts](module3-contracts.md) — Kafka event provenance,
-  event-time processing, publication, and checkpoint contracts.
-- [Module 4 plan](module4-plan.md) — recommendation, graph, Hybrid, API, and
-  dashboard contracts.
-- [Module 2 executor benchmark](module2-executor-benchmark.md) — local and
-  standalone Spark comparison procedures.
-- [Module 4 package migration](module4-package-migration.md) — compatibility
-  links to the current package, CLI, API, and validation guides.
-- [Module 4C evaluation plan](module4c-evaluation-plan.md) — compatibility
-  entry point for the preserved evaluation design.
-- [Coding conventions](coding-conventions.md) — project code style and
-  behavior-preservation principles.
+| Document | Owns |
+|---|---|
+| [Docker guide](docker.md) | Image targets, service prerequisites, every module's operating commands, synthetic event generation, the Spark executor layout experiment, validation commands and cleanup boundaries. |
+| [Kubernetes guide](kubernetes.md) | The Kubernetes demonstration: design facts (identity, credentials, storage, network policy, version lock) and the operator procedure (preflight, run, verify, collect, teardown). |
+| [Module 3 contracts](module3-contracts.md) | Kafka event provenance, event-time aggregation, publication, bundles, checkpoints and the Module 4C consumption boundary. |
+| [Module 4 plan](module4-plan.md) | The Module 4A-4D algorithms, data contracts, ranking, evaluation, API routes and dashboard contracts. |
+| [Coding conventions](coding-conventions.md) | The project's Python, PySpark, error-handling and testing rules. |
+| [Module 4C evaluation plan](module4c-evaluation-plan.md) | A compatibility page kept at its former path because the archived C8A report generator references it. |
 
 ## Historical evidence
 
-The [evidence index](evidence/README.md) links dated measurements, acceptance
-records, and archived design documents. Historical records retain their
-original scope and are not current runtime acceptance claims. The separate
-[style regression report](style-regression-validation.md) documents an earlier
-comparison and its limits.
+| Document | Owns |
+|---|---|
+| [Evidence index](evidence/README.md) | Dated validation reports, receipts and archived design documents, with the five files that live code registers. |
+| [Module 4 evidence index](evidence/module4/README.md) | The eleven Module 4 run directories, their status, and which artifacts are unique to each run. |
+| [Style regression validation](style-regression-validation.md) | The 15 October 2026 post-refactor comparison and its **NOT FULLY VERIFIED** assessment. |
+
+Historical records keep their original dates, code and environment identities
+and experiment boundaries. Updating this index does not turn a historical
+result into validation of the current commit; see
+[project progress](progress.md) for the present status.

@@ -12,6 +12,7 @@ import subprocess
 
 import yaml
 
+from scripts.k8s.constants import demo_database
 from scripts.k8s.lock_lifecycle import load_version_lock, validate_static_lock
 from scripts.k8s.ownership import (
     OWNER_LABEL,
@@ -247,7 +248,7 @@ def render_overlay(
         "kind": "ConfigMap",
         "metadata": {"name": "module4d-api-config"},
         "data": {
-            "MODULE4D_MONGO_DATABASE": f"module4d_demo_{identity.run_id}",
+            "MODULE4D_MONGO_DATABASE": demo_database(identity.run_id),
             "MODULE4D_TREND_SOURCE_NAMESPACES": configured_trend_namespaces,
         },
     }
@@ -326,7 +327,7 @@ def validate_locked_overlay(
     ):
         raise ValueError("locked render namespace identity does not match the run")
     if (
-        api_config_patch.get("data", {}).get("MODULE4D_MONGO_DATABASE") != f"module4d_demo_{identity.run_id}"
+        api_config_patch.get("data", {}).get("MODULE4D_MONGO_DATABASE") != demo_database(identity.run_id)
         or api_config_patch.get("data", {}).get("MODULE4D_TREND_SOURCE_NAMESPACES") != configured_value
         or ui_config_patch.get("data", {}).get("MODULE4D_TREND_SOURCE_NAMESPACES") != configured_value
     ):

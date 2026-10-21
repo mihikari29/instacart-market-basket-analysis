@@ -6,94 +6,23 @@ import argparse
 from datetime import datetime, timezone
 import json
 import math
-import os
 from pathlib import Path
-import re
-import shlex
-import subprocess
+
+from module3_harness import (
+    archive_checkpoint,
+    artifact_path,
+    compose_python,
+    ensure_output,
+    run_command,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run(command: list[str], capture: bool = False) -> subprocess.CompletedProcess:
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        check=True,
-        text=True,
-        capture_output=capture,
-    )
-    if capture:
-        print(result.stdout, end="", flush=True)
-        if result.stderr:
-            print(result.stderr, end="", flush=True)
-    return result
 
 
-def _compose_python(arguments: list[str], capture: bool = False) -> subprocess.CompletedProcess:
-    return _run(
-        [
-            "docker",
-            "compose",
-            "--profile",
-            "tools",
-            "run",
-            "--rm",
-            "--no-deps",
-            "--entrypoint",
-            "python3",
-            "module3",
-            *arguments,
-        ],
-        capture=capture,
-    )
 
-
-def _artifact_path(output: str) -> Path:
-    match = re.search(r"\[ARTIFACTS\]\s+(/workspace/\S+)", output)
-    if not match:
-        raise RuntimeError(f"Could not locate artifact path in output:\n{output}")
-    return ROOT / Path(match.group(1)).relative_to("/workspace")
-
-
-def _ensure_output(path: Path) -> None:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        return
-    except PermissionError:
-        pass
-    container_path = Path("/workspace") / path.relative_to(ROOT)
-    command = (
-        f"mkdir -p {shlex.quote(str(container_path))} && "
-        f"chown {os.getuid()}:{os.getgid()} {shlex.quote(str(container_path))}"
-    )
-    _run(
-        [
-            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
-            "--entrypoint", "sh", "module3", "-c", command,
-        ]
-    )
-
-
-def _archive_checkpoint(checkpoint: Path, archived: Path) -> None:
-    try:
-        checkpoint.rename(archived)
-        return
-    except PermissionError:
-        pass
-    checkpoint_container = Path("/workspace") / checkpoint.relative_to(ROOT)
-    archived_container = Path("/workspace") / archived.relative_to(ROOT)
-    command = (
-        f"mv {shlex.quote(str(checkpoint_container))} {shlex.quote(str(archived_container))} && "
-        f"chown -R {os.getuid()}:{os.getgid()} {shlex.quote(str(archived_container.parent))}"
-    )
-    _run(
-        [
-            "docker", "compose", "--profile", "tools", "run", "--rm", "--no-deps",
-            "--entrypoint", "sh", "module3", "-c", command,
-        ]
-    )
 
 
 def main(argv=None) -> int:
@@ -110,15 +39,15 @@ def main(argv=None) -> int:
     topic = "instacart-module3-live-smoke"
     checkpoint_id = "live-smoke"
     output = (ROOT / args.output).resolve()
-    _ensure_output(output)
+    ensure_output(output)
     checkpoint = output / "checkpoint" / checkpoint_id
     archived_checkpoint = None
     if checkpoint.exists():
         suffix = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         archived_checkpoint = checkpoint.with_name(f"{checkpoint_id}.previous-{suffix}")
-        _archive_checkpoint(checkpoint, archived_checkpoint)
+        archive_checkpoint(checkpoint, archived_checkpoint)
 
-    _run(
+    run_command(
         [
             "docker",
             "compose",
@@ -137,11 +66,11 @@ def main(argv=None) -> int:
         "from src.module3.kafka_utils import create_topic; "
         f"print(json.dumps(create_topic('kafka:29092', '{topic}', 4, reset=True)))"
     )
-    created = _compose_python(["-c", create_code], capture=True)
+    created = compose_python(["-c", create_code], capture=True)
     topic_before = json.loads(created.stdout.strip().splitlines()[-1])
 
     producer_receipt = args.output / "producer_receipt.json"
-    _compose_python(
+    compose_python(
         [
             "-m",
             "src.module1.producer",
@@ -166,7 +95,7 @@ def main(argv=None) -> int:
         "from src.module3.kafka_utils import topic_metadata; "
         f"print(json.dumps(topic_metadata('kafka:29092', '{topic}')))"
     )
-    metadata_result = _compose_python(["-c", metadata_code], capture=True)
+    metadata_result = compose_python(["-c", metadata_code], capture=True)
     topic_after = json.loads(metadata_result.stdout.strip().splitlines()[-1])
     kafka_delta = topic_after["total_records"] - topic_before["total_records"]
     if receipt["failed_events"] != 0 or kafka_delta != receipt["acked_events"]:
@@ -175,7 +104,7 @@ def main(argv=None) -> int:
         )
 
     stream_started = datetime.now(timezone.utc)
-    stream_result = _run(
+    stream_result = run_command(
         [
             "python3",
             "scripts/module3.py",
@@ -193,7 +122,7 @@ def main(argv=None) -> int:
         ],
         capture=True,
     )
-    artifact = _artifact_path(stream_result.stdout)
+    artifact = artifact_path(stream_result.stdout)
     summary = json.loads((artifact / "summary.json").read_text(encoding="utf-8"))
     progress = [
         json.loads(line)
@@ -268,7 +197,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
     }}
     print(json.dumps(result, default=str))
 """
-    mongo_result = _compose_python(["-c", mongo_code], capture=True)
+    mongo_result = compose_python(["-c", mongo_code], capture=True)
     mongo = json.loads(mongo_result.stdout.strip().splitlines()[-1])
     if (
         mongo["documents_written"] <= 0

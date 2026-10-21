@@ -1,5 +1,71 @@
 # Kế hoạch kỹ thuật và nghiệm thu Module 4A–4D
 
+## English abstract
+
+> Sections 1 to 18 of this document are written in Vietnamese, the author's
+> working language. Sections 19 and 20 are in English. This abstract gives a
+> reader who does not read Vietnamese the scope, the contracts and the
+> acceptance status, plus a map of every section. The Vietnamese text below
+> remains the authoritative version.
+
+**What Module 4 is.** Module 4 turns the prior-history data staged by Module 1
+into recommendations and then serves them. It has four parts:
+
+| Part | Package | Responsibility |
+|---|---|---|
+| 4A | `src/module4/als.py` | Fit implicit-feedback ALS from prior user-product counts, evaluate it against held-out official train baskets, publish versioned recommendations. |
+| 4B | `src/module4/graph.py` | Build the prior-basket product co-purchase graph over the full catalog, derive neighbour and weighted-degree metrics, run GraphFrames PageRank. |
+| 4C | `src/module4/hybrid/` | Combine ready 4A and 4B snapshots with a verified immutable finalized-trend bundle at an explicit event-time cutoff, rank deterministically, publish a versioned per-user snapshot. |
+| 4D | `src/module4/dashboard/` | Serve bounded, indexed, read-only API views and render them in a four-page Streamlit dashboard. The dashboard never connects to MongoDB directly. |
+
+**Data discipline.** 4A and 4B fit from *prior* interactions only. The
+official train baskets are held out as evaluation truth and never select
+fitting parameters. 4C publishes behind an explicit readiness pointer and
+records the source generation it used. 4D reads only published, versioned
+generations and distinguishes unavailable from empty and from malformed.
+
+**Acceptance status.** On 10 October 2026 the historical full-data A/B
+acceptance passed 21/21 gates, with a first run and a same-version replay
+that reproduced the logical snapshot digests. That record is dated evidence
+for its own source revision, not a fresh verification of the current commit.
+ALS did **not** outperform the personal-frequency baseline on Recall@10
+(0.121472 against 0.319232): the acceptance demonstrates correctness and
+reproducibility, not a recommendation-quality improvement. The search tested
+one bounded baseline configuration, not a global optimum.
+
+**What the acceptance does not establish.** Leakage-safe Hybrid quality,
+per-user ALS serving, dashboard production readiness and production
+scalability are all open. See [current progress](progress.md).
+
+**Section map.**
+
+| Section | Vietnamese heading | English heading |
+|---|---|---|
+| 1 | Phạm vi | Scope |
+| 2 | Mục tiêu nghiệm thu | Acceptance objectives |
+| 3 | Hợp đồng dữ liệu | Data contracts |
+| 4 | Cấu trúc mô hình đề xuất | Proposed model structure |
+| 5 | Module 4A — ALS Recommendation | Module 4A — ALS recommendation |
+| 6 | Module 4B — Product Co-purchase Graph | Module 4B — product co-purchase graph |
+| 7 | Chiến lược kiểm thử | Test strategy |
+| 8 | Ma trận đánh giá/nghiệm thu | Evaluation and acceptance matrix |
+| 9 | Evidence bắt buộc | Required evidence |
+| 10 | Kế hoạch thực hiện | Implementation plan |
+| 11 | Thứ tự ưu tiên khi thiếu thời gian | Prioritisation when time is short |
+| 12 | Kết quả kiểm tra hiện tại | Current check results |
+| 13 | Backlog thực hiện | Implementation backlog |
+| 14 | Chi tiết công việc theo thành phần | Work breakdown by component |
+| 15 | Ma trận test bắt buộc | Required test matrix |
+| 16 | Quy trình chạy nghiệm thu | Acceptance execution procedure |
+| 17 | Checklist nghiệm thu Module 4A–4B | Module 4A–4B acceptance checklist |
+| 18 | Quy tắc cập nhật tài liệu bàn giao | Handover document update rules |
+| 19 | — | Module 4C — Hybrid recommendation and serving (English) |
+| 20 | — | Module 4D — Read API and dashboard specification (English) |
+
+The English contracts for 4C and 4D are also summarised in the
+[implementation ledger](implementation-ledger.md) and the
+[repository layout](../README.md#repository-layout).
+
 Mốc nghiệm thu Module 4A–4B lịch sử: **10/10/2026** (Asia/Bangkok). Bản hợp nhất Module 4A–4D cập nhật **15/10/2026**.
 
 Ngày 10/10, historical full-data A/B acceptance passed **21/21 gates**. The recorded full-ab-20261010-fixed-first and full-ab-20261010-fixed-replay runs passed with the same model and graph versions; their evidence retains the run IDs and source revisions. This is dated evidence, not fresh post-refactor full-data verification.

@@ -17,7 +17,7 @@ from src.module2.fixtures import create_fixture
 from src.module4.config import Config
 from src.module4.data import read_inputs, validate_inputs, validate_source_receipts
 from src.module4.spark import session
-from scripts.module4_flow_smoke import _run_cli
+from scripts.module4_flow_smoke import run_cli
 
 
 def main():
@@ -50,7 +50,7 @@ def main():
         spark.stop()
         spark = None
         run_id = f"cross-{token}"
-        result = _run_cli(Path.cwd(), root, "results/module4-cross", run_id,
+        result = run_cli(Path.cwd(), root, "results/module4-cross", run_id,
                           f"als-{run_id}", f"graph-{run_id}")
         with MongoClient(runtime.mongodb_uri, serverSelectionTimeoutMS=5000) as client:
             if client[database]["user_recommendations"].count_documents({}) != 24:

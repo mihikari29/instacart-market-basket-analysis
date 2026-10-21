@@ -9,9 +9,10 @@ from pathlib import Path
 import re
 from typing import Any, Mapping
 
-from .acceptance import ACCEPTANCE_SCENARIOS, _read_receipt, _sha256_bytes, _sha256_json
+from .constants import acceptance_job_name as _acceptance_job_name
+from .acceptance import ACCEPTANCE_SCENARIOS, read_receipt, sha256_bytes, sha256_json
 from .ownership import PROTECTED_NAMESPACES, RunIdentity
-from .pipeline import _validate_pipeline_lock
+from .pipeline import validate_pipeline_lock
 from .pipeline_receipts import (
     assert_pipeline_receipt_matches_live,
     collect_pipeline_receipt,
@@ -22,7 +23,7 @@ from .receipts import (
     collect_runtime_ownership_receipt,
     receipt_from_document,
 )
-from .runtime import CommandExecutor, _checked, _json_output, kubectl
+from .runtime import CommandExecutor, checked, json_output, kubectl
 
 
 class TeardownError(RuntimeError):
@@ -54,7 +55,7 @@ def _receipt_object_map(*receipts) -> dict[tuple[str, str], tuple[str, dict[str,
 
 def _json_inventory(executor: CommandExecutor, identity: RunIdentity, *args: str, description: str) -> dict[str, Any]:
     try:
-        payload = _json_output(_checked(executor, kubectl(identity, *args)), description)
+        payload = json_output(checked(executor, kubectl(identity, *args)), description)
     except Exception as exc:
         raise TeardownError(f"{description} could not be collected") from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
@@ -168,7 +169,7 @@ def _validate_endpoints_targets(
         raise TeardownError("Endpoints has no verifiable approved Pod targets")
 
 
-def _validate_complete_profile_inventory(
+def validate_complete_profile_inventory(
     executor: CommandExecutor,
     identity: RunIdentity,
     b2_receipt,
@@ -205,7 +206,7 @@ def _validate_complete_profile_inventory(
         raise TeardownError("run namespace ownership labels do not match")
 
     expected = _receipt_object_map(b2_receipt, b3_receipt)
-    acceptance_job_name = f"it4931-acceptance-{identity.run_id}"
+    acceptance_job_name = _acceptance_job_name(identity.run_id)
     acceptance_job_labels = {
         **identity.labels,
         "app.kubernetes.io/name": "pipeline-task",
@@ -223,7 +224,7 @@ def _validate_complete_profile_inventory(
     # Discovery keeps this inventory exhaustive when a new namespaced API kind
     # is introduced. A failed discovery or list request blocks teardown.
     try:
-        discovered = _checked(
+        discovered = checked(
             executor,
             kubectl(identity, "api-resources", "--verbs=list", "--namespaced=true", "-o", "name"),
         ).stdout
@@ -451,7 +452,7 @@ def _validate_complete_profile_inventory(
         raise TeardownError("profile contains an unexpected or stale StorageClass")
 
 
-def _failure_evidence(
+def failure_evidence(
     value: Path | str | Mapping[str, Any] | None,
     *,
     identity: RunIdentity,
@@ -470,7 +471,7 @@ def _failure_evidence(
         document = json.loads(content)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise TeardownError("failure evidence could not be read") from exc
-    digest = _sha256_bytes(content)
+    digest = sha256_bytes(content)
     if not isinstance(expected_digest, str) or not _SHA256.fullmatch(expected_digest) or expected_digest != digest:
         raise TeardownError("failure evidence SHA-256 does not match the captured bytes")
     if (
@@ -490,7 +491,7 @@ def _acceptance_job_identity_from_failure(document: Mapping[str, Any], identity:
         pods = json.loads(commands["pods"]["stdout"]).get("items", [])
     except (KeyError, TypeError, json.JSONDecodeError):
         raise TeardownError("failure evidence lacks readable Job and Pod inventories")
-    job_name = f"it4931-acceptance-{identity.run_id}"
+    job_name = _acceptance_job_name(identity.run_id)
     job_matches = [item for item in jobs if isinstance(item, Mapping) and item.get("metadata", {}).get("name") == job_name]
     pod_matches = []
     for item in pods:
@@ -510,7 +511,7 @@ def _acceptance_job_identity_from_failure(document: Mapping[str, Any], identity:
 
 
 def _live_acceptance_job(executor: CommandExecutor, identity: RunIdentity) -> tuple[str | None, str | None]:
-    name = f"it4931-acceptance-{identity.run_id}"
+    name = _acceptance_job_name(identity.run_id)
     try:
         job_result = executor.run(kubectl(identity, "--namespace", identity.namespace, "get", "job", name, "-o", "json"), timeout=30)
     except Exception as exc:
@@ -525,8 +526,8 @@ def _live_acceptance_job(executor: CommandExecutor, identity: RunIdentity) -> tu
     except json.JSONDecodeError as exc:
         raise TeardownError("live B4 Job identity is malformed") from exc
     job_meta = job.get("metadata", {})
-    pods_payload = _json_output(
-        _checked(executor, kubectl(identity, "--namespace", identity.namespace, "get", "pods", "-l", f"job-name={name}", "-o", "json")),
+    pods_payload = json_output(
+        checked(executor, kubectl(identity, "--namespace", identity.namespace, "get", "pods", "-l", f"job-name={name}", "-o", "json")),
         "B4 child Pod inventory",
     )
     pods = pods_payload.get("items")
@@ -545,7 +546,7 @@ def _live_acceptance_job(executor: CommandExecutor, identity: RunIdentity) -> tu
     return job_meta["uid"], pod_meta["uid"]
 
 
-def _verify_acceptance_artifacts(document: Mapping[str, Any]) -> None:
+def verify_acceptance_artifacts(document: Mapping[str, Any]) -> None:
     for path_field, digest_field in (
         ("task_result_path", "task_result_file_sha256"),
         ("job_log_path", "job_log_file_sha256"),
@@ -558,14 +559,14 @@ def _verify_acceptance_artifacts(document: Mapping[str, Any]) -> None:
             raise TeardownError("B4 acceptance evidence artifact must not be a symbolic link")
         try:
             path = source.resolve(strict=True)
-            actual = _sha256_bytes(path.read_bytes())
+            actual = sha256_bytes(path.read_bytes())
         except OSError as exc:
             raise TeardownError("B4 acceptance evidence artifact is unavailable") from exc
         if actual != expected or path.stat().st_mode & 0o077:
             raise TeardownError("B4 acceptance evidence artifact changed or is not private")
 
 
-def _validate_acceptance_checks(document: Mapping[str, Any]) -> None:
+def validate_acceptance_checks(document: Mapping[str, Any]) -> None:
     checks = document.get("checks")
     if not isinstance(checks, list):
         raise TeardownError("B4 receipt has no acceptance scenario inventory")
@@ -588,7 +589,7 @@ def teardown_run(
     b2_receipt: Path | str | Mapping[str, Any],
     b3_receipt: Path | str | Mapping[str, Any],
     acceptance_receipt: Path | str | Mapping[str, Any] | None = None,
-    failure_evidence: Path | str | Mapping[str, Any] | None = None,
+    failure_evidence_path: Path | str | Mapping[str, Any] | None = None,
     teardown_receipt_path: Path | str,
     execute: bool = False,
 ) -> dict[str, Any]:
@@ -600,14 +601,14 @@ def teardown_run(
     if execute is not True:
         raise TeardownError("teardown requires explicit execute=True authorization")
     try:
-        _validate_pipeline_lock(lock)
+        validate_pipeline_lock(lock)
     except Exception as exc:
         raise TeardownError("teardown requires a complete B3 runtime lock") from exc
-    b2_document, b2_sha = _read_receipt(b2_receipt, "B2")
-    b3_document, b3_sha = _read_receipt(b3_receipt, "B3")
+    b2_document, b2_sha = read_receipt(b2_receipt, "B2")
+    b3_document, b3_sha = read_receipt(b3_receipt, "B3")
     acceptance_document = None
     if acceptance_receipt is not None:
-        acceptance_document, acceptance_sha = _read_receipt(acceptance_receipt, "B4")
+        acceptance_document, acceptance_sha = read_receipt(acceptance_receipt, "B4")
         if (
             acceptance_document.get("schema_version") != 1
             or acceptance_document.get("run_id") != identity.run_id
@@ -615,7 +616,7 @@ def teardown_run(
             or acceptance_document.get("namespace") != identity.namespace
             or acceptance_document.get("b2_receipt_sha256") != b2_sha
             or acceptance_document.get("b3_receipt_sha256") != b3_sha
-            or acceptance_document.get("lock_sha256") != _sha256_json(lock)
+            or acceptance_document.get("lock_sha256") != sha256_json(lock)
         ):
             raise TeardownError("B4 acceptance receipt does not bind the supplied run and B2/B3 receipts")
         if acceptance_document.get("status") not in {"fixture_runtime_pass", "full_data_runtime_pass", "failed", "incomplete_runtime_acceptance"}:
@@ -626,10 +627,10 @@ def teardown_run(
             or (acceptance_document.get("status") == "full_data_runtime_pass" and acceptance_document.get("scope") != "full_data_runtime")
         ):
             raise TeardownError("B4 runtime scope and status do not match")
-        _validate_acceptance_checks(acceptance_document)
+        validate_acceptance_checks(acceptance_document)
         if acceptance_document.get("status") in {"fixture_runtime_pass", "full_data_runtime_pass"}:
-            _verify_acceptance_artifacts(acceptance_document)
-    captured_failure = _failure_evidence(failure_evidence, identity=identity)
+            verify_acceptance_artifacts(acceptance_document)
+    captured_failure = failure_evidence(failure_evidence_path, identity=identity)
     if captured_failure is None:
         raise TeardownError("failure evidence must be captured and reviewed before any teardown")
 
@@ -663,7 +664,7 @@ def teardown_run(
     if expected_acceptance != (live_job_uid, live_pod_uid):
         raise TeardownError("B4 Job or Pod UID differs from its recorded acceptance/failure evidence")
     try:
-        _validate_complete_profile_inventory(
+        validate_complete_profile_inventory(
             executor,
             identity,
             recorded_b2,

@@ -51,9 +51,9 @@ def _capture(command: list[str]) -> subprocess.CompletedProcess:
 def _copy_context(destination: Path) -> None:
     for name in ("Dockerfile", ".dockerignore", "requirements.txt", "requirements-dev.txt"):
         shutil.copy2(ROOT / name, destination / name)
-    requirements_dir = destination / "deploy/module4/requirements"
+    requirements_dir = destination / "deploy/dashboard/requirements"
     requirements_dir.mkdir(parents=True)
-    shutil.copy2(ROOT / "deploy/module4/requirements/api.txt", requirements_dir / "api.txt")
+    shutil.copy2(ROOT / "deploy/dashboard/requirements/api.txt", requirements_dir / "api.txt")
     shutil.copy2(ROOT / "pyproject.toml", destination / "pyproject.toml")
     shutil.copytree(ROOT / "src", destination / "src", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     tests_dir = destination / "tests"
@@ -69,12 +69,12 @@ def _copy_context(destination: Path) -> None:
         target = tests_dir / source.name
         shutil.copy2(source, target)
     for relative in (
-        "scripts/module4/__init__.py",
-        "scripts/module4/module4d_api_validation.py",
-        "scripts/module4/module4d_demo_fixture.py",
-        "scripts/module4/module4d_demo_validate.py",
-        "scripts/module4/module4c_responsiveness.py",
-        "scripts/module4/module4c_streaming_demo.py",
+        "scripts/dashboard/__init__.py",
+        "scripts/dashboard/api_validation.py",
+        "scripts/dashboard/demo_fixture.py",
+        "scripts/dashboard/demo_validate.py",
+        "scripts/experiments/module4c_responsiveness.py",
+        "scripts/experiments/module4c_streaming_demo.py",
         "scripts/k8s/write_python_environment.py",
     ):
         target = destination / relative

@@ -519,8 +519,59 @@ def evaluate_at_k(recommendations, truth, ks=(5, 10, 20), catalog_size=None) -> 
     return _ranking_metrics_many(recommendations, truth, ks, catalog_size)
 
 
-def personal_frequency(interactions, users, k: int = 20):
-    """Recommend user-frequency products, filling short lists by popularity."""
+def popularity_products(interactions, k: int = 20):
+    """Return the `k` most popular prior products, ranked by popularity.
+
+    The result has one row per catalog product, but producing it means
+    aggregating every prior interaction. A caller that needs the table for
+    several cohorts should compute it once and pass it to
+    `global_popularity` and `personal_frequency` rather than letting each
+    call re-aggregate the full interaction table.
+    """
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+
+    if k < 1:
+        raise ValueError("k must be positive")
+    return (
+        interactions.groupBy("product_id")
+        .agg(F.sum("purchase_count").alias("purchase_count"))
+        .withColumn(
+            "als_rank",
+            F.row_number().over(Window.orderBy(F.desc("purchase_count"), F.asc("product_id"))),
+        )
+        .where(F.col("als_rank") <= k)
+        .select(
+            "product_id",
+            F.col("purchase_count").cast("double").alias("als_score"),
+            "als_rank",
+        )
+    )
+
+
+def global_popularity(interactions, users, k: int = 20, products=None):
+    """Recommend the same prior-popular products to every requested user.
+
+    `products` may be a precomputed popularity table from
+    `popularity_products`. Passing it avoids re-aggregating the interaction
+    table for every cohort that needs the same baseline.
+    """
+
+    if k < 1:
+        raise ValueError("k must be positive")
+    if products is None:
+        products = popularity_products(interactions, k)
+    return users.select("user_id").distinct().crossJoin(products)
+
+
+def personal_frequency(interactions, users, k: int = 20, fallback_products=None):
+    """Recommend user-frequency products, filling short lists by popularity.
+
+    `fallback_products` may be a precomputed popularity table holding twice
+    as many products as the requested list. It is independent of the
+    requested users, so computing it once and reusing it across cohorts
+    avoids repeating the full aggregation.
+    """
     from pyspark.sql import Window
     from pyspark.sql import functions as F
 
@@ -541,7 +592,9 @@ def personal_frequency(interactions, users, k: int = 20):
             "als_rank",
         )
     )
-    popularity = global_popularity(interactions, requested, 2 * k).select(
+    if fallback_products is None:
+        fallback_products = popularity_products(interactions, 2 * k)
+    popularity = requested.crossJoin(fallback_products).select(
         "user_id", "product_id", "als_score", F.col("als_rank").alias("popularity_rank")
     )
     candidates = popularity.join(personal.select("user_id", "product_id"), ["user_id", "product_id"], "left_anti")
@@ -560,30 +613,6 @@ def personal_frequency(interactions, users, k: int = 20):
         .select("user_id", "product_id", "als_score", "als_rank")
     )
     return personal.unionByName(fallback)
-
-
-def global_popularity(interactions, users, k: int = 20):
-    """Recommend the same prior-popular products to every requested user."""
-    from pyspark.sql import Window
-    from pyspark.sql import functions as F
-
-    if k < 1:
-        raise ValueError("k must be positive")
-    products = (
-        interactions.groupBy("product_id")
-        .agg(F.sum("purchase_count").alias("purchase_count"))
-        .withColumn(
-            "als_rank",
-            F.row_number().over(Window.orderBy(F.desc("purchase_count"), F.asc("product_id"))),
-        )
-        .where(F.col("als_rank") <= k)
-        .select(
-            "product_id",
-            F.col("purchase_count").cast("double").alias("als_score"),
-            "als_rank",
-        )
-    )
-    return users.select("user_id").distinct().crossJoin(products)
 
 
 def split_truth_by_history(truth, interactions):

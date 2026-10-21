@@ -24,8 +24,8 @@ from .ownership import (
 )
 from .runtime import (
     CommandExecutor,
-    _checked,
-    _json_output,
+    checked,
+    json_output,
     collect_cluster_identity,
     collect_namespace_identity,
     containerd_image_inventory_command,
@@ -40,7 +40,10 @@ class ReceiptCollectionError(RuntimeError):
 _OWNERSHIP_RECEIPT_SCHEMA_VERSION = 2
 
 
-def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
+
+
+def pv_spec_capacity(pv: Mapping[str, Any]) -> str:
+    """Return the storage capacity a bound persistent volume requests."""
     spec = pv.get("spec")
     capacity = spec.get("capacity") if isinstance(spec, Mapping) else None
     value = capacity.get("storage") if isinstance(capacity, Mapping) else None
@@ -165,7 +168,7 @@ _SECRET_METADATA_TEMPLATE = (
 
 
 def _get_json(executor: CommandExecutor, command: list[str], description: str) -> dict[str, Any]:
-    payload = _json_output(_checked(executor, command), description)
+    payload = json_output(checked(executor, command), description)
     if not isinstance(payload, dict):
         raise ReceiptCollectionError(f"{description} response is invalid")
     return payload
@@ -309,7 +312,7 @@ def collect_runtime_ownership_receipt(
 
     # Secret data is deliberately excluded from the API response; only its
     # metadata is collected for the ownership inventory.
-    secret_result = _checked(
+    secret_result = checked(
         executor,
         kubectl(
             identity,
@@ -424,7 +427,7 @@ def collect_runtime_ownership_receipt(
         storage_class_uid=sc_metadata.get("uid", ""),
         provisioner=provisioner or "",
         requested_storage=pvc_spec.get("resources", {}).get("requests", {}).get("storage", ""),
-        capacity=_pv_spec_capacity(pv),
+        capacity=pv_spec_capacity(pv),
         access_mode=(pvc_spec.get("accessModes") or [""])[0],
         profile_local=provisioner == lock["storage"].get("provisioner") and locality_kind == "hostPath",
         locality_kind=locality_kind,
@@ -440,7 +443,7 @@ def collect_runtime_ownership_receipt(
         retention_when_scaled="Retain",
     )
 
-    cri_inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
+    cri_inventory = checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
     provenance = lock.get("image_provenance", {})
     image_records = []
     role_specs = (

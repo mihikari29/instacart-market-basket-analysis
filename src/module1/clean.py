@@ -27,6 +27,8 @@ import uuid
 from pathlib import Path
 import pandas as pd
 
+from .contracts import PARQUET_COMPRESSION
+
 RAW_DATA_TYPES = {
     "orders": {
         "order_id": "int32",
@@ -376,7 +378,7 @@ def _write_outputs_atomically(output_dir: Path, outputs: dict[str, pd.DataFrame]
     backup: Path | None = None
     try:
         for filename, frame in outputs.items():
-            frame.to_parquet(stage / filename, index=False)
+            frame.to_parquet(stage / filename, index=False, compression=PARQUET_COMPRESSION)
         (stage / _CLEAN_OUTPUT_MANIFEST).write_text(
             json.dumps({"schema_version": 1, "files": sorted(_CLEAN_OUTPUT_FILES)}, sort_keys=True) + "\n",
             encoding="utf-8",

@@ -1,6 +1,9 @@
 """Unit tests for the bounded, verified Module 4C source reader."""
 
+
 from __future__ import annotations
+
+from tests.mongo_fakes import FakeClient
 
 from contextlib import contextmanager
 from dataclasses import replace
@@ -152,13 +155,6 @@ class FakeDatabase:
         return self.collections.setdefault(name, FakeCollection())
 
 
-class FakeClient:
-    def __init__(self, database):
-        self.database = database
-
-    def __getitem__(self, name):
-        assert name == "instacart"
-        return self.database
 
 
 @pytest.fixture

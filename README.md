@@ -77,7 +77,7 @@ Curated Parquet gives Spark typed, columnar inputs and supports date partition p
 
 ## Module 1 — Replay event generation and staging
 
-The source has weekday, hour and order-sequence information but no date. `SyntheticConfig` makes the simulation reproducible: its default seed is `42`, scatter window is 13 weeks, and within-basket item gaps use an exponential distribution with a 30-second mean clipped to 5–120 seconds. Other presets are `mobile-fast` (20 seconds, 3–90), `desktop-browse` (40 seconds, 10–240), `uniform` (15–50 seconds), and `deterministic` (hash-derived timing). Scatter windows are 1, 4, 13, 26 or 52 weeks. See [synthetic event generation](docs/generate.md) for the algorithm and [feed scenarios](docs/progress.md#23-synthetic-feed-configurations) for historical measurements.
+The source has weekday, hour and order-sequence information but no date. `SyntheticConfig` makes the simulation reproducible: its default seed is `42`, scatter window is 13 weeks, and within-basket item gaps use an exponential distribution with a 30-second mean clipped to 5–120 seconds. Other presets are `mobile-fast` (20 seconds, 3–90), `desktop-browse` (40 seconds, 10–240), `uniform` (15–50 seconds), and `deterministic` (hash-derived timing). Scatter windows are 1, 4, 13, 26 or 52 weeks. See [synthetic event generation](docs/docker.md) for the algorithm and [feed scenarios](docs/progress.md#23-synthetic-feed-configurations) for historical measurements.
 
 Generation chooses a stable per-user anchor week, reconstructs order dates from cleaned gaps, and preserves the recorded weekday and hour. Stable hash-derived values keyed by user, order and cart position make results invariant to row order and the `--batch-users` processing-memory setting for the same source and seed. Within an order, item events advance according to the configured gap distribution. A final monotonicity pass shifts a later order forward when needed so that event times increase strictly by cart position and order sequence for each user. The event identifier is `order_id_add_to_cart_order`.
 
@@ -91,7 +91,7 @@ Module 2 reads the curated HDFS tables, verifies handoff receipts and structural
 
 The batch outputs include product and department metrics, user-level descriptive features, weekday/hour distributions and pivoted time summaries. `user_features` records `user_id`, order and purchase counts, unique products, reorder rate and average basket size, with run ID, `prior_only` feature scope and UTC generation metadata. Module 4 has a bounded reader for one descriptive feature row. These features are not ALS model inputs. Batch publication uses run-owned temporary MongoDB collections and promotes each collection after validation. Individual collection promotion is atomic at the rename boundary, but a set of multiple collections is not one cross-collection transaction. Readers use run/version metadata to avoid mixing generations.
 
-The benchmark tooling includes explicit join strategies, date and partition filters, cached versus uncached aggregation, local thread configurations, and a separate existing-standalone-master executor-layout experiment. The full-data evidence records a Sort-Merge versus Broadcast Hash join comparison, equivalent filtered outputs, and cache materialization separately from reuse. It cautions that the host's caches were warm and the all-date arm had a different scan scope. See [Module 2 benchmark design](docs/module2-executor-benchmark.md) and the [dated measurements](docs/evidence/full/README.md).
+The benchmark tooling includes explicit join strategies, date and partition filters, cached versus uncached aggregation, local thread configurations, and a separate existing-standalone-master executor-layout experiment. The full-data evidence records a Sort-Merge versus Broadcast Hash join comparison, equivalent filtered outputs, and cache materialization separately from reuse. It cautions that the host's caches were warm and the all-date arm had a different scan scope. See [Module 2 benchmark design](docs/docker.md) and the [dated measurements](docs/evidence/full/README.md).
 
 ## Module 3 — Kafka and Spark Structured Streaming
 
@@ -115,15 +115,15 @@ Finite replay is considered complete only when the producer reports success, rec
 
 ## Environments and where to work
 
-The root `compose.yaml` is the persistent development stack for Kafka, Spark, HDFS and MongoDB. Its named volumes preserve state. The isolated synthetic dashboard environment in `deploy/module4/compose.demo.yaml` uses disposable MongoDB storage and loopback-only API/UI ports; it does not exercise production capacity. The [Docker guide](docs/docker.md) owns verified image targets, prerequisites, operating commands, and cleanup boundaries.
+The root `compose.yaml` is the persistent development stack for Kafka, Spark, HDFS and MongoDB. Its named volumes preserve state. The isolated synthetic dashboard environment in `deploy/dashboard/compose.demo.yaml` uses disposable MongoDB storage and loopback-only API/UI ports; it does not exercise production capacity. The [Docker guide](docs/docker.md) owns verified image targets, prerequisites, operating commands, and cleanup boundaries.
 
 Use the approved [Proposal](docs/Proposal.md) for the assignment objectives and requirements, and the [documentation index](docs/README.md) to navigate current contracts, procedures and historical evidence.
 
-The Kubernetes demonstration uses a fresh run identity, profile, context, namespace and storage. It separates serving (B2), processing (B3) and acceptance (B4), records private receipts, disables automatic retry/resume, and retains resources on failure. Teardown is a separate operation that rechecks run ownership. Its resource bounds, runtime identity lock, exact commands and limitations are in the [Kubernetes runbook](docs/kubernetes-demo-runbook.md). Kubernetes Spark runs in local mode inside run-owned jobs; this is not Spark executor scaling across Kubernetes workers.
+The Kubernetes demonstration uses a fresh run identity, profile, context, namespace and storage. It separates serving (B2), processing (B3) and acceptance (B4), records private receipts, disables automatic retry/resume, and retains resources on failure. Teardown is a separate operation that rechecks run ownership. Its resource bounds, runtime identity lock, exact commands and limitations are in the [Kubernetes guide](docs/kubernetes.md). Kubernetes Spark runs in local mode inside run-owned jobs; this is not Spark executor scaling across Kubernetes workers.
 
-For an executable procedure, use the canonical runbooks rather than copying a command into this overview: [Module 1](docs/docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [Module 2](docs/docker.md#module-2-batch-processing-and-benchmarks), [Module 3](docs/docker.md#module-3-streaming-operations), [Module 4A/4B](docs/docker.md#module-4a4b-operation-and-full-data-acceptance), and [Kubernetes](docs/kubernetes-demo-runbook.md). Test selection and service-backed exclusions are recorded in the [acceptance handoff](docs/external-acceptance-handoff.md); implementation files are mapped in the [repository layout](docs/repository-layout.md).
+For an executable procedure, use the canonical runbooks rather than copying a command into this overview: [Module 1](docs/docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [Module 2](docs/docker.md#module-2-batch-processing-and-benchmarks), [Module 3](docs/docker.md#module-3-streaming-operations), [Module 4A/4B](docs/docker.md#module-4a4b-operation-and-full-data-acceptance), and [Kubernetes](docs/kubernetes.md). Test selection and service-backed exclusions are recorded in the [acceptance handoff](docs/acceptance.md); implementation files are mapped in the [repository layout](README.md).
 
-Start the [External Acceptance Tutorial](docs/acceptance-tutorial.md) for a beginner-friendly path through preparation, execution decisions, evidence, and handoff.
+Start the [External Acceptance Tutorial](docs/acceptance.md) for a beginner-friendly path through preparation, execution decisions, evidence, and handoff.
 
 ## Results and limits
 
@@ -141,6 +141,112 @@ Selected historical findings help show what the evidence means:
 
 Full trial context, environment identity and limitations are in the [full-data report](docs/evidence/full/README.md), [Module 3 evidence](docs/evidence/module3/README.md), and [Module 4 acceptance record](docs/evidence/module4/acceptance-20261010/README.md).
 
-External runtime acceptance remains pending. That work includes pinned Spark/MongoDB integration, browser and container-package checks, isolated Kubernetes B2/B3/B4 execution, runtime checkpoint recovery, full-data processing, actual performance/executor experiments, and fresh identity-bound evidence. Historical results, offline fixture checks, source review and runtime acceptance are different evidence scopes. See [current project progress](docs/progress.md) and the [external acceptance handoff](docs/external-acceptance-handoff.md) for the exact boundaries.
+External runtime acceptance remains pending. That work includes pinned Spark/MongoDB integration, browser and container-package checks, isolated Kubernetes B2/B3/B4 execution, runtime checkpoint recovery, full-data processing, actual performance/executor experiments, and fresh identity-bound evidence. Historical results, offline fixture checks, source review and runtime acceptance are different evidence scopes. See [current project progress](docs/progress.md) and the [external acceptance](docs/acceptance.md) for the exact boundaries.
 
-<a id="lambda-modules-spec-7--verify-against-assignment"></a>
+## Repository layout
+
+This guide maps stable code and documentation entry points. Module 4 application
+code remains under `src/module4/`; its deployment assets and operational tools
+are grouped under `deploy/dashboard/` and `scripts/dashboard/`.
+
+## Canonical structure
+
+```text
+Dockerfile                         spark, api, ui, browser, k8s-runner, pipeline targets
+compose.yaml                       persistent pipeline services
+requirements.txt                   shared runtime dependencies
+requirements-dev.txt               shared development/test dependencies
+src/common/                        shared building blocks: env, redaction, run context,
+                                   Spark session, type guards, source identity
+src/module1/ … src/module4/        processing and application packages
+scripts/module1.py … module4.py    project pipeline entry points
+scripts/module3_harness.py         shared Compose harness for the Module 3 checks
+scripts/dashboard/                 Module 4D demo, fixture, validator and browser tools
+scripts/experiments/               archived Module 4C experiment harnesses
+scripts/k8s/                       Kubernetes demo coordinator (io, constants and phases)
+deploy/dashboard/                  isolated synthetic dashboard Compose environment
+deploy/dashboard/requirements/     separate API, UI, UI-dev and browser pins
+deploy/k8s/                        serving and pipeline manifests, version lock
+tests/                             unit, contract, Spark and service-backed tests
+docs/                              requirements, current guides and evidence
+.github/workflows/                 CI and gated full-data validation
+```
+
+### Module 4 package paths
+
+<a id="module4-package-paths"></a>
+
+Module 4A and 4B remain in the root package. Module 4C and 4D use dedicated
+subpackages under the same canonical `src.module4` namespace:
+
+| Former path | Canonical path |
+|---|---|
+| `src/module4/` | `src/module4/` (Module 4A/4B retained) |
+| `src/module4c/` | `src/module4/hybrid/` |
+| `src/module4d/` | `src/module4/dashboard/` |
+
+Use `from src.module4.hybrid.service import serve_hybrid_user` for Hybrid
+serving and `from src.module4.dashboard.api import create_app` for the API.
+The dashboard ASGI application is `src.module4.dashboard.api:app`. There are
+no compatibility packages at `src.module4c` or `src.module4d`.
+
+## Documentation map
+
+| Document | Responsibility |
+|---|---|
+| [Proposal](docs/Proposal.md) | Approved project requirements and architecture baseline. |
+| [Documentation index](README.md) | Entry points for project, technical, operating, and evidence guides. |
+| [Progress](docs/progress.md) | Current implementation and the boundary of completed checks and pending acceptance. |
+| [External acceptance handoff](docs/acceptance.md#delivered-scope-and-evidence-boundaries) | Operator preparation, delivered scope, and external validation tasks. |
+| [Implementation summary](docs/implementation-ledger.md) | Design decisions, important contracts, safety, and verification boundaries. |
+| [Synthetic event generation](docs/docker.md#synthetic-event-generation) | Timestamp construction, scenario configuration, determinism, and feed provenance. |
+| [Module 3 contracts](docs/module3-contracts.md) | Kafka, event-time aggregation, Mongo publication, bundles, and Module 4C boundary. |
+| [Module 4 plan](docs/module4-plan.md) | Module 4A–4D algorithms, data, ranking, evaluation, API, and dashboard contracts. |
+| [Docker guide](docs/docker.md) | Image targets, runtime prerequisites, operational procedures, and scoped cleanup. |
+| [Evidence archive](docs/evidence/README.md) | Dated validation reports, receipts, historical observations, and archive indexes. |
+
+Use current guides for current behavior and procedures. The Module 4C/4D
+standalone design and release documents live in the evidence archives; their
+original dates, run identities, measurements, and limitations remain part of
+the record.
+
+## Application and deployment paths
+
+- `src/module1/clean.py`, `config.py`, `generate.py`, `producer.py`, and
+  `stage_hdfs.py` own raw validation, synthetic timing, Kafka payloads, and
+  HDFS handoff behavior; see the [generation guide](docs/docker.md#synthetic-event-generation).
+- `src/module2/` contains Spark handoff validation, analytics, prior-only
+  feature extraction, Mongo publication, and local/standalone benchmarks; see
+  the [executor benchmark guide](docs/docker.md#spark-executor-layout-experiment).
+- `src/module3/` contains Kafka parsing, Structured Streaming, legacy and
+  immutable trend writers, finite replay, checkpoint versioning, and completed
+  batch telemetry; see the [Module 3 contract guide](docs/module3-contracts.md).
+- `src/module4/` contains ALS, graph, Hybrid serving, API, and dashboard code.
+  The retired `src.module4c` and `src.module4d` packages are not valid imports.
+- `deploy/dashboard/requirements/` separates API, UI, UI-development, and browser
+  dependencies. The UI development manifest includes the runtime UI pins.
+- `scripts/dashboard/` groups the Module 4C evaluation/streaming experiments and
+  Module 4D demo, validation and browser tools. `scripts/k8s/` owns run identity,
+  image provenance, pipeline and acceptance coordination. Core project runners
+  stay in `scripts/`.
+- `tests/` separates unit and contract tests from Spark, MongoDB, API/UI and
+  browser/runtime selections. The [acceptance handoff](docs/acceptance.md#delivered-scope-and-evidence-boundaries)
+  records the exact historic broad-suite selection and its exclusions.
+
+The main `compose.yaml` owns persistent Kafka, Spark, HDFS, and MongoDB
+services. The isolated `deploy/dashboard/compose.demo.yaml` uses disposable
+MongoDB storage and loopback-only UI/API ports and does not mount main pipeline
+data. See the [Docker guide](docs/docker.md) for their separate boundaries.
+
+## Stable names and evidence
+
+`MODULE4D_` environment variables, API routes, MongoDB collection/readiness
+identifiers, Hybrid serving-version format, and established test filenames are
+runtime contracts. Script basenames and command arguments are also stable entry
+points. Check the relevant canonical guide before changing these contracts.
+
+Historical reports are not rewritten when code or current documentation changes.
+The [evidence index](docs/evidence/README.md) links each result to its recorded
+revision and scope. The [style regression report](docs/style-regression-validation.md)
+retains its dated **NOT FULLY VERIFIED** assessment for that comparison; it is
+not a runtime acceptance statement for the reviewed implementation revision.

@@ -33,21 +33,3 @@ KAFKA_EVENT_SCHEMA = StructType(
         StructField("ingestion_time_epoch_ms", LongType()),
     ]
 )
-
-# Columns downstream code can rely on after parse.py
-PARSED_COLUMNS = (
-    "event_id",
-    "order_id",
-    "user_id",
-    "product_id",
-    "add_to_cart_order",
-    "reordered",
-    "aisle_id",
-    "department_id",
-    "order_dow",
-    "order_hour_of_day",
-    "event_time_epoch_ms",
-    "event_time_iso",
-    "ingestion_time_epoch_ms",
-    "event_time",  # timestamp column added by parse.from_kafka
-)

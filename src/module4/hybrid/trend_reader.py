@@ -1,6 +1,7 @@
 """Read and validate one immutable Module 3 trending-window bundle."""
 
 from __future__ import annotations
+from ...common.type_guards import positive_int
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,9 +15,9 @@ from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     BUNDLE_SCHEMA_VERSION,
     MAX_TREND_TOP_K,
-    _build_document,
-    _canonical_window_datetime,
-    _validate_namespace,
+    build_document,
+    canonical_window_datetime,
+    validate_namespace,
 )
 
 from .config import TrendRecommendation, TrendSnapshot
@@ -106,11 +107,6 @@ def _validate_hash(value: Any, field: str) -> str:
     return value
 
 
-def _positive_integer(value: Any, field: str) -> int:
-    if type(value) is not int or value <= 0:
-        raise TrendSnapshotIntegrityError(f"{field} must be a positive integer")
-    return value
-
 
 def _validate_document(
     document: Any,
@@ -126,10 +122,10 @@ def _validate_document(
         raise TrendSnapshotIntegrityError("bundle schema_version is unsupported")
 
     try:
-        source_namespace = _validate_namespace(
+        source_namespace = validate_namespace(
             document.get("source_namespace"), "source_namespace", maximum=256
         )
-        source_scope = _validate_namespace(
+        source_scope = validate_namespace(
             document.get("source_scope"), "source_scope", maximum=128
         )
     except (TypeError, ValueError) as exc:
@@ -138,10 +134,10 @@ def _validate_document(
         raise TrendSnapshotIntegrityError("selected bundle source_namespace does not match the request")
 
     try:
-        window_start, _start_iso = _canonical_window_datetime(
+        window_start, _start_iso = canonical_window_datetime(
             document.get("window_start"), "window_start"
         )
-        window_end, _end_iso = _canonical_window_datetime(document.get("window_end"), "window_end")
+        window_end, _end_iso = canonical_window_datetime(document.get("window_end"), "window_end")
     except (TypeError, ValueError, OverflowError) as exc:
         raise TrendSnapshotIntegrityError(f"bundle window timestamp is invalid: {exc}") from exc
     if window_start >= window_end:
@@ -174,8 +170,8 @@ def _validate_document(
                 f"items[{position - 1}] must contain exactly the C4A item fields"
             )
 
-        product_id = _positive_integer(item.get("product_id"), "product_id")
-        rank = _positive_integer(item.get("trend_rank"), "trend_rank")
+        product_id = positive_int(item.get("product_id"), "product_id", error=TrendSnapshotIntegrityError)
+        rank = positive_int(item.get("trend_rank"), "trend_rank", error=TrendSnapshotIntegrityError)
         if product_id in product_ids:
             raise TrendSnapshotIntegrityError(f"duplicate product_id {product_id}")
         product_ids.add(product_id)
@@ -218,7 +214,7 @@ def _validate_document(
             raise TrendSnapshotIntegrityError("expires_at must be later than published_at")
 
     try:
-        rebuilt = _build_document(
+        rebuilt = build_document(
             {
                 "window_start": window_start,
                 "window_end": window_end,
@@ -295,7 +291,7 @@ def read_verified_trend_snapshot(
     independent of processing-time TTL expiry.
     """
     try:
-        namespace = _validate_namespace(source_namespace, "source_namespace", maximum=256)
+        namespace = validate_namespace(source_namespace, "source_namespace", maximum=256)
     except (TypeError, ValueError) as exc:
         raise TrendSnapshotRequestError(str(exc)) from exc
 

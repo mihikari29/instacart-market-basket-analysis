@@ -6,12 +6,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import sys
 from typing import Any
 from urllib.error import HTTPError, URLError
+
+from scripts.dashboard import required
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -30,11 +31,6 @@ UNKNOWN_USER_ID = 9999
 SENSITIVE_RE = re.compile(r"(?i)(mongodb(?:\+srv)?://|password|passwd|secret|token|root:[^@]+@)")
 
 
-def _required(name: str) -> str:
-    value = os.environ.get(name, "")
-    if not value:
-        raise RuntimeError(f"{name} is required")
-    return value
 
 
 def _get(base_url: str, path: str, expected_status: int = 200) -> tuple[int, dict[str, Any]]:
@@ -103,11 +99,11 @@ def _assert_plan(database: Any, collection_name: str, query: dict[str, Any], sor
 
 
 def validate() -> dict[str, Any]:
-    database_name = _required("MODULE4D_DEMO_DATABASE")
-    namespace = _required("MODULE4D_DEMO_TREND_NAMESPACE")
-    readonly_user = _required("MODULE4D_DEMO_READONLY_USERNAME")
-    readonly_password = _required("MODULE4D_DEMO_READONLY_PASSWORD")
-    base_url = _required("MODULE4D_DEMO_API_BASE_URL").rstrip("/")
+    database_name = required("MODULE4D_DEMO_DATABASE")
+    namespace = required("MODULE4D_DEMO_TREND_NAMESPACE")
+    readonly_user = required("MODULE4D_DEMO_READONLY_USERNAME")
+    readonly_password = required("MODULE4D_DEMO_READONLY_PASSWORD")
+    base_url = required("MODULE4D_DEMO_API_BASE_URL").rstrip("/")
     if not base_url.startswith("http://module4d-api:"):
         raise RuntimeError("live validator must call the isolated module4d-api service")
     reader_uri = (

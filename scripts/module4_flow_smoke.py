@@ -10,7 +10,7 @@ import sys
 import uuid
 
 from src.module4.config import Config
-from src.module4.data import _hdfs_sha256
+from src.module4.data import hdfs_sha256
 from src.module4.sink_mongo import validate_snapshot
 from src.module4.spark import session
 
@@ -90,13 +90,13 @@ def _prepare_fixture(spark, root: str):
         source_name = "products" if name == "products" else name
         sources[source_name] = {
             "rows": frame.count(),
-            "sha256": _hdfs_sha256(spark, fs, parquet_files[0]),
+            "sha256": hdfs_sha256(spark, fs, parquet_files[0]),
         }
     _write_json_hdfs(spark, f"{root}/curated/_sources.json", sources)
     return sources
 
 
-def _run_cli(root: Path, fixture_root: str, output_root: str, run_id: str, model_version: str, graph_version: str):
+def run_cli(root: Path, fixture_root: str, output_root: str, run_id: str, model_version: str, graph_version: str):
     args = [
         sys.executable,
         "-m",
@@ -160,11 +160,11 @@ def main():
         graph_version = f"graph-flow-{run_token}"
         output_root = "results/module4-flow"
         first_run_id = f"flow-{run_token}-first"
-        first = _run_cli(
+        first = run_cli(
             Path.cwd(), fixture_root, output_root, first_run_id, model_version, graph_version
         )
         replay_id = f"flow-{run_token}-replay"
-        replay = _run_cli(
+        replay = run_cli(
             Path.cwd(), fixture_root, output_root, replay_id, model_version, graph_version
         )
         if replay["als"]["model"].get("reused_existing_model") is not True:

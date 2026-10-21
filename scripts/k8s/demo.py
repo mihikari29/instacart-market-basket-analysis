@@ -14,10 +14,8 @@ import argparse
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
 import json
 import math
-import os
 from pathlib import Path
 import re
 import shutil
@@ -69,11 +67,17 @@ from .runtime import (
     measure_host_capacity,
     validate_host_capacity,
 )
+from .io import (
+    read_json_object,
+    sha256_file as _sha256,
+    sha256_json as sha256_json,
+    write_json_atomic,
+)
 from .teardown import (
     TeardownError,
-    _read_receipt as _read_teardown_receipt,
-    _validate_acceptance_checks,
-    _verify_acceptance_artifacts,
+    read_receipt as read_teardown_receipt,
+    validate_acceptance_checks,
+    verify_acceptance_artifacts,
     teardown_run,
 )
 
@@ -98,52 +102,24 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _sha256_json(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-
-
 def _write_private_json(path: Path, payload: Mapping[str, Any], *, allow_replace: bool = False) -> None:
-    if path.is_symlink() or (path.exists() and not allow_replace):
-        raise DemoError("run evidence output already exists or is a symbolic link")
-    if not path.parent.is_dir() or path.parent.stat().st_mode & 0o077:
-        raise DemoError("run evidence parent must be a private directory")
-    temporary = path.with_name(f".{path.name}.tmp")
-    if temporary.exists() or temporary.is_symlink():
-        raise DemoError("temporary evidence path already exists")
     try:
-        with temporary.open("x", encoding="utf-8") as stream:
-            json.dump(payload, stream, sort_keys=True, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.chmod(0o600)
-        if allow_replace:
-            temporary.replace(path)
-        else:
-            temporary.rename(path)
+        write_json_atomic(path, payload, mode=0o600, replace=allow_replace, private_parent=True)
+    except FileExistsError as exc:
+        raise DemoError("run evidence output already exists or is a symbolic link") from exc
+    except PermissionError as exc:
+        raise DemoError("run evidence parent must be a private directory") from exc
     except OSError as exc:
-        temporary.unlink(missing_ok=True)
         raise DemoError("run evidence could not be written") from exc
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file():
-        raise DemoError("run evidence is missing or is a symbolic link")
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return read_json_object(path)
+    except FileNotFoundError as exc:
+        raise DemoError("run evidence is missing or is a symbolic link") from exc
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         raise DemoError("run evidence is invalid JSON") from exc
-    if not isinstance(value, dict):
-        raise DemoError("run evidence must be a JSON object")
-    return value
 
 
 def _identity_from_lock(lock: Mapping[str, Any], requested_run_id: str | None = None) -> RunIdentity:
@@ -389,7 +365,7 @@ def _validate_mode_inputs(
     return receipt
 
 
-def _plan_document(
+def plan_document(
     identity: RunIdentity,
     mode: str,
     *,
@@ -490,7 +466,7 @@ def preflight_report(
     }
 
 
-def _require_absent_namespace(executor: CommandExecutor, identity: RunIdentity) -> None:
+def require_absent_namespace(executor: CommandExecutor, identity: RunIdentity) -> None:
     """Fail closed if this new one-shot run would adopt an existing namespace."""
     try:
         result = executor.run(kubectl(identity, "get", "namespaces", "-o", "json"), timeout=30)
@@ -507,7 +483,7 @@ def _require_absent_namespace(executor: CommandExecutor, identity: RunIdentity) 
             raise DemoError("run namespace already exists; refusing to adopt or overwrite prior resources")
 
 
-def _acceptance_passed(mode: str, receipt: Mapping[str, Any]) -> bool:
+def acceptance_passed(mode: str, receipt: Mapping[str, Any]) -> bool:
     expected = {
         "fixture": ("fixture_runtime_pass", "fixture_runtime"),
         "full": ("full_data_runtime_pass", "full_data_runtime"),
@@ -597,7 +573,7 @@ def run_demo(
                 f"preparation evidence: {preparation_directory}"
             ) from exc
     assert lock is not None
-    plan = _plan_document(identity, mode, host_capacity=host_capacity, source_receipt_sha256=source_sha)
+    plan = plan_document(identity, mode, host_capacity=host_capacity, source_receipt_sha256=source_sha)
 
     try:
         render_overlay(
@@ -627,7 +603,7 @@ def run_demo(
         }
         _write_private_json(root / "version-lock.json", lock)
         _write_private_json(session_path, session)
-        _require_absent_namespace(active_executor, identity)
+        require_absent_namespace(active_executor, identity)
         session["completed_stages"].append("namespace_preflight")
         session["stage"] = "serving"
         _write_private_json(session_path, session, allow_replace=True)
@@ -693,7 +669,7 @@ def run_demo(
             acceptance_receipt_path=acceptance_path,
             execute=True,
         )
-        if not _acceptance_passed(mode, acceptance_result):
+        if not acceptance_passed(mode, acceptance_result):
             raise DemoError("B4 did not produce a complete passing runtime receipt")
         session.update(
             status="runtime_pass",
@@ -796,7 +772,7 @@ def verify_run(run_id: str, output_directory: Path | str) -> dict[str, Any]:
             or acceptance.get("namespace") != identity.namespace
             or acceptance.get("cluster_uid") != b3.cluster_uid
             or acceptance.get("namespace_uid") != b3.namespace_uid
-            or acceptance.get("lock_sha256") != _sha256_json(lock)
+            or acceptance.get("lock_sha256") != sha256_json(lock)
             or acceptance.get("b2_receipt_sha256") != verified["b2_receipt"]
             or acceptance.get("b3_receipt_sha256") != verified["b3_receipt"]
         ):
@@ -947,7 +923,7 @@ def teardown_demo(
     if failure_evidence is None:
         raise DemoError("collect and review --failure evidence before teardown")
     if acceptance_path.is_file():
-        acceptance, _acceptance_digest = _read_teardown_receipt(acceptance_path, "B4")
+        acceptance, _acceptance_digest = read_teardown_receipt(acceptance_path, "B4")
         if (
             acceptance.get("schema_version") != 1
             or acceptance.get("run_id") != identity.run_id
@@ -955,13 +931,13 @@ def teardown_demo(
             or acceptance.get("namespace") != identity.namespace
             or acceptance.get("b2_receipt_sha256") != _sha256(b2_path)
             or acceptance.get("b3_receipt_sha256") != _sha256(b3_path)
-            or acceptance.get("lock_sha256") != _sha256_json(lock)
+            or acceptance.get("lock_sha256") != sha256_json(lock)
         ):
             raise DemoError("acceptance receipt does not bind this run and its B2/B3 locks")
         try:
-            _validate_acceptance_checks(acceptance)
+            validate_acceptance_checks(acceptance)
             if acceptance.get("status") in {"fixture_runtime_pass", "full_data_runtime_pass"}:
-                _verify_acceptance_artifacts(acceptance)
+                verify_acceptance_artifacts(acceptance)
         except TeardownError as exc:
             raise DemoError(f"acceptance receipt cannot authorize teardown: {exc}") from exc
     plan = {
@@ -991,7 +967,7 @@ def teardown_demo(
             b2_receipt=b2_path,
             b3_receipt=b3_path,
             acceptance_receipt=acceptance_path if acceptance_path.is_file() else None,
-            failure_evidence=failure_evidence,
+            failure_evidence_path=failure_evidence,
             teardown_receipt_path=root / "teardown-receipt.json",
             execute=True,
         )
@@ -1065,7 +1041,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 capacity["windows_backing_disk_gib"] = args.windows_backing_disk_gib
                 capacity["windows_backing_disk_source"] = "operator-supplied measured value"
             source = _validate_mode_inputs(args.mode, input_directory=args.input_dir, capacity=capacity)
-            report = _plan_document(
+            report = plan_document(
                 identity, args.mode, host_capacity=capacity,
                 source_receipt_sha256=source.get("manifest_sha256") if source else None,
             )

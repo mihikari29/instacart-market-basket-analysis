@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from tests.mongo_fakes import FindCommandRecorder
+
 from datetime import datetime, timezone
 import os
 import uuid
 
 import pytest
 from pymongo import MongoClient
-from pymongo.monitoring import CommandListener
 from pymongo.uri_parser import parse_uri
 
 from src.module4.config import Config as Module4Config
@@ -180,19 +181,6 @@ def _seed_snapshot(
     )
 
 
-class _FindCommandRecorder(CommandListener):
-    def __init__(self):
-        self.commands = []
-
-    def started(self, event):
-        if event.command_name == "find":
-            self.commands.append(dict(event.command))
-
-    def succeeded(self, event):
-        pass
-
-    def failed(self, event):
-        pass
 
 
 def _install_command_recorder(monkeypatch, recorder):
@@ -212,7 +200,7 @@ def test_live_capture_verifies_user_versions_catalog_bounded_queries_and_ranker(
 ):
     _client, database, uri = live_database
     _seed_snapshot(database)
-    recorder = _FindCommandRecorder()
+    recorder = FindCommandRecorder()
     _install_command_recorder(monkeypatch, recorder)
     config = _config(uri, database.name)
 

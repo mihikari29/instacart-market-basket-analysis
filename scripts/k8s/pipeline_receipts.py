@@ -15,17 +15,23 @@ from .ownership import (
     OwnerReferenceIdentity,
     RunIdentity,
 )
+from .constants import (
+    PIPELINE_CLAIMS,
+    acceptance_job_name,
+    pipeline_job_name,
+)
 from .pipeline import (
     PIPELINE_POLICY_NAMES,
     PIPELINE_STEPS,
-    _locked_image,
-    _validate_pipeline_lock,
+    locked_image,
+    validate_pipeline_lock,
 )
+from .receipts import pv_spec_capacity
 from .runtime import (
     CommandExecutor,
     RuntimePreflightError,
-    _checked,
-    _json_output,
+    checked,
+    json_output,
     collect_cluster_identity,
     collect_namespace_identity,
     containerd_image_inventory_command,
@@ -33,13 +39,7 @@ from .runtime import (
 )
 
 
-_CLAIMS = {
-    "it4931-hdfs-namenode": "1Gi",
-    "it4931-hdfs-datanode": "16Gi",
-    "it4931-kafka-data": "2Gi",
-    "it4931-pipeline-data": "16Gi",
-    "it4931-pipeline-checkpoints": "2Gi",
-}
+_CLAIMS = PIPELINE_CLAIMS
 _DIRECT_OBJECTS = {
     ("ConfigMap", "it4931-pipeline-config"),
     ("ServiceAccount", "module4d-pipeline"),
@@ -115,13 +115,6 @@ class PipelineReceiptError(RuntimeError):
     """B3 live identity, owner-chain, storage, or image evidence is incomplete."""
 
 
-def _pv_spec_capacity(pv: Mapping[str, Any]) -> str:
-    spec = pv.get("spec")
-    capacity = spec.get("capacity") if isinstance(spec, Mapping) else None
-    value = capacity.get("storage") if isinstance(capacity, Mapping) else None
-    if not isinstance(value, str) or not value:
-        raise PipelineReceiptError("bound PV spec does not report storage capacity")
-    return value
 
 
 def _parse_owner_references(metadata: Mapping[str, Any]) -> tuple[OwnerReferenceIdentity, ...]:
@@ -141,7 +134,7 @@ def _parse_owner_references(metadata: Mapping[str, Any]) -> tuple[OwnerReference
 
 def _query_json(executor: CommandExecutor, command: list[str], description: str) -> dict[str, Any]:
     try:
-        value = _json_output(_checked(executor, command), description)
+        value = json_output(checked(executor, command), description)
     except RuntimePreflightError as exc:
         raise PipelineReceiptError(f"{description} could not be collected") from exc
     if not isinstance(value, dict):
@@ -206,7 +199,7 @@ def collect_pipeline_receipt(
     if execute is not True:
         raise PipelineReceiptError("B3 receipt collection requires explicit execute=True authorization")
     try:
-        _validate_pipeline_lock(lock)
+        validate_pipeline_lock(lock)
         cluster = collect_cluster_identity(executor, identity, execute=True)
         namespace = collect_namespace_identity(executor, identity, execute=True)
     except Exception as exc:
@@ -242,7 +235,7 @@ def collect_pipeline_receipt(
                 raise PipelineReceiptError(f"B3 ownership labels do not match for {kind}/{name}")
             if labels.get("it4931.instacart.edu/component") != "pipeline":
                 raise PipelineReceiptError(f"B3 component label is missing for {kind}/{name}")
-            acceptance_job = f"it4931-acceptance-{identity.run_id}"
+            acceptance_job = acceptance_job_name(identity.run_id)
             if include_b4_acceptance and kind == "Job" and name == acceptance_job:
                 continue
             if include_b4_acceptance and kind == "Pod":
@@ -257,13 +250,13 @@ def collect_pipeline_receipt(
             objects.append(record)
 
     direct_actual = {key for key in by_key if key[0] != "Pod"}
-    expected_direct = set(_DIRECT_OBJECTS) | {("Job", f"it4931-{step}-{identity.run_id}") for step in PIPELINE_STEPS}
+    expected_direct = set(_DIRECT_OBJECTS) | {("Job", pipeline_job_name(step, identity.run_id)) for step in PIPELINE_STEPS}
     if direct_actual != expected_direct:
         raise PipelineReceiptError("B3 direct object inventory is incomplete or contains unapproved resources")
     direct_uids = {key: value.get("metadata", {}).get("uid") for key, value in by_key.items() if key[0] != "Pod"}
     job_status = {}
     for step in PIPELINE_STEPS:
-        name = f"it4931-{step}-{identity.run_id}"
+        name = pipeline_job_name(step, identity.run_id)
         document = by_key.get(("Job", name))
         status = document.get("status", {}) if document is not None else {}
         if status.get("succeeded") != 1 or status.get("active", 0) != 0:
@@ -323,7 +316,7 @@ def collect_pipeline_receipt(
         local = pv_spec.get("hostPath") or pv_spec.get("local")
         locality_kind = "hostPath" if isinstance(pv_spec.get("hostPath"), Mapping) else "local" if isinstance(pv_spec.get("local"), Mapping) else "unknown"
         locality_path = local.get("path", "") if isinstance(local, Mapping) else ""
-        capacity = _pv_spec_capacity(pv)
+        capacity = pv_spec_capacity(pv)
         if (
             _quantity(capacity) < _quantity(requested)
             or locality_kind != "hostPath"
@@ -345,12 +338,12 @@ def collect_pipeline_receipt(
         ))
 
     image_roles = {role: (reference, lock["images"][role]["immutable_digest"]) for role, reference in (
-        ("kafka", _locked_image(lock, "kafka")),
-        ("hdfs_namenode", _locked_image(lock, "hdfs_namenode")),
-        ("hdfs_datanode", _locked_image(lock, "hdfs_datanode")),
-        ("pipeline_application_image", _locked_image(lock, "pipeline_application_image")),
+        ("kafka", locked_image(lock, "kafka")),
+        ("hdfs_namenode", locked_image(lock, "hdfs_namenode")),
+        ("hdfs_datanode", locked_image(lock, "hdfs_datanode")),
+        ("pipeline_application_image", locked_image(lock, "pipeline_application_image")),
     )}
-    inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
+    inventory = checked(executor, containerd_image_inventory_command(identity), timeout=60).stdout
     images: list[PipelineImage] = []
     for item in objects:
         if item.kind != "Pod":
@@ -478,7 +471,7 @@ def validate_pipeline_receipt(
     if not isinstance(receipt, PipelineOwnershipReceipt) or receipt.schema_version != 1:
         raise PipelineReceiptError("B3 ownership receipt schema is unsupported")
     try:
-        _validate_pipeline_lock(lock)
+        validate_pipeline_lock(lock)
     except Exception as exc:
         raise PipelineReceiptError("B3 receipt requires a complete finalized image and cluster lock") from exc
     if (receipt.profile, receipt.context, receipt.namespace) != (identity.profile, identity.profile, identity.namespace):
@@ -493,12 +486,12 @@ def validate_pipeline_receipt(
     uids = [receipt.cluster_uid, receipt.namespace_uid, *(item.uid for item in receipt.objects)]
     if any(not isinstance(value, str) or not value for value in uids) or len(set(uids)) != len(uids):
         raise PipelineReceiptError("B3 receipt UIDs are missing or duplicated")
-    expected_jobs = {("Job", f"it4931-{step}-{identity.run_id}") for step in PIPELINE_STEPS}
+    expected_jobs = {("Job", pipeline_job_name(step, identity.run_id)) for step in PIPELINE_STEPS}
     expected_direct = set(_DIRECT_OBJECTS) | expected_jobs
     actual_direct = set(keyed).difference(key for key in keyed if key[0] == "Pod")
     if actual_direct != expected_direct:
         raise PipelineReceiptError("B3 direct-resource receipt is incomplete or includes unowned resources")
-    expected_job_status = {f"it4931-{step}-{identity.run_id}" for step in PIPELINE_STEPS}
+    expected_job_status = {pipeline_job_name(step, identity.run_id) for step in PIPELINE_STEPS}
     if not isinstance(receipt.job_status, Mapping) or set(receipt.job_status) != expected_job_status:
         raise PipelineReceiptError("B3 completed-Job receipt is incomplete")
     if any(
@@ -507,7 +500,7 @@ def validate_pipeline_receipt(
     ):
         raise PipelineReceiptError("B3 receipt contains an incomplete Job")
     direct_uids = {key: value.uid for key, value in keyed.items() if key[0] != "Pod"}
-    expected_job_names = {f"it4931-{step}-{identity.run_id}" for step in PIPELINE_STEPS}
+    expected_job_names = {pipeline_job_name(step, identity.run_id) for step in PIPELINE_STEPS}
     expected_stateful_names = {"hdfs-namenode", "hdfs-datanode", "kafka"}
     pods_by_owner: dict[tuple[str, str], list[PipelineObject]] = {}
     for item in receipt.objects:
@@ -566,7 +559,7 @@ def validate_pipeline_receipt(
         raise PipelineReceiptError("B3 receipt is missing a Kafka or HDFS runtime image")
     for role in ("kafka", "hdfs_namenode", "hdfs_datanode", "pipeline_application_image"):
         image = lock["images"][role]
-        expected_ref = _locked_image(lock, role)
+        expected_ref = locked_image(lock, role)
         expected_digest = image["immutable_digest"]
         matches = [record for record in image_records if record.role == role]
         if not matches:

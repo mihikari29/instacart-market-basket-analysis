@@ -8,7 +8,7 @@ import math
 
 import pytest
 
-from scripts.module4.module4c_responsiveness import (
+from scripts.experiments.module4c_responsiveness import (
     BASE_END,
     CHANGED_END,
     SOURCE_NAMESPACE,
@@ -261,12 +261,12 @@ def test_git_metadata_uses_verified_launcher_values_when_pinned_image_has_no_git
     monkeypatch,
 ):
     monkeypatch.setattr(
-        "scripts.module4.module4c_responsiveness.subprocess.run",
+        "scripts.experiments.module4c_responsiveness.subprocess.run",
         lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError("git")),
     )
     monkeypatch.setenv("C8A_GIT_COMMIT", "a" * 40)
-    monkeypatch.setenv("C8A_GIT_STATUS_JSON", '["?? scripts/module4/module4c_responsiveness.py"]')
+    monkeypatch.setenv("C8A_GIT_STATUS_JSON", '["?? scripts/experiments/module4c_responsiveness.py"]')
     commit, dirty, status = _git_state()
     assert commit == "a" * 40
     assert dirty is True
-    assert status == ["?? scripts/module4/module4c_responsiveness.py"]
+    assert status == ["?? scripts/experiments/module4c_responsiveness.py"]

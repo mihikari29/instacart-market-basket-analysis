@@ -1,35 +1,23 @@
-"""SparkSession builder for the speed layer.
+"""Spark session for the Module 3 speed layer.
 
-Same invariant block as module2.spark (AQE off, autoBroadcastJoin off, UTC,
-ANSI on, event log enabled uncompressed) plus the streaming metrics flag so
-recentProgress exposes the throughput counters required by Proposal §15.4.
+The project-wide Spark invariants live in `src.common.spark_session`. The
+streaming metrics flag is added so that `recentProgress` exposes the
+throughput counters required by Proposal section 15.4.
 """
 
 from pathlib import Path
-from pyspark.sql import SparkSession
+
+from ..common.spark_session import build_session
 
 
 def session(config, event_dir: Path):
-    event_dir.mkdir(parents=True, exist_ok=True)
-    builder = (
-        SparkSession.builder.appName("instacart-module3")
-        .master(config.master)
-        .config("spark.sql.shuffle.partitions", config.shuffle_partitions)
-        .config("spark.sql.adaptive.enabled", "false")
-        .config("spark.sql.autoBroadcastJoinThreshold", "-1")
-        .config("spark.sql.session.timeZone", "UTC")
-        .config("spark.sql.ansi.enabled", "true")
-        .config("spark.sql.debug.maxToStringFields", "200")
-        .config("spark.sql.maxMetadataStringLength", "10000")
-        .config("spark.sql.streaming.metricsEnabled", "true")
-        .config("spark.eventLog.enabled", "true")
-        .config("spark.eventLog.compress", "false")
-        .config("spark.eventLog.rolling.enabled", "false")
-        .config("spark.eventLog.dir", event_dir.resolve().as_uri())
-        .config("spark.cores.max", "2")
-        .config("spark.executor.memory", "1g")
-        .config("spark.executor.cores", "2")
+    """Create the Module 3 Spark session."""
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module3",
+        total_cores=2,
+        executor_memory="1g",
+        executor_cores=2,
+        extra_config={"spark.sql.streaming.metricsEnabled": "true"},
     )
-    spark = builder.getOrCreate()
-    spark.sparkContext.setLogLevel("WARN")
-    return spark

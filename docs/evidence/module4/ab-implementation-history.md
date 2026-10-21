@@ -665,7 +665,7 @@ gate.
 # Handoff Module 2; services đã khởi động ở mục 16.1
 docker compose run --rm --use-aliases module2 validate
 
-# Cấu hình tài nguyên/COMPOSE_FILE theo [Module 4A/4B runbook](docker.md#module-4a4b-operation-and-full-data-acceptance) hoặc exact commands.
+# Cấu hình tài nguyên/COMPOSE_FILE theo [Module 4A/4B runbook](../../../docker.md#module-4a4b-operation-and-full-data-acceptance) hoặc exact commands.
 python scripts/module4.py validate --scope full_data \
   --source-receipt data/raw/source-receipt.json --shuffle-partitions 32
 python scripts/module4.py all --scope full_data \

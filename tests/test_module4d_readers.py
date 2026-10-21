@@ -9,7 +9,7 @@ import math
 
 import pytest
 
-from src.module3.trend_bundle import _build_document
+from src.module3.trend_bundle import build_document
 from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError
 from src.module4.dashboard.readers import (
     DatabaseReadFailure,
@@ -452,7 +452,7 @@ def _trend_document(window_end, *, namespace=NAMESPACE, product_id=501, scope="h
         "trend_score": 0.75,
         "trend_rank": 1,
     }
-    return _build_document(
+    return build_document(
         {"window_start": start, "window_end": window_end, "items": [item], "_row_count": 1},
         source_namespace=namespace,
         source_scope=scope,
@@ -682,7 +682,7 @@ def test_c5_valid_unavailable_trend_states_are_preserved(status, expected_reason
             "trend_score": 0.5,
             "trend_rank": 1,
         }
-        documents.append(_build_document(
+        documents.append(build_document(
             {"window_start": start, "window_end": end, "items": [item], "_row_count": 1},
             source_namespace=NAMESPACE,
             source_scope="historical_test",
@@ -717,7 +717,7 @@ def test_corrupted_trend_bundle_propagates_integrity_failure():
         "trend_score": 0.5,
         "trend_rank": 1,
     }
-    document = _build_document(
+    document = build_document(
         {"window_start": start, "window_end": end, "items": [item], "_row_count": 1},
         source_namespace=NAMESPACE,
         source_scope="historical_test",

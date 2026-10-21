@@ -12,7 +12,7 @@ from src.module3.config import Config as Module3Config
 from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     DEFAULT_SOURCE_SCOPE,
-    _build_document,
+    build_document,
     _config_payload,
     _sha256,
 )
@@ -63,7 +63,7 @@ def _bundle_document(
         )
     ]
     config_hash = _sha256(_config_payload(config, top_k))
-    return _build_document(
+    return build_document(
         {
             "window_start": start,
             "window_end": start + timedelta(hours=2),
@@ -317,7 +317,7 @@ def test_expired_latest_snapshot_is_unavailable_without_older_fallback():
 def test_fixed_c4a_fixture_digest_and_identity_are_independently_known():
     config = Module3Config(mongo_top_k_per_window=20, ttl_seconds=0)
     config_hash = _sha256(_config_payload(config, 20))
-    document = _build_document(
+    document = build_document(
         {
             "window_start": datetime(2024, 1, 1, tzinfo=timezone.utc),
             "window_end": datetime(2024, 1, 1, 2, tzinfo=timezone.utc),

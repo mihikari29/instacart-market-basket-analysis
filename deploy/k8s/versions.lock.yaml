@@ -54,8 +54,8 @@ image_provenance:
   api_application_image: unresolved-until-built-from-a-clean-commit
   ui_application_image: unresolved-until-built-from-a-clean-commit
 python_dependencies:
-  api_manifest: deploy/module4/requirements/api.txt (exact declared package pins; transitive closure not confirmed)
-  ui_manifest: deploy/module4/requirements/ui.txt (exact declared package pins; transitive closure not confirmed)
+  api_manifest: deploy/dashboard/requirements/api.txt (exact declared package pins; transitive closure not confirmed)
+  ui_manifest: deploy/dashboard/requirements/ui.txt (exact declared package pins; transitive closure not confirmed)
   api_python: unresolved (the existing Docker guide documents the 3.10 family; exact image runtime not inspected)
   ui_python: unresolved (the existing Docker guide documents the 3.14 family; exact image runtime not inspected)
   spark_parent_python: unresolved (exact resolved Spark-stage runtime not inspected)

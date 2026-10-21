@@ -9,7 +9,7 @@ from typing import Any, Mapping
 from .image_provenance import verify_loaded_image_inventory
 from .lock_lifecycle import validate_static_lock
 from .ownership import OwnershipError, RunIdentity, validate_version_lock
-from .runtime import CommandExecutor, RuntimePreflightError, _checked, containerd_image_inventory_command
+from .runtime import CommandExecutor, RuntimePreflightError, checked, containerd_image_inventory_command
 
 
 class ImageOperationError(RuntimeError):
@@ -137,7 +137,7 @@ def load_and_verify_application_images(
         if result.returncode != 0:
             raise ImageOperationError(f"{role} image load failed with status {result.returncode}")
     try:
-        inventory = _checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout
+        inventory = checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout
         return verify_loaded_image_inventory(inventory, expected)
     except (RuntimePreflightError, ValueError) as exc:
         raise ImageOperationError("loaded images did not match the locked immutable identities") from exc

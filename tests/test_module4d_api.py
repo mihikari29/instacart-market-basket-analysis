@@ -9,7 +9,7 @@ import sys
 from fastapi.testclient import TestClient
 import pytest
 
-from src.module3.trend_bundle import _build_document
+from src.module3.trend_bundle import build_document
 from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError, read_verified_trend_snapshot
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
@@ -61,7 +61,7 @@ def _trend_document(*, digest_valid=True, retention_seconds=0, window_end=None):
         "trend_score": 0.875,
         "trend_rank": 1,
     }
-    document = _build_document(
+    document = build_document(
         {"window_start": start, "window_end": end, "items": [item], "_row_count": 1},
         source_namespace=NAMESPACE,
         source_scope="historical_api_test",

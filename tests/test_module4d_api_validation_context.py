@@ -2,7 +2,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from scripts.module4.module4d_api_validation import _copy_context
+from scripts.dashboard.api_validation import _copy_context
+from tests.build_context import admitted
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +37,10 @@ class D1BNarrowContextTests(unittest.TestCase):
                 self.assertFalse((context / excluded).exists())
 
             dockerignore = (context / ".dockerignore").read_text(encoding="utf-8")
-            self.assertIn(f"!{required}", dockerignore)
+            self.assertTrue(
+                admitted(dockerignore.splitlines(), required),
+                f"{required} must be admitted into the build context",
+            )
             for exclusion in ("**/data/**", "**/results/**", "**/checkpoints/**", "**/.env", "**/credentials/**"):
                 self.assertIn(exclusion, dockerignore)
 

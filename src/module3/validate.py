@@ -1,5 +1,6 @@
 """Kafka connectivity validation (the `validate` subcommand, no streaming)."""
 
+from ..common.redaction import redact_sensitive_text, redact_uri
 from .config import Config
 
 
@@ -43,13 +44,16 @@ def validate_kafka(config: Config) -> dict:
         finally:
             admin.close()
     except Exception as exc:
-        info["error"] = f"{type(exc).__name__}: {exc}"
+        info["error"] = redact_sensitive_text(f"{type(exc).__name__}: {exc}")
     return info
 
 
 def validate_mongo(config: Config) -> dict:
     """Ping Mongo, list existing collections to confirm reachable but untouched."""
-    info = {"mongodb_uri": config.mongodb_uri, "database": config.mongo_database, "ok": False}
+    # The URI is recorded without its credentials: the report is uploaded as a
+    # CI artifact and the address is what an operator needs, the password is
+    # not.
+    info = {"mongodb_uri": redact_uri(config.mongodb_uri), "database": config.mongo_database, "ok": False}
     try:
         from pymongo import MongoClient
 
@@ -59,5 +63,5 @@ def validate_mongo(config: Config) -> dict:
             db = client[config.mongo_database]
             info["existing_collections"] = sorted(db.list_collection_names())
     except Exception as exc:
-        info["error"] = f"{type(exc).__name__}: {exc}"
+        info["error"] = redact_sensitive_text(f"{type(exc).__name__}: {exc}")
     return info

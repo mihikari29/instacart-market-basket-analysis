@@ -74,7 +74,7 @@ def _invalid_integer(column, maximum=2147483647):
     )
 
 
-def _read_hdfs_json(spark, path: str) -> dict:
+def read_hdfs_json(spark, path: str) -> dict:
     jvm = spark._jvm
     location = jvm.org.apache.hadoop.fs.Path(path)
     fs = location.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
@@ -95,7 +95,7 @@ def _read_hdfs_json(spark, path: str) -> dict:
     return value
 
 
-def _hdfs_sha256(spark, fs, path) -> str:
+def hdfs_sha256(spark, fs, path) -> str:
     jvm = spark._jvm
     stream = fs.open(path)
     try:
@@ -107,7 +107,7 @@ def _hdfs_sha256(spark, fs, path) -> str:
 def validate_source_receipts(spark, config, tables, verify_counts=True) -> dict:
     """Compare staged Parquet bytes and row counts with Module 1's receipt."""
     root = config.root.rstrip("/") + "/curated/_sources.json"
-    sources = _read_hdfs_json(spark, root)
+    sources = read_hdfs_json(spark, root)
     jvm = spark._jvm
     hadoop_config = spark.sparkContext._jsc.hadoopConfiguration()
     inputs = {}
@@ -133,7 +133,7 @@ def validate_source_receipts(spark, config, tables, verify_counts=True) -> dict:
                 f"{source_name}: expected exactly one staged Parquet file for the SHA-256 receipt; "
                 f"found {len(parquet_files)}"
             )
-        actual_hash = _hdfs_sha256(spark, fs, parquet_files[0])
+        actual_hash = hdfs_sha256(spark, fs, parquet_files[0])
         if actual_hash.lower() != str(expected["sha256"]).lower():
             raise ValueError(f"{source_name}: staged Parquet SHA-256 does not match _sources.json")
         inputs[source_name] = {
@@ -332,20 +332,3 @@ def build_train_truth(tables):
         F.sort_array(F.collect_set("product_id")).alias("ground_truth")
     )
 
-
-def build_user_product_history(prior_enriched):
-    """Return the distinct product history used for warm/cold cohort reports."""
-    from pyspark.sql import functions as F
-
-    return prior_enriched.groupBy("user_id").agg(
-        F.sort_array(F.collect_set("product_id")).alias("seen_products")
-    )
-
-
-def validation_summary(tables, source_receipt=None) -> dict:
-    """Small, serializable validation report helper used by the CLI and tests."""
-    report = validate_inputs(tables)
-    report["schema"] = {name: list(frame.schema.simpleString().split(",")) for name, frame in tables.items()}
-    if source_receipt is not None:
-        report["source_receipt"] = source_receipt
-    return report

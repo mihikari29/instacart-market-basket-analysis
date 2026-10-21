@@ -16,7 +16,7 @@ from pymongo.errors import DuplicateKeyError
 from pymongo.synchronous.collection import Collection
 from pymongo.uri_parser import parse_uri
 
-from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, _build_document
+from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME, build_document
 from src.module4 import sink_mongo as module4_sink
 from src.module4.config import Config as Module4Config
 from src.module4.hybrid import (
@@ -221,7 +221,7 @@ def _bundle_document(
         }
         for rank, (product_id, score) in enumerate(zip(product_ids, scores), start=1)
     ]
-    return _build_document(
+    return build_document(
         {
             "window_start": window_start,
             "window_end": window_end,

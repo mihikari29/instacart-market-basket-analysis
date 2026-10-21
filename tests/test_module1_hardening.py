@@ -17,8 +17,9 @@ class _ParquetFixture:
     def __init__(self, value: bytes = b"staged"):
         self.value = value
 
-    def to_parquet(self, path, index=False):
+    def to_parquet(self, path, index=False, compression=None):
         assert index is False
+        assert compression is not None, "Module 1 publication must pin the Parquet codec"
         Path(path).write_bytes(self.value)
 
 
@@ -398,7 +399,7 @@ def test_clean_publication_staging_failure_preserves_prior_output(tmp_path):
     previous = {name: (output / name).read_bytes() for name in raw_clean._CLEAN_OUTPUT_FILES}
 
     class _FailingFixture(_ParquetFixture):
-        def to_parquet(self, path, index=False):
+        def to_parquet(self, path, index=False, compression=None):
             raise OSError("synthetic staging failure")
 
     frames = _clean_output_frames()

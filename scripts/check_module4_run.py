@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.module4.config import Config  # noqa: E402
 from src.module4.evaluation import validate_prior_only_hybrid_evaluation  # noqa: E402
-from src.module4.sink_mongo import _snapshot_validation, publication_lock  # noqa: E402
+from src.module4.sink_mongo import snapshot_validation, publication_lock  # noqa: E402
 
 
 def require(condition, message):
@@ -116,7 +116,7 @@ def main(argv=None):
         ):
             require(pointer.get(version_field) == version, "active pointer has a different version")
             collection = db[name]
-            validation = _snapshot_validation(collection, version_field, version, expected_count, run_id)
+            validation = snapshot_validation(collection, version_field, version, expected_count, run_id)
             require(validation["valid"], f"invalid snapshot {name}: {validation}")
             require(collection.count_documents({}) == expected_count, f"mixed/stale snapshot: {name}")
             with collection.find({}).sort("_id", 1).batch_size(5000) as cursor:

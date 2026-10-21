@@ -1,6 +1,9 @@
+
+from tests.mongo_fakes import FakeBulkResult, FakeUpdateOne
 """Focused tests for the optional Module 3 trend-bundle publisher."""
 
 # ruff: noqa: E402 -- PySpark imports follow an optional dependency guard.
+
 
 from datetime import datetime, timedelta
 import json
@@ -41,17 +44,8 @@ WINDOW_SCHEMA = StructType(
 )
 
 
-class FakeUpdateOne:
-    def __init__(self, filter_document, update_document, upsert):
-        self.filter = filter_document
-        self.update = update_document
-        self.upsert = upsert
 
 
-class FakeBulkResult:
-    def __init__(self, upserted=0, matched=0):
-        self.upserted_count = upserted
-        self.matched_count = matched
 
 
 class FakeBundleCollection:

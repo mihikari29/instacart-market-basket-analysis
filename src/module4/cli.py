@@ -18,6 +18,8 @@ import traceback
 import uuid
 from urllib.parse import urlsplit, urlunsplit
 
+from ..common.run_context import new_run_id, save_json
+from ..common.source_identity import REPOSITORY_ROOT
 from .als import (
     ALSParams,
     fit_model,
@@ -42,6 +44,7 @@ from .evaluation import (
     global_popularity,
     offline_hybrid_recommendations,
     personal_frequency,
+    popularity_products,
     prior_frequency_trend_products,
     prior_only_hybrid_evaluation_provenance,
     prior_trend_only_recommendations,
@@ -67,15 +70,10 @@ from .split import make_internal_holdout
 from .spark import clear_job_group, session
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = REPOSITORY_ROOT
 EVALUATION_KS = (5, 10, 20)
 _MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
 _SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
-
-
-def save_json(path: Path, value) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
 
 
 def revision() -> dict:
@@ -93,6 +91,7 @@ def source_digest() -> str:
     digest = hashlib.sha256()
     paths = [
         *REPO_ROOT.joinpath("src/module4").glob("*.py"),
+        *REPO_ROOT.joinpath("src/common").glob("*.py"),
         REPO_ROOT / "scripts/module4.py",
         REPO_ROOT / "scripts/module4_runtime_smoke.py",
         REPO_ROOT / "scripts/module4_flow_smoke.py",
@@ -710,9 +709,9 @@ def run_als(
                 raise FileExistsError(
                     f"Model path exists without Module 4 metadata; refusing to overwrite: {model_path}"
                 )
-            from .data import _read_hdfs_json
+            from .data import read_hdfs_json
 
-            existing = _read_hdfs_json(spark, marker_path)
+            existing = read_hdfs_json(spark, marker_path)
             if existing != expected_model_metadata:
                 raise ValueError("existing model version has different source/config/code metadata")
             model = load_model(model_path)
@@ -803,15 +802,23 @@ def run_als(
             model_report["product_factors"],
         )
 
+        # The popularity table does not depend on the requested users, so it is
+        # aggregated once over the prior interaction table and reused for every
+        # cohort and subgroup below. The fallback table holds twice as many
+        # products because the personal-frequency baseline pads short lists.
+        popular_products = popularity_products(interactions, evaluation_k).cache()
+        fallback_products = popularity_products(interactions, 2 * evaluation_k).cache()
         all_als_for_truth = all_factor_recommendations.join(truth_users, "user_id", "inner")
         no_factor_predictions = truth_users.join(
             all_als_for_truth.select("user_id").distinct(), "user_id", "left_anti"
         )
         all_als_recommendations = all_als_for_truth.unionByName(
-            global_popularity(interactions, no_factor_predictions, evaluation_k)
+            global_popularity(interactions, no_factor_predictions, evaluation_k, popular_products)
         ).cache()
-        all_global = global_popularity(interactions, truth_users, evaluation_k)
-        all_personal = personal_frequency(interactions, truth_users, evaluation_k)
+        all_global = global_popularity(interactions, truth_users, evaluation_k, popular_products)
+        all_personal = personal_frequency(
+            interactions, truth_users, evaluation_k, fallback_products
+        )
         catalog_size = tables["products"].select("product_id").distinct().count()
         all_truth_summary = {
             "users": truth_users.count(),
@@ -842,8 +849,12 @@ def run_als(
                 "metrics": _evaluate_methods(
                     {
                         "als": all_factor_recommendations.join(warm_truth_users, "user_id", "inner"),
-                        "global_popularity": global_popularity(interactions, warm_truth_users, evaluation_k),
-                        "personal_frequency": personal_frequency(interactions, warm_truth_users, evaluation_k),
+                        "global_popularity": global_popularity(
+                            interactions, warm_truth_users, evaluation_k, popular_products
+                        ),
+                        "personal_frequency": personal_frequency(
+                            interactions, warm_truth_users, evaluation_k, fallback_products
+                        ),
                     },
                     train_truth.join(warm_truth_users, "user_id", "inner"),
                     catalog_size,
@@ -865,8 +876,12 @@ def run_als(
                 "metrics": _evaluate_methods(
                     {
                         "als": all_als_recommendations,
-                        "global_popularity": global_popularity(interactions, subgroup_users, evaluation_k),
-                        "personal_frequency": personal_frequency(interactions, subgroup_users, evaluation_k),
+                        "global_popularity": global_popularity(
+                            interactions, subgroup_users, evaluation_k, popular_products
+                        ),
+                        "personal_frequency": personal_frequency(
+                            interactions, subgroup_users, evaluation_k, fallback_products
+                        ),
                     },
                     subgroup_truth,
                     catalog_size,
@@ -999,11 +1014,15 @@ def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: 
             edges.select(F.col("dst").alias("product_id"))
         ).distinct()
         active_products = endpoints.count()
-        isolated = weighted_degree(edges, vertices).where("neighbor_count = 0").count()
+        # The weighted degree table is the same frame for both measurements
+        # below, and building it means a union of the edge set plus a group
+        # by, so it is computed once and reused.
+        degrees = weighted_degree(edges, vertices).cache()
+        isolated = degrees.where("neighbor_count = 0").count()
         covered_facts = prior.select("order_id", "product_id").distinct().join(
             endpoints, "product_id", "inner"
         ).count()
-        degree_quantiles = weighted_degree(edges, vertices).approxQuantile(
+        degree_quantiles = degrees.approxQuantile(
             "neighbor_count", [0.5, 0.9, 0.95, 0.99, 1.0], 0.001
         )
         weight_quantiles = edges.approxQuantile("weight", [0.5, 0.9, 0.95, 0.99, 1.0], 0.001)
@@ -1279,10 +1298,7 @@ def main(argv=None):
         finally:
             if spark is not None:
                 spark.stop()
-    run_id = _valid_version(
-        args.run_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]),
-        "run_id",
-    )
+    run_id = _valid_version(args.run_id or new_run_id(), "run_id")
     model_version = _valid_version(args.model_version or f"als-{run_id}", "model_version")
     graph_version = _valid_version(args.graph_version or f"graph-{run_id}", "graph_version")
     output = args.output / run_id

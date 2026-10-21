@@ -104,7 +104,7 @@ def _sha256(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def _validate_namespace(value: Any, field: str, *, maximum: int) -> str:
+def validate_namespace(value: Any, field: str, *, maximum: int) -> str:
     if (
         not isinstance(value, str)
         or value != value.strip()
@@ -130,7 +130,7 @@ def _canonical_datetime(value: Any, field: str, *, allow_naive_utc: bool) -> tup
     return utc_value, canonical
 
 
-def _canonical_window_datetime(value: Any, field: str) -> tuple[datetime, str]:
+def canonical_window_datetime(value: Any, field: str) -> tuple[datetime, str]:
     """Normalize a window bound to UTC and require BSON-exact milliseconds.
 
     Spark TimestampType values are returned as naive Python datetimes when the
@@ -193,7 +193,7 @@ def _item_from_row(row: Any) -> dict[str, Any]:
     }
 
 
-def _build_document(
+def build_document(
     group: Any,
     *,
     source_namespace: str,
@@ -203,8 +203,8 @@ def _build_document(
     published_at: datetime,
     retention_seconds: int,
 ) -> dict[str, Any]:
-    window_start, start_iso = _canonical_window_datetime(group["window_start"], "window_start")
-    window_end, end_iso = _canonical_window_datetime(group["window_end"], "window_end")
+    window_start, start_iso = canonical_window_datetime(group["window_start"], "window_start")
+    window_end, end_iso = canonical_window_datetime(group["window_end"], "window_end")
     if window_end <= window_start:
         raise ValueError("window_end must be later than window_start")
 
@@ -281,7 +281,7 @@ def _bundle_documents(
     retention_seconds: int,
 ):
     for row in grouped.toLocalIterator():
-        yield _build_document(
+        yield build_document(
             row,
             source_namespace=source_namespace,
             source_scope=source_scope,
@@ -348,7 +348,7 @@ def _existing_metadata_error(expected: dict[str, Any], stored: Any) -> str | Non
 
     for field in ("window_start", "window_end"):
         try:
-            actual, _actual_iso = _canonical_window_datetime(stored.get(field), field)
+            actual, _actual_iso = canonical_window_datetime(stored.get(field), field)
         except (TypeError, ValueError, OverflowError):
             return f"stored bundle {field} is not a valid BSON-compatible timestamp"
         if actual != expected[field]:
@@ -647,8 +647,8 @@ def write_trend_bundles(
         invalid("collection must provide Mongo index, find, and bulk-write operations")
 
     try:
-        namespace = _validate_namespace(source_namespace, "source_namespace", maximum=256)
-        scope = _validate_namespace(source_scope, "source_scope", maximum=128)
+        namespace = validate_namespace(source_namespace, "source_namespace", maximum=256)
+        scope = validate_namespace(source_scope, "source_scope", maximum=128)
         top_k = config.mongo_top_k_per_window
         if type(top_k) is not int or not 1 <= top_k <= MAX_TREND_TOP_K:
             raise ValueError("mongo_top_k_per_window must be an integer between 1 and 20")

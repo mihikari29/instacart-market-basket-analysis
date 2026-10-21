@@ -1,6 +1,7 @@
 """Immutable MongoDB publication for one user's final hybrid snapshot."""
 
 from __future__ import annotations
+from ...common.type_guards import aware_utc_millisecond, positive_int
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -30,7 +31,7 @@ from .data import (
     READINESS_COLLECTION,
     READINESS_ID,
     CapturedUserSources,
-    _readiness_identity,
+    readiness_identity,
 )
 from .ranking import RankingContractError, rank_hybrid_recommendations
 from .trend_reader import TrendSnapshotReadResult
@@ -124,11 +125,6 @@ class HybridPublicationResult:
     idempotent: bool
 
 
-def _positive_integer(value: Any, field: str) -> int:
-    if type(value) is not int or value <= 0:
-        raise HybridSnapshotContractError(f"{field} must be a positive integer")
-    return value
-
 
 def _nonempty_string(value: Any, field: str, *, maximum: int | None = 256) -> str:
     if (
@@ -141,17 +137,6 @@ def _nonempty_string(value: Any, field: str, *, maximum: int | None = 256) -> st
         raise HybridSnapshotContractError(f"{field} must be a stable non-empty string")
     return value
 
-
-def _aware_utc_millisecond(value: Any, field: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise HybridSnapshotContractError(f"{field} must be a timezone-aware datetime")
-    try:
-        normalized = value.astimezone(timezone.utc)
-    except (OverflowError, ValueError) as exc:
-        raise HybridSnapshotContractError(f"{field} must be a valid UTC instant") from exc
-    if normalized.microsecond % 1000:
-        raise HybridSnapshotContractError(f"{field} must be aligned to BSON millisecond precision")
-    return normalized
 
 
 def _stored_bson_utc(value: Any, field: str) -> datetime:
@@ -233,9 +218,9 @@ def _config_payload(config: HybridRankingConfig) -> dict[str, Any]:
 def _canonical_recommendation(row: Recommendation, index: int) -> Recommendation:
     if not isinstance(row, Recommendation):
         raise HybridSnapshotContractError(f"recommendations[{index}] must be a Recommendation")
-    _positive_integer(row.user_id, f"recommendations[{index}].user_id")
-    _positive_integer(row.product_id, f"recommendations[{index}].product_id")
-    _positive_integer(row.rank, f"recommendations[{index}].rank")
+    positive_int(row.user_id, f"recommendations[{index}].user_id", error=HybridSnapshotContractError)
+    positive_int(row.product_id, f"recommendations[{index}].product_id", error=HybridSnapshotContractError)
+    positive_int(row.rank, f"recommendations[{index}].rank", error=HybridSnapshotContractError)
     if not isinstance(row.product_name, str) or not row.product_name.strip():
         raise HybridSnapshotContractError(f"recommendations[{index}].product_name must be non-empty")
     if type(row.from_als) is not bool or type(row.from_trend) is not bool:
@@ -299,10 +284,10 @@ def _source_input_payload(
 ) -> dict[str, Any]:
     als_rows = []
     for row in captured.als_recommendations:
-        product_id = _positive_integer(row.product_id, "captured ALS product_id")
-        user_id = _positive_integer(row.user_id, "captured ALS user_id")
+        product_id = positive_int(row.product_id, "captured ALS product_id", error=HybridSnapshotContractError)
+        user_id = positive_int(row.user_id, "captured ALS user_id", error=HybridSnapshotContractError)
         score = _finite_float(row.als_score, "captured ALS score", nullable=True)
-        rank = _positive_integer(row.als_rank, "captured ALS rank")
+        rank = positive_int(row.als_rank, "captured ALS rank", error=HybridSnapshotContractError)
         als_rows.append(
             {
                 "user_id": user_id,
@@ -315,7 +300,7 @@ def _source_input_payload(
 
     catalog_rows = []
     for row in captured.product_catalog:
-        product_id = _positive_integer(row.product_id, "captured catalog product_id")
+        product_id = positive_int(row.product_id, "captured catalog product_id", error=HybridSnapshotContractError)
         if not isinstance(row.product_name, str) or not row.product_name.strip():
             raise HybridSnapshotContractError("captured catalog product_name must be non-empty")
         catalog_rows.append({"product_id": product_id, "product_name": row.product_name})
@@ -323,8 +308,8 @@ def _source_input_payload(
 
     trend_rows = []
     for row in trend_result.trend_recommendations:
-        product_id = _positive_integer(row.product_id, "captured trend product_id")
-        trend_rank = _positive_integer(row.trend_rank, "captured trend rank")
+        product_id = positive_int(row.product_id, "captured trend product_id", error=HybridSnapshotContractError)
+        trend_rank = positive_int(row.trend_rank, "captured trend rank", error=HybridSnapshotContractError)
         trend_score = _unit_float(row.trend_score, "captured trend score")
         trend_rows.append(
             {
@@ -399,8 +384,8 @@ def prepare_hybrid_snapshot(
     ):
         raise HybridSnapshotContractError("C5 trend rows must use the TrendRecommendation contract")
 
-    user_id = _positive_integer(captured_sources.user_id, "captured_sources.user_id")
-    if _positive_integer(ranking_result.user_id, "ranking_result.user_id") != user_id:
+    user_id = positive_int(captured_sources.user_id, "captured_sources.user_id", error=HybridSnapshotContractError)
+    if positive_int(ranking_result.user_id, "ranking_result.user_id", error=HybridSnapshotContractError) != user_id:
         raise HybridSnapshotContractError("ranking result user_id does not match captured sources")
     if len(ranking_result.recommendations) > min(
         MAX_FINAL_RECOMMENDATIONS, ranking_config.output_top_k
@@ -429,7 +414,7 @@ def prepare_hybrid_snapshot(
     except ValueError as exc:
         raise HybridSnapshotContractError(f"{exc.args[0]} is not a valid source version") from exc
 
-    as_of = _aware_utc_millisecond(as_of_event_time, "as_of_event_time")
+    as_of = aware_utc_millisecond(as_of_event_time, "as_of_event_time", error=HybridSnapshotContractError)
     metadata = ranking_result.metadata
     if not isinstance(metadata.mode, str) or not metadata.mode.strip():
         raise HybridSnapshotContractError("ranking metadata mode must be non-empty")
@@ -478,12 +463,12 @@ def prepare_hybrid_snapshot(
     if trend_scope is not None:
         trend_scope = _nonempty_string(trend_scope, "trend_source_scope", maximum=128)
     trend_start = (
-        _aware_utc_millisecond(trend_result.window_start, "trend_window_start")
+        aware_utc_millisecond(trend_result.window_start, "trend_window_start", error=HybridSnapshotContractError)
         if trend_result.window_start is not None
         else None
     )
     trend_end = (
-        _aware_utc_millisecond(trend_result.window_end, "trend_window_end")
+        aware_utc_millisecond(trend_result.window_end, "trend_window_end", error=HybridSnapshotContractError)
         if trend_result.window_end is not None
         else None
     )
@@ -658,7 +643,7 @@ def ensure_final_recommendation_indexes(collection: Any) -> None:
             raise HybridPublicationConflictError(f"existing index {name!r} has an incompatible definition")
 
 
-def _row_document(prepared: PreparedHybridSnapshot, row: Recommendation, generated_at: datetime) -> dict[str, Any]:
+def row_document(prepared: PreparedHybridSnapshot, row: Recommendation, generated_at: datetime) -> dict[str, Any]:
     document = {
         "schema_version": SERVING_SCHEMA_VERSION,
         "_id": f"{prepared.serving_version}:{prepared.user_id}:{row.product_id}",
@@ -757,13 +742,13 @@ def _write_and_verify_rows(
             collection,
             prepared,
             [
-                _row_document(prepared, row, processing_time)
+                row_document(prepared, row, processing_time)
                 for row in prepared.rows
             ],
         )
     generated_at = existing_generated_at or processing_time
     expected_documents = [
-        _row_document(prepared, row, generated_at) for row in prepared.rows
+        row_document(prepared, row, generated_at) for row in prepared.rows
     ]
     existing_ids = {document.get("_id") for document in existing}
     missing_documents = [
@@ -811,7 +796,7 @@ def _pointer_id(user_id: int) -> str:
     return f"hybrid:{user_id}"
 
 
-def _pointer_document(prepared: PreparedHybridSnapshot, updated_at: datetime) -> dict[str, Any]:
+def pointer_document(prepared: PreparedHybridSnapshot, updated_at: datetime) -> dict[str, Any]:
     return {
         "schema_version": SERVING_SCHEMA_VERSION,
         "_id": _pointer_id(prepared.user_id),
@@ -846,7 +831,7 @@ def _validate_active_ab_readiness(database: Any, prepared: PreparedHybridSnapsho
     except Exception as exc:
         raise HybridPublicationPromotionError("failed to recheck active A/B readiness") from exc
     try:
-        identity = _readiness_identity(document)
+        identity = readiness_identity(document)
     except Exception as exc:
         raise HybridPublicationPromotionError("active A/B readiness is not publishable") from exc
     if (
@@ -970,8 +955,8 @@ def _pointer_matches(document: Mapping[str, Any], prepared: PreparedHybridSnapsh
 
 def _validate_prepared_snapshot(prepared: PreparedHybridSnapshot) -> None:
     """Reject manually constructed or internally inconsistent prepared objects."""
-    _positive_integer(prepared.user_id, "prepared.user_id")
-    _aware_utc_millisecond(prepared.as_of_event_time, "prepared.as_of_event_time")
+    positive_int(prepared.user_id, "prepared.user_id", error=HybridSnapshotContractError)
+    aware_utc_millisecond(prepared.as_of_event_time, "prepared.as_of_event_time", error=HybridSnapshotContractError)
     for field, value in (
         ("source_run_id", prepared.source_run_id),
         ("model_version", prepared.model_version),
@@ -1107,8 +1092,8 @@ def _validate_prepared_snapshot(prepared: PreparedHybridSnapshot) -> None:
     if (prepared.trend_window_start is None) != (prepared.trend_window_end is None):
         raise HybridSnapshotContractError("prepared trend window bounds must both be present or absent")
     if prepared.trend_window_start is not None:
-        start = _aware_utc_millisecond(prepared.trend_window_start, "prepared.trend_window_start")
-        end = _aware_utc_millisecond(prepared.trend_window_end, "prepared.trend_window_end")
+        start = aware_utc_millisecond(prepared.trend_window_start, "prepared.trend_window_start", error=HybridSnapshotContractError)
+        end = aware_utc_millisecond(prepared.trend_window_end, "prepared.trend_window_end", error=HybridSnapshotContractError)
         if start >= end or end > prepared.as_of_event_time:
             raise HybridSnapshotContractError("prepared trend window is inconsistent with its event time")
     if prepared.trend_source_scope is not None:
@@ -1173,7 +1158,7 @@ def _compare_and_promote(
         existing_raw = readiness.find_one({"_id": pointer_id})
     except Exception as exc:
         raise HybridPublicationPromotionError("failed to read per-user readiness pointer") from exc
-    desired = _pointer_document(prepared, updated_at)
+    desired = pointer_document(prepared, updated_at)
 
     if existing_raw is None:
         try:
@@ -1329,7 +1314,7 @@ def publish_hybrid_recommendations(
         now = datetime.now(timezone.utc)
         processing_time = now.replace(microsecond=(now.microsecond // 1000) * 1000)
     else:
-        processing_time = _aware_utc_millisecond(processing_time_utc, "processing_time_utc")
+        processing_time = aware_utc_millisecond(processing_time_utc, "processing_time_utc", error=HybridSnapshotContractError)
     if client is not None:
         return _publish_with_client(client, config, prepared, processing_time)
 

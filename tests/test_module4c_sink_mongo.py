@@ -1,6 +1,9 @@
 """Contract tests for immutable Module 4C recommendation publication."""
 
+
 from __future__ import annotations
+
+from tests.mongo_fakes import FakeClient
 
 from contextlib import contextmanager
 from dataclasses import replace
@@ -297,13 +300,6 @@ class FakeDatabase:
         return self.collections.setdefault(name, FakeCollection(name=name))
 
 
-class FakeClient:
-    def __init__(self, database):
-        self.database = database
-
-    def __getitem__(self, name):
-        assert name == "instacart"
-        return self.database
 
 
 def _active_readiness(**overrides):

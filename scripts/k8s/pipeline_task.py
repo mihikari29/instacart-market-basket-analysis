@@ -18,6 +18,8 @@ from typing import Any
 
 from .data_receipts import inspect_input_directory
 from .fixture_data import write_fixture
+from .constants import als_model_version, demo_database, graph_version
+from .io import redact_secrets, write_json_atomic
 from .pipeline import (
     FIXTURE_MAX_EVENTS,
     FIXTURE_MAX_USERS,
@@ -29,8 +31,6 @@ from .pipeline import (
 WORKSPACE = Path("/workspace")
 RUNTIME_ROOT = Path("/run/pipeline")
 INPUT_ROOT = RUNTIME_ROOT / "input"
-_MONGO_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
-_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
 class TaskError(RuntimeError):
@@ -38,13 +38,12 @@ class TaskError(RuntimeError):
 
 
 def _safe(value: str) -> str:
-    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", _MONGO_URI.sub("mongodb://<redacted>", value))
+    return redact_secrets(value)
 
 
-def _write_json(path: Path, value: Any) -> None:
+def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
-    path.chmod(0o600)
+    write_json_atomic(path, value, mode=0o600, replace=True)
 
 
 def _artifact_inventory(root: Path) -> list[dict[str, Any]]:
@@ -104,7 +103,7 @@ def _subprocess(command: list[str], *, env: dict[str, str], log_path: Path, time
         raise TaskError(f"{Path(command[0]).name} exited with status {code}; sanitized output: {log_path}")
 
 
-def _runtime_values() -> dict[str, str]:
+def runtime_values() -> dict[str, str]:
     required = ("PIPELINE_RUN_ID", "PIPELINE_MODE", "PIPELINE_HDFS_ROOT", "PIPELINE_HDFS_URI", "PIPELINE_TOPIC")
     values = {key: os.environ.get(key, "") for key in required}
     if not re.fullmatch(r"[0-9a-f]{12}", values["PIPELINE_RUN_ID"]):
@@ -124,7 +123,7 @@ def _runtime_values() -> dict[str, str]:
 
 
 def input_stage() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     fixture_manifest = None
     if values["PIPELINE_MODE"] == "fixture":
         fixture_manifest = write_fixture(INPUT_ROOT)
@@ -151,7 +150,7 @@ def input_stage() -> dict:
         "files": input_manifest["files"],
         "fixture": fixture_manifest,
     }
-    _write_json(RUNTIME_ROOT / "evidence" / "source-receipt.json", source_receipt)
+    write_json(RUNTIME_ROOT / "evidence" / "source-receipt.json", source_receipt)
     receipt = {
         "schema_version": 1,
         "run_id": values["PIPELINE_RUN_ID"],
@@ -161,13 +160,13 @@ def input_stage() -> dict:
         "source_files": input_manifest["files"],
         "fixture_manifest": fixture_manifest,
     }
-    _write_json(RUNTIME_ROOT / "evidence" / "input-stage-receipt.json", receipt)
+    write_json(RUNTIME_ROOT / "evidence" / "input-stage-receipt.json", receipt)
     print(json.dumps(receipt, sort_keys=True), flush=True)
     return receipt
 
 
 def module1() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     input_manifest = inspect_input_directory(INPUT_ROOT)
     records = input_manifest["files"]
     expected_digest = os.environ.get("PIPELINE_SOURCE_RECEIPT_SHA256")
@@ -230,7 +229,7 @@ def module1() -> dict:
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     output = RUNTIME_ROOT / "evidence" / f"module1-{os.environ.get('POD_NAME', 'module1')}.json"
-    _write_json(output, receipt)
+    write_json(output, receipt)
     return receipt
 
 
@@ -252,7 +251,7 @@ def _verify_api_egress_is_blocked() -> dict[str, Any]:
 
 
 def module2() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise TaskError("Module 2 requires the dedicated Mongo publisher Secret")
@@ -304,7 +303,7 @@ def module2() -> dict:
 
 
 def module4() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise TaskError("Module 4 requires the dedicated Mongo publisher Secret")
@@ -313,8 +312,8 @@ def module4() -> dict:
     args = [
         sys.executable, "-m", "src.module4.cli", "all", "--root", values["PIPELINE_HDFS_URI"],
         "--master", "local[2]", "--output", str(output), "--run-id", f"k8s-{values['PIPELINE_RUN_ID']}",
-        "--model-version", f"als-k8s-{values['PIPELINE_RUN_ID']}",
-        "--graph-version", f"graph-k8s-{values['PIPELINE_RUN_ID']}",
+        "--model-version", als_model_version(values['PIPELINE_RUN_ID']),
+        "--graph-version", graph_version(values['PIPELINE_RUN_ID']),
         "--graph-backend", "graphframes", "--graph-min-edge-weight", "2",
         "--scope", "staged_fixture" if values["PIPELINE_MODE"] == "fixture" else "full_data",
     ]
@@ -323,7 +322,7 @@ def module4() -> dict:
     else:
         args += ["--pilot-users", "5000", "--max-trials", "12", "--source-receipt", str(source_receipt)]
     database = os.environ.get("MODULE4D_MONGO_DATABASE", "")
-    if database != f"module4d_demo_{values['PIPELINE_RUN_ID']}":
+    if database != demo_database(values['PIPELINE_RUN_ID']):
         raise TaskError("Module 4 requires the exact run-scoped Mongo database")
     env = dict(
         os.environ,
@@ -340,7 +339,7 @@ def module4() -> dict:
 
 
 def replay() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     from src.module3.config import Config as StreamConfig
     from src.module3.spark import session
     from src.module3.stream import run_stream
@@ -452,7 +451,7 @@ def replay() -> dict:
         "completion": stream_receipt["completion"],
         "synthetic_event_time_provenance": "Synthetic event time for replay simulation",
     }
-    _write_json(output / "replay-receipt.json", receipt)
+    write_json(output / "replay-receipt.json", receipt)
     return receipt
 
 
@@ -488,7 +487,7 @@ def _ensure_topic(config) -> None:
 
 
 def hybrid() -> dict:
-    values = _runtime_values()
+    values = runtime_values()
     user_id = os.environ.get("PIPELINE_DEMO_USER_ID", "1")
     if not re.fullmatch(r"[1-9][0-9]*", user_id):
         raise TaskError("PIPELINE_DEMO_USER_ID must be a positive integer")
@@ -525,7 +524,7 @@ def hybrid() -> dict:
     except json.JSONDecodeError as exc:
         raise TaskError("Hybrid CLI returned an invalid receipt") from exc
     receipt = {"run_id": values["PIPELINE_RUN_ID"], "as_of_event_time": as_of, **response}
-    _write_json(output_path, receipt)
+    write_json(output_path, receipt)
     print(json.dumps(receipt, sort_keys=True), flush=True)
     return receipt
 
@@ -540,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = STEPS[arguments.step]()
         step_receipt = {"schema_version": 1, "step": arguments.step, "status": "completed", "receipt": result}
-        _write_json(RUNTIME_ROOT / "evidence" / "steps" / f"{arguments.step}.json", step_receipt)
+        write_json(RUNTIME_ROOT / "evidence" / "steps" / f"{arguments.step}.json", step_receipt)
         print(json.dumps(step_receipt, default=str, sort_keys=True))
         return 0
     except TaskError as exc:

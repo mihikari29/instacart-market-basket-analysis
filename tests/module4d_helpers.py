@@ -15,7 +15,7 @@ from src.module4.hybrid import (
     VerifiedSourceContext,
     rank_hybrid_recommendations,
 )
-from src.module4.hybrid.sink_mongo import _pointer_document, _row_document, prepare_hybrid_snapshot
+from src.module4.hybrid.sink_mongo import pointer_document, row_document, prepare_hybrid_snapshot
 
 
 BASE_TIME = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
@@ -92,6 +92,6 @@ def make_snapshot(
         ranking_config,
         as_of_event_time=at,
     )
-    rows = [_row_document(prepared, row, published) for row in prepared.rows]
-    pointer = _pointer_document(prepared, published)
+    rows = [row_document(prepared, row, published) for row in prepared.rows]
+    pointer = pointer_document(prepared, published)
     return prepared, pointer, rows, trend

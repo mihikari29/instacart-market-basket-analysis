@@ -17,7 +17,7 @@ def _epoch_ms(value: datetime) -> int:
     return int(value.timestamp() * 1000)
 
 
-def _event(event_id: str, product_id: int, event_time: datetime) -> dict:
+def build_event(event_id: str, product_id: int, event_time: datetime) -> dict:
     epoch_ms = _epoch_ms(event_time)
     return {
         "event_id": event_id,
@@ -133,14 +133,14 @@ def run_late_data_demo(
     started_at = datetime.now(timezone.utc)
 
     events = {
-        "on_time": _event("late-demo-on-time", 4242, on_time_at),
-        "duplicate": _event("late-demo-on-time", 4242, on_time_at),
-        "poison": _event("late-demo-poison", 4242, on_time_at) | {
+        "on_time": build_event("late-demo-on-time", 4242, on_time_at),
+        "duplicate": build_event("late-demo-on-time", 4242, on_time_at),
+        "poison": build_event("late-demo-poison", 4242, on_time_at) | {
             "product_id": "MALFORMED"
         },
-        "within_watermark": _event("late-demo-within", 4242, within_at),
-        "watermark_advance": _event("late-demo-advance", 9999, advance_at),
-        "beyond_watermark": _event("late-demo-dropped", 4242, too_late_at),
+        "within_watermark": build_event("late-demo-within", 4242, within_at),
+        "watermark_advance": build_event("late-demo-advance", 9999, advance_at),
+        "beyond_watermark": build_event("late-demo-dropped", 4242, too_late_at),
     }
 
     def orchestrate(query):

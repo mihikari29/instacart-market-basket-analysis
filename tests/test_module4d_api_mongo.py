@@ -19,7 +19,7 @@ import pytest
 from pyspark.sql import SparkSession
 
 from src.module3.config import Config as Module3Config
-from src.module3.trend_bundle import _build_document, write_trend_bundles
+from src.module3.trend_bundle import build_document, write_trend_bundles
 from src.module4.config import Config as Module4Config
 from src.module4.sink_mongo import update_pair_readiness
 from src.module4.hybrid import publish_hybrid_recommendations, read_verified_trend_snapshot
@@ -88,7 +88,7 @@ def _trend_document(
         "trend_score": 0.75,
         "trend_rank": 1,
     }
-    return _build_document(
+    return build_document(
         {
             "window_start": window_start,
             "window_end": window_end,

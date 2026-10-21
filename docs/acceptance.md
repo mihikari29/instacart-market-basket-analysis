@@ -6,8 +6,8 @@ not execute that work. All results start as **NOT RUN**. Kubernetes runtime
 acceptance, full-data runtime acceptance, and production readiness remain open.
 
 The [Proposal](Proposal.md) is the assignment baseline. The [Docker guide](docker.md)
-and [Kubernetes runbook](kubernetes-demo-runbook.md) own operational commands.
-The [external acceptance handoff](external-acceptance-handoff.md) owns the
+and [Kubernetes guide](kubernetes.md) own operational commands.
+The [external acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries) owns the
 delivered scope, historical checks, exclusions, and remaining evidence boundaries.
 Use this tutorial to decide what to do next, when to stop, and what to retain.
 
@@ -107,7 +107,7 @@ copying input data; P0.2–P0.4 can first inventory what is missing.
 | Expected observation | Module 1 prepares data; Module 2 computes batch analytics; Module 3 computes event-time trends; 4A fits ALS, 4B builds the graph, 4C publishes Hybrid snapshots, and 4D reads through FastAPI/Streamlit. |
 | Decision | PASS when the operator records scope and understands each boundary; FAIL if a claim contradicts the contracts; BLOCKED if the approved requirements/source cannot be identified. |
 | Evidence | Planned scope, operator/reviewer, mandatory requirement rows, and links to approved source review. |
-| Troubleshooting | Use the [repository layout](repository-layout.md) to locate an unfamiliar component. |
+| Troubleshooting | Use the [repository layout](../README.md#repository-layout) to locate an unfamiliar component. |
 | Stop/recovery | Resolve scope disagreements before running services. Do not mark optional work mandatory without an assignment decision. |
 | Side effects | READ_ONLY; LOCAL_WRITE when recording the report. |
 
@@ -124,7 +124,7 @@ descriptive and are not ALS fitting inputs.
 |---|---|
 | Objective | Prepare the Linux/WSL2-oriented operator environment and identify each runtime. |
 | Prerequisites | Bash, Git, an operator-owned host, and permission to install the selected tools locally. |
-| Command/reference | Inventory with the commands below; use [Docker image/environment ownership](docker.md#build-each-image), [Kubernetes prerequisites](kubernetes-demo-runbook.md#prerequisites-and-capacity), and the manifests listed in P1.2. |
+| Command/reference | Inventory with the commands below; use [Docker image/environment ownership](docker.md#build-each-image), [Kubernetes prerequisites](kubernetes.md#prerequisites-and-capacity), and the manifests listed in P1.2. |
 | Expected observation | Required executables exist; actual versions and installation provenance are recorded. Minikube is v1.39.0; the selected cluster is Kubernetes v1.36.4 with bundled Calico v3.32.2, Docker driver, containerd, one node. |
 | Decision | PASS for an equipped selected scope; FAIL for a measured version mismatch; BLOCKED for missing tools, incompatible platform, or unresolved installation permissions. |
 | Evidence | OS/WSL details, tool versions, binary origin/checksum where required, and selected environment/manifests. |
@@ -161,7 +161,7 @@ of a successful runtime deployment.
 |---|---|
 | Objective | Establish admission capacity before expensive work. |
 | Prerequisites | Selected host and storage locations; P0.2 tool inventory. |
-| Command/reference | Inspect `lscpu`, `free -h`, and `df -h / "$HOME"`; apply [capacity requirements](kubernetes-demo-runbook.md#prerequisites-and-capacity) and later P4.2/P5.2 preflight. |
+| Command/reference | Inspect `lscpu`, `free -h`, and `df -h / "$HOME"`; apply [capacity requirements](kubernetes.md#prerequisites-and-capacity) and later P4.2/P5.2 preflight. |
 | Expected observation | B3/full coordinator reserve: 6 physical CPU cores, 12 GiB available RAM, 40 GiB free disk. B2 serving alone: 4 CPU, 6 GiB RAM, 20 GiB disk. WSL also needs a current measured Windows backing-disk free-capacity value. |
 | Decision | PASS when measured capacity meets the intended scope; FAIL if measured values contradict a claimed reserve; BLOCKED before runtime when capacity or WSL evidence is insufficient. |
 | Evidence | Timestamped available capacity, filesystem/drive identity, Docker/WSL storage location, and the Windows measurement method. |
@@ -316,9 +316,9 @@ time; the C0 review SHA is historical context, not a permanent future gate.
 |---|---|
 | Host offline tests | Root [requirements](../requirements.txt), test-tool pins from [requirements-dev](../requirements-dev.txt), and imports needed by the selected API/UI tests. |
 | Spark | Docker `spark` target: Spark 3.5.5, Java 17, Python runtime and verified connector jars. `requirements-dev.txt` also declares PySpark 3.5.5. |
-| API | Docker `api` target and [API manifest](../deploy/module4/requirements/api.txt); Kubernetes uses the separate `k8s-runner` package. |
-| UI | Docker `ui` target, [UI runtime](../deploy/module4/requirements/ui.txt) and [UI development manifest](../deploy/module4/requirements/ui-dev.txt). |
-| Browser | Docker `browser` target and [browser manifest](../deploy/module4/requirements/browser.txt), including its matching Chromium runtime. |
+| API | Docker `api` target and [API manifest](../deploy/dashboard/requirements/api.txt); Kubernetes uses the separate `k8s-runner` package. |
+| UI | Docker `ui` target, [UI runtime](../deploy/dashboard/requirements/ui.txt) and [UI development manifest](../deploy/dashboard/requirements/ui-dev.txt). |
+| Browser | Docker `browser` target and [browser manifest](../deploy/dashboard/requirements/browser.txt), including its matching Chromium runtime. |
 
 The following is a host test convenience environment, deliberately omitting
 PySpark from `requirements-dev.txt`. It does not reproduce any image runtime.
@@ -329,8 +329,8 @@ Java/runtime compatibility; the actual skips may differ.
 python3 -m venv "$EVIDENCE_ROOT/host-venv"
 . "$EVIDENCE_ROOT/host-venv/bin/activate"
 python3 -m pip install -r requirements.txt \
-  -r deploy/module4/requirements/api.txt \
-  -r deploy/module4/requirements/ui-dev.txt \
+  -r deploy/dashboard/requirements/api.txt \
+  -r deploy/dashboard/requirements/ui-dev.txt \
   'pytest>=8,<9' 'ruff==0.11.13' 'PyYAML==6.0.2'
 python3 -m pip check
 python3 -m pip freeze > "$EVIDENCE_ROOT/host-packages.txt"
@@ -342,7 +342,7 @@ python3 -m pip freeze > "$EVIDENCE_ROOT/host-packages.txt"
 |---|---|
 | Objective | Reproduce the handoff's complete non-service selection without hiding exclusions. |
 | Prerequisites | P1.1/P1.2 PASS; no service-starting wrapper is used. |
-| Command/reference | Run the exact selection below, from [Recorded development checks](external-acceptance-handoff.md#recorded-development-checks). |
+| Command/reference | Run the exact selection below, from [Recorded development checks](acceptance.md#recorded-development-checks). |
 | Expected observation | Collection completes, no failures occur, and every skip/exclusion has an explicit reason. Fresh totals may differ from historical 803/7. |
 | Decision | PASS for executed offline checks with adequate evidence; FAIL for test/collection errors; BLOCKED for missing required imports or unexplained skips. Any unexecuted mandatory integration/Spark gate remains open. |
 | Evidence | Full selection, stdout/stderr, exit code, pass/fail/skip counts, reasons and package versions. Add `-rs` in a separately recorded diagnostic rerun if skip reasons are needed. |
@@ -407,7 +407,7 @@ effects before starting them.
 |---|---|
 | Objective | Build the selected packages and record actual image/runtime provenance. |
 | Prerequisites | P0 capacity, clean approved source, Docker/Buildx, network or reviewed caches, and permission to create/replace the intended local tags. |
-| Command/reference | Follow [Build each image](docker.md#build-each-image). For `k8s-runner`, `ui`, and `pipeline` package imports, inspect the [manual packaging workflow](../.github/workflows/kubernetes-packaging.yml) and [packaging boundary](external-acceptance-handoff.md#packaging-acceptance-and-teardown-boundaries). |
+| Command/reference | Follow [Build each image](docker.md#build-each-image). For `k8s-runner`, `ui`, and `pipeline` package imports, inspect the [manual packaging workflow](../.github/workflows/kubernetes-packaging.yml) and [packaging boundary](acceptance.md#packaging-acceptance-and-teardown-boundaries). |
 | Expected observation | Selected builds/imports complete; resolved packages, base/jar identities, final image identities and supplied source SHA reconcile. Package imports use no source mount and `--network none`; builds may need network. |
 | Decision | PASS for the selected successful package checks; FAIL for build/import/provenance mismatch; BLOCKED for unavailable dependencies, build tools, resources or authorization. |
 | Evidence | Build commands/logs, BuildKit metadata where applicable, final image/config/manifest identities, runtime versions and package inventory. |
@@ -428,11 +428,11 @@ PASS is not an application or cluster runtime PASS.
 |---|---|
 | Objective | Execute each test selection in the environment that owns it. |
 | Prerequisites | P2.1 packages, isolated test service permission, reviewed temporary-resource cleanup, and sufficient capacity. |
-| Command/reference | Use [Validation commands](docker.md#validation-commands): Spark repository suite; API harness `python3 scripts/module4/module4d_api_validation.py --mode all`; UI-development tests; supplementary Module 3/4/4C Mongo suites. |
+| Command/reference | Use [Validation commands](docker.md#validation-commands): Spark repository suite; API harness `python3 scripts/dashboard/api_validation.py --mode all`; UI-development tests; supplementary Module 3/4/4C Mongo suites. |
 | Expected observation | Each selection exits 0 and reports its actual tests/skips. Supplementary Mongo tests use the documented disposable service/aliases; they are separate from authenticated dashboard MongoDB. |
 | Decision | PASS only for selections actually executed successfully; FAIL for tests or cleanup verification errors; BLOCKED for missing image/service/environment or authorization. |
 | Evidence | Per-selection command, image identity, logs/counts/skips, service/run labels and cleanup outcome. |
-| Troubleshooting | Even API harness `--mode unit` builds an image and runs runtime smoke that starts services; the word unit does not make the harness offline. Inspect [its entry point](../scripts/module4/module4d_api_validation.py). |
+| Troubleshooting | Even API harness `--mode unit` builds an image and runs runtime smoke that starts services; the word unit does not make the harness offline. Inspect [its entry point](../scripts/dashboard/api_validation.py). |
 | Stop/recovery | Obtain authorization for the whole harness, including its scoped cleanup. Do not copy the Mongo cleanup wrapper into a shared project or run cleanup by broad names. |
 | Side effects | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE, DESTRUCTIVE_OR_TEARDOWN for documented disposable-resource cleanup. |
 
@@ -448,12 +448,12 @@ report. These procedures do not run full-data acceptance.
 |---|---|
 | Objective | Verify the API/UI boundary and browser behavior on known synthetic data. |
 | Prerequisites | P2.1 images, free loopback ports 18000/18501, permission for the isolated fixture and its scoped failure cleanup, plus supported host networking for the browser container. |
-| Command/reference | Follow [Start and stop the synthetic dashboard](docker.md#start-and-stop-the-synthetic-dashboard): `bash scripts/module4/module4d_demo.sh up`. Then use the Chromium command at the end of [Validation commands](docker.md#validation-commands). |
+| Command/reference | Follow [Start and stop the synthetic dashboard](docker.md#start-and-stop-the-synthetic-dashboard): `bash scripts/dashboard/demo.sh up`. Then use the Chromium command at the end of [Validation commands](docker.md#validation-commands). |
 | Expected observation | A fresh demo ID/database, loopback API/UI, tmpfs MongoDB, provisioned indexes and read account, valid synthetic responses, and the browser's documented page/selector/refresh/error checks. |
 | Decision | PASS for successful fixture/browser evidence; FAIL for mismatched persisted/API/UI data or browser assertions; BLOCKED for unreachable loopback endpoints or unsupported network prerequisites. |
 | Evidence | Printed demo ID, exact image IDs, sanitized startup/browser logs, response/source versions and scoped cleanup result. |
 | Troubleshooting | Browser uses `--network host --ipc=host`, UI URL `http://127.0.0.1:18501`, API URL `http://127.0.0.1:18000`, namespace `module4d-demo`. Confirm that the chosen Linux/WSL2 Docker setup actually supports this path. |
-| Stop/recovery | Do not expose MongoDB or substitute a shared database. Retain diagnostics before separately authorizing `module4d_demo.sh down` for the exact ID. Startup failure already attempts documented scoped cleanup. |
+| Stop/recovery | Do not expose MongoDB or substitute a shared database. Retain diagnostics before separately authorizing `scripts/dashboard/demo.sh down` for the exact ID. Startup failure already attempts documented scoped cleanup. |
 | Side effects | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for scoped failure cleanup or separately authorized shutdown. |
 
 FastAPI reads MongoDB with a read-only account; Streamlit receives API settings,
@@ -502,7 +502,7 @@ boundary with their corresponding run evidence.
 |---|---|
 | Objective | Verify six-table validation, deterministic events, HDFS handoff and Kafka delivery. |
 | Prerequisites | Matching source receipt and module/runtime outputs for one declared scope. |
-| Command/reference | Review artifacts from [Module 1 operations](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation contract](generate.md), or B3 `input`/`module1`/`replay` receipts. |
+| Command/reference | Review artifacts from [Module 1 operations](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation contract](docker.md#synthetic-event-generation), or B3 `input`/`module1`/`replay` receipts. |
 | Expected observation | Raw domains, keys, relationships and contiguous cart positions pass; source/curated/event counts reconcile; seed/scenario and monotonicity are recorded; HDFS receipts and producer attempted/acknowledged/failed counts are present. |
 | Decision | PASS for coherent executed evidence; FAIL for validation/count/hash mismatch; BLOCKED when source or handoff/delivery evidence is missing. |
 | Evidence | Six-file receipt/hashes, clean manifest, feed manifest, `_sources.json`, `_handoff.json`, producer receipt and terminal-offset evidence. |
@@ -625,7 +625,7 @@ Keep PVC/PV/StorageClass identities with ownership receipts.
 |---|---|
 | Objective | Select a fresh run identity/output without adopting existing resources. |
 | Prerequisites | P0/P1 ready; [current lock](../deploy/k8s/versions.lock.yaml) selects Minikube v1.39.0, Kubernetes v1.36.4, Calico v3.32.2. |
-| Command/reference | Use the block below; inspect [run identity](kubernetes.md#run-identity-and-ownership) and [runbook commands](kubernetes-demo-runbook.md#commands). |
+| Command/reference | Use the block below; inspect [run identity](kubernetes.md#run-identity-and-ownership) and [runbook commands](kubernetes.md#commands). |
 | Expected observation | New 12-hex ID, profile/context absent, output and sibling `.preparation` absent; parent exists privately outside worktrees. |
 | Decision | PASS for reviewed fresh identity/path; FAIL for a collision or unsafe path; BLOCKED if ownership/toolchain cannot be established. |
 | Evidence | Chosen ID, source SHA, lock hash, planned profile/context/namespace, output and preparation paths. |
@@ -679,7 +679,7 @@ prerequisites through their owning phases as well.
 |---|---|
 | Objective | Execute one complete isolated fixture session. |
 | Prerequisites | P4.1/P4.2 PASS and explicit recorded authorization for all planned effects. |
-| Command/reference | Use the fixture command below, owned by [Commands](kubernetes-demo-runbook.md#commands) and [Ordered execution and recovery](kubernetes-demo-runbook.md#ordered-execution-and-recovery). |
+| Command/reference | Use the fixture command below, owned by [Commands](kubernetes.md#commands) and [Ordered execution and recovery](kubernetes.md#ordered-execution-and-recovery). |
 | Expected observation | Preparation collects source/toolchain/cluster/storage/image identities, finalizes private locks, deploys B2 serving, runs B3 pipeline then B4; resources and evidence remain. |
 | Decision | PASS only when the matching session is `runtime_pass` and B4 records `fixture_runtime_pass` / `fixture_runtime`; FAIL on executed gate failure; BLOCKED on admission/identity/prerequisite failure. |
 | Evidence | stdout/stderr/exit code, preparation journal/build metadata/locks, session, B2/B3/B4 receipts and module artifacts. |
@@ -742,7 +742,7 @@ model/serving versions and namespace with UI observations.
 |---|---|
 | Objective | Preserve partial state without assuming automated collection or teardown is always available. |
 | Prerequisites | A failed attempt, its command/exit code and whichever preparation/session files exist. |
-| Command/reference | Inspect the table below, the sibling `.preparation/preparation-state.json`, and [failure/recovery rules](kubernetes-demo-runbook.md#ordered-execution-and-recovery). Use P4.6 only when its session prerequisites hold. |
+| Command/reference | Inspect the table below, the sibling `.preparation/preparation-state.json`, and [failure/recovery rules](kubernetes.md#ordered-execution-and-recovery). Use P4.6 only when its session prerequisites hold. |
 | Expected observation | Last completed stage, possible retained resources and available evidence are identified without changing them. |
 | Decision | PASS for a complete failure inventory, not runtime acceptance; FAIL if evidence contradicts claimed state; BLOCKED for automated collect/teardown when required session/receipts are absent. |
 | Evidence | Sanitized error, stage journal, paths, known profile/namespace IDs, existing logs, missing files and owner/reviewer decision. |
@@ -764,7 +764,7 @@ model/serving versions and namespace with UI observations.
 |---|---|
 | Objective | Verify saved evidence and distinguish local inventory from live failure collection. |
 | Prerequisites | Exact run ID/output and a valid private `demo-session.json`; live diagnostic collection needs explicit authorization. |
-| Command/reference | Run the two local commands below. For live diagnostics, follow [runbook commands](kubernetes-demo-runbook.md#commands): `collect --failure --execute` with the same run ID/output after authorization. |
+| Command/reference | Run the two local commands below. For live diagnostics, follow [runbook commands](kubernetes.md#commands): `collect --failure --execute` with the same run ID/output after authorization. |
 | Expected observation | `verify` reports matching saved receipts, `cluster_contacted=false`, `teardown_performed=false`; `collect` lists host-side paths, byte sizes and SHA-256. Live collection writes sanitized diagnostics and a pointer receipt. |
 | Decision | PASS for the declared verification/collection operation only; FAIL for altered/mismatched files; BLOCKED for absent session or unsupported partial-state prerequisites. |
 | Evidence | Verification JSON, local artifact inventory, failure evidence/pointer when collected, and omissions/PVC locations. |
@@ -842,7 +842,7 @@ its domain/key/relationship checks.
 |---|---|
 | Objective | Run a separately authorized full-data session on the exact prepared input. |
 | Prerequisites | P5.1 PASS, fresh capacity/Windows measurement, approved clean source, all P4 ownership/version prerequisites and unused output/preparation paths. |
-| Command/reference | Use the full-data block below and [canonical commands](kubernetes-demo-runbook.md#commands). Review preflight JSON/plan before executing the separate final block. |
+| Command/reference | Use the full-data block below and [canonical commands](kubernetes.md#commands). Review preflight JSON/plan before executing the separate final block. |
 | Expected observation | Local readiness true, correct source receipt/hash and full-mode plan; execution produces a new profile and full-data B2/B3/B4 evidence. |
 | Decision | PASS only for `full_data_runtime_pass` / `full_data_runtime` with matching receipts; FAIL for an executed gate failure; BLOCKED before run for readiness, source, capacity, identity or authorization problems. |
 | Evidence | Full source/preflight/plan JSON, exact invocation/exit codes, new run ID/profile/output, journal, locks and receipts. |
@@ -912,7 +912,7 @@ acceptance matrix rather than quietly promoting or dropping it.
 |---|---|
 | Objective | Supply Proposal §15.6 evidence from actual executor allocation. |
 | Prerequisites | A separate approved Spark standalone master/workers, identical accessible code/Python and HDFS input, reachable driver/UI REST API, capacity and authorization. |
-| Command/reference | Use [Existing standalone master: Proposal §15.6](module2-executor-benchmark.md). Review its `plan --execution-mode standalone --master ... --executor-configs ...`, then its authorized `run` procedure. |
+| Command/reference | Use [Existing standalone master: Proposal §15.6](docker.md#spark-executor-layout-experiment). Review its `plan --execution-mode standalone --master ... --executor-configs ...`, then its authorized `run` procedure. |
 | Expected observation | Two through eight distinct configurations, at least one warmup/three measured repetitions per configuration, equal source/rows/checksum, and observed executor IDs/hosts/cores/effective configuration. |
 | Decision | PASS for valid actual allocation/equal-output evidence; FAIL for driver-only/missing/mismatched allocation; BLOCKED without a suitable reachable standalone environment. |
 | Evidence | Plan, actual master, requested/effective Spark config, observed allocation/REST records, input identity/size, physical plans, event-log metrics and trials. |
@@ -1002,7 +1002,7 @@ write an honest report.
 |---|---|
 | Objective | Present the actual run against Proposal §39. |
 | Prerequisites | Reviewed run evidence, selected scope, dashboard access authorization and identified gaps. |
-| Command/reference | Follow [Dashboard and demo script](kubernetes-demo-runbook.md#dashboard-and-demo-script) and [Proposal](Proposal.md) §39, using the session's exact explicit-context access command. |
+| Command/reference | Follow [Dashboard and demo script](kubernetes.md#dashboard-and-demo-script) and [Proposal](Proposal.md) §39, using the session's exact explicit-context access command. |
 | Expected observation | Architecture/HDFS/batch/plans/Kafka/streaming/late-data/ALS/Hybrid/benchmark/resources are shown with their current run identities and truthful scope. |
 | Decision | PASS for the declared demonstrated requirements; FAIL for unsupported live claims or substituted historical results; BLOCKED when required evidence/access is absent. |
 | Evidence | Slides/video/time plan, source/run/scope, displayed receipt paths/versions, command log and reviewer observations. |
@@ -1016,7 +1016,7 @@ write an honest report.
 |---|---|
 | Objective | Review an exact deletion plan only after preserving evidence. |
 | Prerequisites | Correct session, complete run-specific lock, valid B2/B3 ownership receipts, required acceptance evidence, exported required artifacts and reviewed live diagnostic evidence. |
-| Command/reference | Follow [canonical teardown commands](kubernetes-demo-runbook.md#commands). Select one exact existing run and print the no-`--execute` plan below; execution requires separate authorization. |
+| Command/reference | Follow [canonical teardown commands](kubernetes.md#commands). Select one exact existing run and print the no-`--execute` plan below; execution requires separate authorization. |
 | Expected observation | `status=plan_only`, `command_executed=false`, exact namespace/profile and evidence hashes. Authorized execution later rechecks live UIDs, ownership and storage before deletion and writes its receipt. |
 | Decision | PASS for an approved plan or separately evidenced teardown operation; FAIL for identity/ownership mismatch; BLOCKED for missing session/receipts/exports/diagnostics or authorization. |
 | Evidence | Plan, exact target IDs/UIDs, evidence/export review, approver/time, execution result/receipt if performed, and retained-resource inventory. |
@@ -1103,27 +1103,27 @@ not authorize execution; the owning step's prerequisites and decision apply.
 
 | Step | Major command/procedure | Effects | Canonical owner / safety boundary |
 |---|---|---|---|
-| P0.2/P0.3 | Version, CPU/RAM/disk inventory | READ_ONLY; LOCAL_WRITE if logged | [Kubernetes prerequisites](kubernetes-demo-runbook.md#prerequisites-and-capacity); Docker daemon reads are not startup. |
+| P0.2/P0.3 | Version, CPU/RAM/disk inventory | READ_ONLY; LOCAL_WRITE if logged | [Kubernetes prerequisites](kubernetes.md#prerequisites-and-capacity); Docker daemon reads are not startup. |
 | P0.5/P1.2 | Private directories, venv/pip and package inventory | LOCAL_WRITE, RESOURCE_INTENSIVE for installs | Existing dependency manifests/P1.2; no system-wide install implied. |
 | P1.1 | Git identity/status/ls-remote | READ_ONLY | Approved session source; no branch mutation. |
-| P1.2/P1.3 | Ruff/diff check and canonical host pytest | READ_ONLY source checks; LOCAL_WRITE test/log artifacts; possible RESOURCE_INTENSIVE | [Handoff selection](external-acceptance-handoff.md#recorded-development-checks); preserve exclusions. |
+| P1.2/P1.3 | Ruff/diff check and canonical host pytest | READ_ONLY source checks; LOCAL_WRITE test/log artifacts; possible RESOURCE_INTENSIVE | [Handoff selection](acceptance.md#recorded-development-checks); preserve exclusions. |
 | P2.1 | Docker targets/package imports | SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE, DESTRUCTIVE_OR_TEARDOWN for temporary-container removal | [Build guide](docker.md#build-each-image), [packaging workflow](../.github/workflows/kubernetes-packaging.yml); authorize disposable-resource cleanup, imports isolated, builds may use network. |
 | P2.2 | Spark/UI selections, API harness, isolated Mongo suite | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE, DESTRUCTIVE_OR_TEARDOWN for scoped cleanup | [Validation commands](docker.md#validation-commands); review cleanup before authorization. |
-| P2.3 | `module4d_demo.sh up`, Chromium, exact-ID `down` | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for cleanup/down | [Disposable demo](docker.md#start-and-stop-the-synthetic-dashboard); startup failure can clean its own run. |
+| P2.3 | `scripts/dashboard/demo.sh up`, Chromium, exact-ID `down` | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for cleanup/down | [Disposable demo](docker.md#start-and-stop-the-synthetic-dashboard); startup failure can clean its own run. |
 | P2.4 | Compose config/ps versus build/up | READ_ONLY inspection; SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE startup | [Persistent stack](docker.md#run-the-persistent-pipeline-stack); preserve shared data/volumes. |
 | P2.4 | HDFS Safe Mode wait | READ_ONLY service readiness | Same guide; blocks before writes, do not bypass. |
 | P3.1 | Module 1 clean/generate/stage/producer owner procedures | LOCAL_WRITE, DATA_MUTATION, RESOURCE_INTENSIVE | [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay); may replace recognized outputs/HDFS or append Kafka. |
 | P3.2/P3.4/P3.5 | Module 2 stats/all and Module 4 wrapper/all | SERVICE_MUTATION through wrappers, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE | [Module 2](docker.md#module-2-batch-processing-and-benchmarks), [A/B](docker.md#module-4a4b-operation-and-full-data-acceptance); validate-only wrappers may still start services. |
 | P3.3/P5.4 | Module 3 stream/smoke/recovery/benchmarks | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for reset helpers | [Streaming operations](docker.md#module-3-streaming-operations); topics/checkpoints/sinks must be owned. |
 | P3.6 | Hybrid `serve-user` | DATA_MUTATION, LOCAL_WRITE | [Hybrid CLI](docker.md#hybrid-cli); publisher credentials, not API reader. |
-| P4.1/P4.2/P5.2 | Profile/context listing; local preflight/plan | READ_ONLY; RESOURCE_INTENSIVE full-input inspection; LOCAL_WRITE saved output | [Coordinator commands](kubernetes-demo-runbook.md#commands); plan/exit 0 is not acceptance. |
+| P4.1/P4.2/P5.2 | Profile/context listing; local preflight/plan | READ_ONLY; RESOURCE_INTENSIVE full-input inspection; LOCAL_WRITE saved output | [Coordinator commands](kubernetes.md#commands); plan/exit 0 is not acceptance. |
 | P4.3/P5.2 | `demo run --execute` | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE | Same runbook; fresh profile/storage/images/locks, B2/B3/B4; retains resources. |
 | P4.6/P5.6 | `demo verify`, plain `collect` | READ_ONLY local files; LOCAL_WRITE saved reports | Same runbook; no fresh live acceptance or complete PVC export. |
 | P4.6/P6.5 | `collect --failure --execute` | READ_ONLY live diagnostics, LOCAL_WRITE | Same runbook; valid session and explicit authorization required. |
 | P5.1 | Fetch/copy/hash six CSVs | LOCAL_WRITE, RESOURCE_INTENSIVE | [Fetcher/Module 1](docker.md#module-1-ingestion-generation-staging-and-kafka-replay); preserve original receipt outside six-file input copy. |
-| P5.5 | Executor benchmark `plan` versus `run` | READ_ONLY plan; SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE execution | [Standalone benchmark guide](module2-executor-benchmark.md); existing cluster, actual allocation evidence. |
-| P6.1/P6.4 | Artifact exports; explicit-context port forward | READ_ONLY source reads, LOCAL_WRITE/RESOURCE_INTENSIVE exports; SERVICE_MUTATION access process | [Evidence safeguards](kubernetes.md#evidence-and-teardown-safeguards), [demo script](kubernetes-demo-runbook.md#dashboard-and-demo-script). |
-| P6.5 | `demo teardown` versus `teardown --execute` | READ_ONLY plan; SERVICE_MUTATION, DATA_MUTATION, DESTRUCTIVE_OR_TEARDOWN execution | [Teardown procedure](kubernetes-demo-runbook.md#commands); separate authorization/live UID guards. |
+| P5.5 | Executor benchmark `plan` versus `run` | READ_ONLY plan; SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE execution | [Standalone benchmark guide](docker.md#spark-executor-layout-experiment); existing cluster, actual allocation evidence. |
+| P6.1/P6.4 | Artifact exports; explicit-context port forward | READ_ONLY source reads, LOCAL_WRITE/RESOURCE_INTENSIVE exports; SERVICE_MUTATION access process | [Evidence safeguards](kubernetes.md#evidence-and-teardown-safeguards), [demo script](kubernetes.md#dashboard-and-demo-script). |
+| P6.5 | `demo teardown` versus `teardown --execute` | READ_ONLY plan; SERVICE_MUTATION, DATA_MUTATION, DESTRUCTIVE_OR_TEARDOWN execution | [Teardown procedure](kubernetes.md#commands); separate authorization/live UID guards. |
 
 <a id="failure-map"></a>
 ## Appendix C — Failure and recovery decision map
@@ -1154,22 +1154,129 @@ reviewer in Appendix A.
 
 | Assignment requirement | Canonical documentation | Verification phase | Required evidence | Acceptance scope |
 |---|---|---|---|---|
-| Module 1; §§7–11, 42 | [Generation](generate.md), [Module 1 operations](docker.md#module-1-ingestion-generation-staging-and-kafka-replay) | P0.4, P3.1, P4/P5 | Six-file validation/provenance, deterministic feed, HDFS receipts, Kafka delivery/offsets | Fixture and full data recorded separately. |
+| Module 1; §§7–11, 42 | [Generation](docker.md#synthetic-event-generation), [Module 1 operations](docker.md#module-1-ingestion-generation-staging-and-kafka-replay) | P0.4, P3.1, P4/P5 | Six-file validation/provenance, deterministic feed, HDFS receipts, Kafka delivery/offsets | Fixture and full data recorded separately. |
 | Module 2; §§12–16, 42 | [Batch operations](docker.md#module-2-batch-processing-and-benchmarks), [ledger](implementation-ledger.md) | P3.2, P5.3/P5.4 | Reconciled analytics/features/publication, plans, joins/windows/pivots and measurements | Correctness plus explicit benchmark input scope. |
 | Module 3; §§17–22, 37–38, 42 | [Streaming contract](module3-contracts.md), [operations](docker.md#module-3-streaming-operations) | P3.3, P4/P5 | Parse/dedupe, windows/watermark/late data, sink idempotency, offsets/checkpoint recovery, rates/latency | Actual runtime evidence; no universal exactly-once claim. |
 | Module 4A; §§23–25, 38, 42 | [Module 4 plan](module4-plan.md), [A/B procedure](docker.md#module-4a4b-operation-and-full-data-acceptance) | P3.4, P5.3 | Prior-only fit/tuning, held-out train, cohorts/baselines/metrics, model and publication identity | Current run, including full-data evaluation. |
 | Module 4B; §§26–27, 42 | Same Module 4 references | P3.5, P5.3 | Prior graph invariants, real GraphFrames, catalog coverage, weighted degree/PageRank, versioned readback | Implemented graph; Connected Components optional. |
 | Module 4C; §§28–29, 38, 42 | [Hybrid specification](module4-plan.md#module4c-spec), [bundle boundary](module3-contracts.md#module-4c-consumption-boundary) | P3.6, P4/P5 | Ready A/B plus eligible bundle/fallback, deterministic score/rank, source hashes/pointer; separately justified quality design | Responsiveness, runtime integration and quality are separate. |
 | Module 4D; §§30, 42, 45 | [Read API/UI](module4-plan.md#module4d-spec), [dashboard fixture](docker.md#start-and-stop-the-synthetic-dashboard) | P2.3, P3.7, P4/P5 | Bounded indexed read-only API, current source identities, UI/browser states, archived-report labels | Disposable fixture/current runtime; archives keep historical scope. |
-| Kafka/HDFS/Mongo/Spark integration; §§6, 9–10, 31–35, 45 | [Docker guide](docker.md), [Kubernetes runbook](kubernetes-demo-runbook.md) | P2, P4, P5 | Source-to-storage-to-serving reconciliation, actual service/image/receipt identities | Pinned integration and isolated runtime. |
+| Kafka/HDFS/Mongo/Spark integration; §§6, 9–10, 31–35, 45 | [Docker guide](docker.md), [Kubernetes guide](kubernetes.md) | P2, P4, P5 | Source-to-storage-to-serving reconciliation, actual service/image/receipt identities | Pinned integration and isolated runtime. |
 | Docker environment; §§35–36, 45 | [Build targets](docker.md#build-each-image), [validation](docker.md#validation-commands) | P2.1/P2.2 | Build/package/import versions/digests and owned test selections | Package/integration evidence, not cluster acceptance. |
-| Kubernetes demo; §§3.1, 36.2, 39, 45 | [Foundation](kubernetes.md), [canonical runbook](kubernetes-demo-runbook.md) | P4, P5.2/P5.6 | Profile/UID/lock/image/PVC receipts, B2/B3/B4, live NetworkPolicy probes | Fixture/full-data runtime distinct; single-node course scope. |
-| Batch/stream benchmarks; §§15, 37–38 | [Batch/stream operations](docker.md), [executor guide](module2-executor-benchmark.md) | P5.4/P5.5 | Equal-source/output trials, warmups, plans/shuffle/input size, partition/rate/latency records and actual standalone allocation | Workload/environment-specific; priority of should-have partition work explicit. |
-| Full-data validation; §§4, 38, 42, 45 | [Handoff](external-acceptance-handoff.md), P5 procedures | P5.1–P5.6 | Verified complete real source, row/hash/lineage checks, full-data B4, current model/graph/evaluation and reports | Full release proof, not filenames or metadata alone. |
+| Kubernetes demo; §§3.1, 36.2, 39, 45 | [Foundation](kubernetes.md), [canonical runbook](kubernetes.md) | P4, P5.2/P5.6 | Profile/UID/lock/image/PVC receipts, B2/B3/B4, live NetworkPolicy probes | Fixture/full-data runtime distinct; single-node course scope. |
+| Batch/stream benchmarks; §§15, 37–38 | [Batch/stream operations](docker.md), [executor guide](docker.md#spark-executor-layout-experiment) | P5.4/P5.5 | Equal-source/output trials, warmups, plans/shuffle/input size, partition/rate/latency records and actual standalone allocation | Workload/environment-specific; priority of should-have partition work explicit. |
+| Full-data validation; §§4, 38, 42, 45 | [Handoff](acceptance.md#delivered-scope-and-evidence-boundaries), P5 procedures | P5.1–P5.6 | Verified complete real source, row/hash/lineage checks, full-data B4, current model/graph/evaluation and reports | Full release proof, not filenames or metadata alone. |
 | Final report; §§38, 42, 45 | [Evidence index](evidence/README.md), [report template](#report-template) | P6.1–P6.3 | Command/identity/hash/status matrix, limitations, omissions/resources/reviewer | Current acceptance plus separately attributed historical references. |
-| 8–12 minute demo; §39, §45 | [Canonical demonstration](kubernetes-demo-runbook.md#dashboard-and-demo-script) | P6.4 | Current run receipts/UI/plans/metrics, presentation/video and reviewer notes | Human demonstration; not implied by a runtime receipt. |
+| 8–12 minute demo; §39, §45 | [Canonical demonstration](kubernetes.md#dashboard-and-demo-script) | P6.4 | Current run receipts/UI/plans/metrics, presentation/video and reviewer notes | Human demonstration; not implied by a runtime receipt. |
 
-Additional orientation: [documentation index](README.md), [repository layout](repository-layout.md),
+Additional orientation: [documentation index](README.md), [repository layout](../README.md#repository-layout),
 [current progress](progress.md), and [implementation ledger](implementation-ledger.md).
 Historical [evidence](evidence/README.md) remains immutable and cannot replace
 fresh evidence required for the chosen source and acceptance scope.
+
+## Delivered scope and evidence boundaries
+
+**Implementation complete; external runtime acceptance is pending.** This handoff prepares an operator to review the feature branch, reproduce its offline checks in the pinned environment, and collect fresh runtime evidence. Historical records and offline source checks do not establish current runtime acceptance.
+
+## Delivered components and source identity
+
+The implementation source passed independent source-code review at `a5fe5003134efb26f2a8826ce51e98bc291a2ff9`. The later feature-branch cleanup revision `e4bd750b2e744c80025cc9deead4b3c2365c18f4` changed Markdown only; the reviewed source tree is unchanged by that cleanup. This restoration is also documentation-only. Verify the feature branch's final source tree and remote identity before using these records as evidence.
+
+| Component | Delivered behavior | Main implementation and contract references |
+|---|---|---|
+| Module 1 | Six-file fail-closed validation, typed cleaning, deterministic synthetic event generation, source/handoff receipts, HDFS staging and Kafka producer. | `src/module1/`; [generation guide](docker.md#synthetic-event-generation); [Docker Module 1 procedure](docker.md#module-1-ingestion-generation-staging-and-kafka-replay). |
+| Module 2 | Prior-history Spark analytics, descriptive user features, Mongo publication and local/standalone benchmark tooling. | `src/module2/`; [benchmark guide](docker.md#spark-executor-layout-experiment); [Docker Module 2 procedure](docker.md#module-2-batch-processing-and-benchmarks). |
+| Module 3 | Kafka validation, event-time windows, bounded replay/offset reconciliation, checkpoint contracts, optional finalized bundles and completed-batch telemetry. | `src/module3/`; [Module 3 contract](module3-contracts.md); [Docker streaming procedure](docker.md#module-3-streaming-operations). |
+| Modules 4A/4B | Prior-only ALS, catalog-wide product graph, offline evaluation and versioned Mongo snapshots. | `src/module4/`; [Module 4 plan](module4-plan.md); [Docker full-data guide](docker.md#module-4a4b-operation-and-full-data-acceptance). |
+| Module 4C | Readiness-aware Hybrid source reads, deterministic versioned ranking and prior-only evaluation tooling. | `src/module4/hybrid/`; [Module 4 §19](module4-plan.md#module4c-spec). |
+| Module 4D | Bounded read-only API and Streamlit dashboard; UI data access goes through FastAPI. | `src/module4/dashboard/`; [Module 4 §20](module4-plan.md#module4d-spec); Docker API/UI procedure. |
+| Kubernetes | Run-scoped B2/B3/B4 jobs, private receipts, identity locks, guarded acceptance and separate teardown. | `scripts/k8s/`, `deploy/k8s/`; [Kubernetes guide](kubernetes.md). |
+
+## Important input and output contracts
+
+The full-data source contract is exactly six Instacart CSV files: orders, prior interactions, train interactions, products, aisles and departments. Module 1 validates columns, raw domains, keys, foreign keys and contiguous cart positions before coercion and publication. Preserve the six original inputs and their source receipt. A fixture is not a substitute for those files in full-data acceptance.
+
+The source dataset has no absolute purchase dates. Generated event time exists for replay and event-time aggregation. The ordinary Module 1 stream includes prior and train orders; its 13-field Kafka message does not carry `eval_set`. Do not interpret generated dates as customer chronology or use an event-time cutoff alone as proof of a leakage-safe train evaluation.
+
+Module 2 batch analytics and Module 4A/4B model/graph inputs use prior interactions. Module 2's `user_features` output is descriptive, marked `prior_only` and is not an ALS fit input. Official train baskets are evaluation truth. Module 3 emits finalized windows only after its event-time watermark closes them; a finite replay may finish with an unfinalized tail in checkpoint state. Module 4C requires versioned ready batch sources and an immutable eligible trend bundle. Module 4D reads bounded versioned records and does not publish or start processing jobs.
+
+HDFS, Kafka, MongoDB and checkpoints have separate receipt and ownership boundaries. A successful promotion of one Mongo collection is not a transaction across other outputs. The detailed schemas, counts, fields and recovery contracts are in the linked technical guides and [implementation ledger](implementation-ledger.md).
+
+## Recorded development checks
+
+Checks associated with the reviewed source identity include:
+
+- Independent source-code review: **PASS**.
+- Broad non-service pytest selection: **803 passed, 7 skipped**; the seven skips are Spark-dependent modules, not seven individual skipped test cases.
+- Focused telemetry/BSON regressions: **59 passed**.
+- Focused telemetry, Module 4D API and UI client/AppTest selection: **134 passed**.
+- Repository-wide Ruff: **PASS**; Python compilation: **190 files PASS**.
+- Offline Kubernetes fake-client/static, local rendering, runner and packaging/source checks: **PASS** within their recorded selection.
+
+The checks ran with host Python 3.14 and temporary lightweight dependencies under `/tmp`. They did not establish the pinned Spark 3.5.5 / Java 17 container behavior or every transitive dependency. The broad suite used this selection:
+
+```bash
+python3 -B -m pytest -p no:cacheprovider -q -m 'not integration' \
+  --ignore=tests/test_module3_trend_bundle_mongo.py \
+  --ignore=tests/test_module4_mongo.py \
+  --ignore=tests/test_module4c_cli_mongo.py \
+  --ignore=tests/test_module4c_data_mongo.py \
+  --ignore=tests/test_module4c_sink_mongo_mongo.py \
+  --ignore=tests/test_module4c_trend_reader_mongo.py \
+  --ignore=tests/test_module4d_api_mongo.py \
+  --ignore=tests/test_module4d_batch_api_mongo.py \
+  --ignore=tests/test_module4c_responsiveness.py \
+  --ignore=tests/test_module4c_streaming_demo.py
+```
+
+Seven Spark-dependent modules were skipped by the selection: Hybrid evaluation parity, Module 3, bundle integration, trend bundle writer, Module 4 Spark fixtures, Spark batch fixtures, and the Module 2 producer-to-Parquet-to-Module 4 reader handoff. Eight live MongoDB modules were excluded to avoid service access. The responsiveness and streaming-demo suites were also excluded because their imports require unavailable PySpark. Those tests are **not run** in this host suite.
+
+Ruff and compilation are source checks. Fake Kubernetes clients and offline Kustomize rendering are not a live cluster. Historical green GitHub workflows refer to their recorded source revisions; the finalization push used `[skip ci]`, and no CI result is claimed for that push. The exact per-check logs and historic result dates remain in the [implementation ledger](implementation-ledger.md) and evidence archive.
+
+## Historical evidence and scope
+
+The evidence archive preserves dated results that predate or otherwise have a different scope from the reviewed source revision:
+
+| Record | Scope |
+|---|---|
+| [Full-data Module 1/2 report](evidence/full/README.md) | 3 October 2026 full public dataset, one isolated host, Spark 3.5.5/Java 17/Python 3.10, one two-core executor, 33,819,106 generated events and recorded batch benchmarks. |
+| [Module 3 validation](evidence/module3/README.md) | Bounded Kafka/Spark/Mongo correctness, watermark, recovery, throughput and partition experiments on one broker and a small Spark runtime. |
+| [Module 4 acceptance](evidence/module4/acceptance-20261010/README.md) | Historical 10 October 2026 run with 21/21 gates, its input/model/graph metrics, and its stated limitations. It is not a fresh run of the reviewed source. |
+| [Module 4C records](evidence/module4c/README.md) | Bounded synthetic integration observations; no Hybrid quality or capacity claim. |
+| [Module 4D records](evidence/module4d/README.md) | Dated API/UI design and release records; use each report's own revision and scope. |
+| [Style comparison](style-regression-validation.md) | Separate historical comparison marked **NOT FULLY VERIFIED**; not current runtime acceptance. |
+
+Historical measurements must retain their date, code/runtime identity, input scope, method and limitations. A recorded count or passing gate does not become a new result because it appears in a current status document.
+
+## Validation not executed for the reviewed source
+
+The following work remains with an external operator in a suitable isolated environment:
+
+1. Run the fixture and integration suites inside the pinned Spark 3.5.5 / Java 17 environment, including PySpark-dependent cases, and execute isolated live MongoDB tests.
+2. Complete browser checks against the isolated dashboard fixture and inspect package boundaries.
+3. Build/import the `k8s-runner`, `ui` and `pipeline` packages using the manual Kubernetes packaging workflow or its source-verified equivalent. No workflow dispatch or image build is claimed here.
+4. Run isolated Kubernetes B2/B3/B4; verify run ownership, storage, service readiness, Mongo roles/indexes, API/UI behavior, checkpoint/replay evidence, network policy allow/deny probes and retained receipts.
+5. Exercise checkpoint recovery with the chosen runtime and verify query identity/offset continuity.
+6. Run full-data processing with exactly the six reviewed CSV inputs, verify their receipts/hashes, observe the 4 GiB raw-input cap and retain complete output/model/replay evidence.
+7. Run the standalone executor-layout experiment and capture actual executor allocation. Measure streaming latency using the defined ingestion-to-finalized-output boundary. Do not infer an improvement before observing the result.
+8. Record fresh results with exact source revision, input receipts, environment identities, commands, output, skips, failures and limitations. Keep fixture and full-data status separate.
+
+Historical Module 1–3 runs and the 10 October Module 4 acceptance are not substitutes for these checks.
+
+## Environment and reproducibility prerequisites
+
+For Docker work, review the persistent Compose volume boundary and the separate disposable dashboard setup before running services. Keep existing datasets, checkpoints, credentials and evidence outside cleanup actions. Use the [Docker guide](docker.md) for current commands, required indexes, ports and teardown scope.
+
+For Kubernetes, use a dedicated run ID, profile, context, namespace, storage and private output directory. The runbook requires at least six physical CPU cores, 12 GiB available RAM and 40 GiB free disk; full-data mode caps raw input at 4 GiB and reserves explicit pipeline storage. Measure WSL backing-disk capacity independently when applicable. The committed runtime lock is a template and must be finalized from measured host, cluster, image, toolchain and storage identities. Do not fill missing identities with estimates.
+
+Use the exact source files and preserve their receipts. Record the source tree/commit and working-tree state, toolchain and image digests, configuration and scenario, input counts/hashes, output receipts, service identities, all executed commands and exit statuses. Keep secret values out of logs and evidence. Synthetic timestamps are simulation metadata only.
+
+## Packaging, acceptance and teardown boundaries
+
+The manual Kubernetes packaging workflow builds the selected images and runs isolated import-verification containers; it does not start persistent data services. Image builds may need network access to registries and dependency repositories, or suitable cached artifacts. Only the import-verification containers run with networking disabled (`--network none`); they also use a read-only filesystem, a temporary `/tmp`, and no repository source mount. This workflow checks packaging and imports, not runtime acceptance, and no passing result is claimed unless it has successfully executed for the selected revision. Runtime acceptance requires successful live execution of the declared scope with evidence bound to the run identity. A `runtime_pass` receipt records B4 completion for fixture or full-data scope; it does not show that resources were deleted. The offline `verify` operation contacts no cluster and reports teardown as not performed.
+
+Resources are retained after success or failure. Collect and inspect sanitized failure evidence before any cleanup. Teardown is a separate run-scoped operation requiring explicit execution and live ownership checks; it is not a prerequisite for reporting B4 runtime acceptance. Never use global prune, shared Compose cleanup or name-only deletion for a Kubernetes run. Follow the [Kubernetes guide](kubernetes.md) for the reviewed plan and exact procedure.
+
+## Acceptance record ownership
+
+The external operator owns the fresh environment and runtime evidence. Preserve source receipts, lock files, B2/B3/B4 receipts, logs, command output and failure evidence with run identity and digests. Mark each test as executed, skipped, failed or blocked with a reason. Identify fixture versus full data, historical versus fresh, offline versus runtime, and source revision. Do not report runtime acceptance until the applicable live checks pass; do not infer production scalability from bounded measurements.
