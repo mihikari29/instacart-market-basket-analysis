@@ -29,6 +29,7 @@ MAX_TREND_TOP_K = 20
 DEFAULT_WRITE_BATCH_SIZE = 250
 MAX_WRITE_BATCH_SIZE = 500
 TTL_INDEX_NAME = "ttl_expires_at"
+TREND_SELECTION_INDEX_NAME = "idx_source_namespace_window_end_desc"
 
 REQUIRED_ROW_FIELDS = (
     "window_start",
@@ -293,8 +294,26 @@ def _bundle_documents(
 
 
 def ensure_bundle_indexes(collection: Any, retention_seconds: int) -> None:
-    """Maintain the absolute-expiration TTL index on the new bundle collection."""
+    """Maintain the TTL index and the trend selection index on the collection.
+
+    The selection index serves the Module 4C and Module 4D lookups that find
+    the newest finalized window for a source namespace. Without it those
+    lookups scan every published window.
+    """
     existing = collection.index_information()
+    selection = existing.get(TREND_SELECTION_INDEX_NAME)
+    correct_selection = bool(
+        selection
+        and list(selection.get("key", [])) == [("source_namespace", 1), ("window_end", -1)]
+    )
+    if selection and not correct_selection:
+        collection.drop_index(TREND_SELECTION_INDEX_NAME)
+        selection = None
+    if not correct_selection:
+        collection.create_index(
+            [("source_namespace", 1), ("window_end", -1)],
+            name=TREND_SELECTION_INDEX_NAME,
+        )
     ttl_index = existing.get(TTL_INDEX_NAME)
     correct_ttl_index = bool(
         ttl_index
