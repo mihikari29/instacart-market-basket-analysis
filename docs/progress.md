@@ -148,6 +148,43 @@ The 3 October batch benchmark used Spark 3.5.5, Java 17.0.14 and Python 3.10.12 
 
 The 3 October streaming report used one broker, four Kafka partitions and a two-core Spark setup. Its bounded throughput and partition measurements are detailed in [Module 3 evidence](evidence/module3/README.md); the small test's two-partition arm was fastest, without establishing a generally optimal partition count. The 10 October Module 4 acceptance report recorded 21/21 gates for its exact historical run, but its ALS metrics trailed the personal-frequency baseline and do not imply model superiority.
 
+## Full-data pipeline run
+
+The complete pipeline was executed on the full dataset on 21 October 2026
+against the reviewed source revision. The run reproduced the accepted
+10 October 2026 full-data acceptance result.
+
+| Stage | Result |
+|---|---|
+| Source | 3,421,083 orders, 32,434,489 prior facts, 1,384,617 train facts, 49,688 products; per-file digests recorded in the source receipt. |
+| Staging | 33,819,106 events across 456 daily partitions promoted atomically to HDFS. |
+| Module 2 | 49,677 product metrics and 21 department metrics published to MongoDB; pivot total equals unpivot total at 32,434,489. |
+| Module 4A | 4,124,180 recommendations for 206,209 users. |
+| Module 4B | 49,688 product-graph documents. |
+| Module 3 | 1,051,069 finalized trend rows and 67,852 immutable finalized-window bundles. |
+| Module 4C | Versioned Hybrid serving snapshot; ALS and trend candidates combined, trend window resolved. |
+| Module 4D | All read routes answered from the published collections. |
+
+The evaluation reproduces the accepted run exactly. ALS Recall@10 is
+`0.12147208248298487` against the accepted `0.121472`; Precision@10 is
+`0.09578611223315568` against `0.095786`; MAP@10 is `0.06988428671987636`
+against `0.069884`; and global-popularity Recall@10 is
+`0.06984315126267848` against `0.069843`. The recommendation and graph
+document counts match the accepted run exactly. This is a reproduction on a
+different host, a different executor layout and a Zstandard-compressed feed.
+
+Two operational limits were found and are recorded rather than hidden:
+
+- The streaming stage exhausts the two gigabyte batch executor heap on a feed
+  whose event times span the full 456 days, because the sliding-window state
+  then holds an entry per five-minute slide. The stage needs a larger executor
+  heap than the batch default, and the bounded development feed is the
+  appropriate input for a demonstration.
+- The Module 3 late-data demonstration produced the expected evidence: two
+  events accepted inside the watermark, the beyond-watermark event dropped,
+  the duplicate removed by event identifier, and the poison record counted as
+  invalid rather than aggregated.
+
 ## Repository maintenance
 
 A structural audit of the source tree, the scripts, the documentation and the
