@@ -2,7 +2,7 @@
 """Bounded live Kafka → Spark → MongoDB → Module 4C integration demo.
 
 The pure fixture, oracle, guards, and evidence validation are also imported by
-``tests/test_module4c_streaming_demo.py``.  Live execution is intended to run
+``tests/test_hybrid_streaming_demo.py``.  Live execution is intended to run
 inside the pinned Spark image on the dedicated internal Docker network.
 """
 

@@ -27,7 +27,7 @@ from src.module4.dashboard.readers import (
     read_hybrid_snapshot,
     read_trend_snapshot,
 )
-from tests.module4d_helpers import BASE_TIME, NAMESPACE, make_snapshot
+from tests.dashboard_helpers import BASE_TIME, NAMESPACE, make_snapshot
 
 
 class Cursor:

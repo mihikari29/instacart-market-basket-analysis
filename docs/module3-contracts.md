@@ -207,7 +207,7 @@ finite source ends; offset drainage does not imply all windows are finalized.
 - Parsing and offset contract: [`src/module3/parse.py`](../src/module3/parse.py), [`src/module3/config.py`](../src/module3/config.py), [`tests/test_module3.py`](../tests/test_module3.py), [`tests/test_module3_config.py`](../tests/test_module3_config.py).
 - Window and legacy output: [`src/module3/trending.py`](../src/module3/trending.py), [`src/module3/sink_mongo.py`](../src/module3/sink_mongo.py), and `tests/test_module3.py`.
 - Immutable bundle contract: [`src/module3/trend_bundle.py`](../src/module3/trend_bundle.py), [`tests/test_module3_trend_bundle.py`](../tests/test_module3_trend_bundle.py), and [`tests/test_module3_trend_bundle_mongo.py`](../tests/test_module3_trend_bundle_mongo.py).
-- Module 3 to Module 4C integration: [`src/module4/hybrid/trend_reader.py`](../src/module4/hybrid/trend_reader.py), [`tests/test_module4c_trend_reader.py`](../tests/test_module4c_trend_reader.py), and [`tests/test_module3_bundle_integration.py`](../tests/test_module3_bundle_integration.py).
+- Module 3 to Module 4C integration: [`src/module4/hybrid/trend_reader.py`](../src/module4/hybrid/trend_reader.py), [`tests/test_hybrid_trend_reader.py`](../tests/test_hybrid_trend_reader.py), and [`tests/test_module3_bundle_integration.py`](../tests/test_module3_bundle_integration.py).
 - Static, bounded operating instructions: [Docker guide](docker.md).
 - Dated Module 3 validation and measurements: [Module 3 evidence](evidence/module3/README.md).
 - Bounded C8A/C8B observations: [Module 4C evidence index](evidence/module4c/README.md).

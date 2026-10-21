@@ -1022,7 +1022,7 @@ def _summary_markdown(report: dict[str, Any], report_digest: str) -> str:
             "",
             "All lambda arms published baseline then changed windows from the same fixed A/B generation in separate disposable databases. The changed pointer advanced, baseline rows remained immutable, and the A/B readiness document stayed unchanged.",
             "",
-            "Concurrent A/B source-generation race coverage depends on I2 C6. This run used a stable source generation. See `docs/module4c-evaluation-plan.md` for temporal-evaluation constraints.",
+            "Concurrent A/B source-generation race coverage depends on I2 C6. This run used a stable source generation. See `docs/module4-plan.md` section 19 for temporal-evaluation constraints.",
             "",
             f"JSON evidence: `report.json` (SHA-256 `{report_digest}`).",
         ]

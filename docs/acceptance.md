@@ -354,14 +354,14 @@ python3 -m pip freeze > "$EVIDENCE_ROOT/host-packages.txt"
 PYTHONDONTWRITEBYTECODE=1 python3 -B -m pytest -p no:cacheprovider -q -m 'not integration' \
   --ignore=tests/test_module3_trend_bundle_mongo.py \
   --ignore=tests/test_module4_mongo.py \
-  --ignore=tests/test_module4c_cli_mongo.py \
-  --ignore=tests/test_module4c_data_mongo.py \
-  --ignore=tests/test_module4c_sink_mongo_mongo.py \
-  --ignore=tests/test_module4c_trend_reader_mongo.py \
-  --ignore=tests/test_module4d_api_mongo.py \
-  --ignore=tests/test_module4d_batch_api_mongo.py \
-  --ignore=tests/test_module4c_responsiveness.py \
-  --ignore=tests/test_module4c_streaming_demo.py
+  --ignore=tests/test_hybrid_cli_mongo.py \
+  --ignore=tests/test_hybrid_data_mongo.py \
+  --ignore=tests/test_hybrid_sink_mongo_mongo.py \
+  --ignore=tests/test_hybrid_trend_reader_mongo.py \
+  --ignore=tests/test_dashboard_api_mongo.py \
+  --ignore=tests/test_dashboard_batch_api_mongo.py \
+  --ignore=tests/test_hybrid_responsiveness.py \
+  --ignore=tests/test_hybrid_streaming_demo.py
 ```
 
 The first eight ignored files require live MongoDB. The final two suites have
@@ -448,12 +448,12 @@ report. These procedures do not run full-data acceptance.
 |---|---|
 | Objective | Verify the API/UI boundary and browser behavior on known synthetic data. |
 | Prerequisites | P2.1 images, free loopback ports 18000/18501, permission for the isolated fixture and its scoped failure cleanup, plus supported host networking for the browser container. |
-| Command/reference | Follow [Start and stop the synthetic dashboard](docker.md#start-and-stop-the-synthetic-dashboard): `bash scripts/dashboard/demo.sh up`. Then use the Chromium command at the end of [Validation commands](docker.md#validation-commands). |
+| Command/reference | Follow [Start and stop the synthetic dashboard](docker.md#start-and-stop-the-synthetic-dashboard): `python3 scripts/dashboard/demo.py up`. Then use the Chromium command at the end of [Validation commands](docker.md#validation-commands). |
 | Expected observation | A fresh demo ID/database, loopback API/UI, tmpfs MongoDB, provisioned indexes and read account, valid synthetic responses, and the browser's documented page/selector/refresh/error checks. |
 | Decision | PASS for successful fixture/browser evidence; FAIL for mismatched persisted/API/UI data or browser assertions; BLOCKED for unreachable loopback endpoints or unsupported network prerequisites. |
 | Evidence | Printed demo ID, exact image IDs, sanitized startup/browser logs, response/source versions and scoped cleanup result. |
 | Troubleshooting | Browser uses `--network host --ipc=host`, UI URL `http://127.0.0.1:18501`, API URL `http://127.0.0.1:18000`, namespace `module4d-demo`. Confirm that the chosen Linux/WSL2 Docker setup actually supports this path. |
-| Stop/recovery | Do not expose MongoDB or substitute a shared database. Retain diagnostics before separately authorizing `scripts/dashboard/demo.sh down` for the exact ID. Startup failure already attempts documented scoped cleanup. |
+| Stop/recovery | Do not expose MongoDB or substitute a shared database. Retain diagnostics before separately authorizing `scripts/dashboard/demo.py down` for the exact ID. Startup failure already attempts documented scoped cleanup. |
 | Side effects | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for scoped failure cleanup or separately authorized shutdown. |
 
 FastAPI reads MongoDB with a read-only account; Streamlit receives API settings,
@@ -1109,7 +1109,7 @@ not authorize execution; the owning step's prerequisites and decision apply.
 | P1.2/P1.3 | Ruff/diff check and canonical host pytest | READ_ONLY source checks; LOCAL_WRITE test/log artifacts; possible RESOURCE_INTENSIVE | [Handoff selection](acceptance.md#recorded-development-checks); preserve exclusions. |
 | P2.1 | Docker targets/package imports | SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE, DESTRUCTIVE_OR_TEARDOWN for temporary-container removal | [Build guide](docker.md#build-each-image), [packaging workflow](../.github/workflows/kubernetes-packaging.yml); authorize disposable-resource cleanup, imports isolated, builds may use network. |
 | P2.2 | Spark/UI selections, API harness, isolated Mongo suite | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE, DESTRUCTIVE_OR_TEARDOWN for scoped cleanup | [Validation commands](docker.md#validation-commands); review cleanup before authorization. |
-| P2.3 | `scripts/dashboard/demo.sh up`, Chromium, exact-ID `down` | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for cleanup/down | [Disposable demo](docker.md#start-and-stop-the-synthetic-dashboard); startup failure can clean its own run. |
+| P2.3 | `scripts/dashboard/demo.py up`, Chromium, exact-ID `down` | SERVICE_MUTATION, DATA_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE; DESTRUCTIVE_OR_TEARDOWN for cleanup/down | [Disposable demo](docker.md#start-and-stop-the-synthetic-dashboard); startup failure can clean its own run. |
 | P2.4 | Compose config/ps versus build/up | READ_ONLY inspection; SERVICE_MUTATION, LOCAL_WRITE, RESOURCE_INTENSIVE startup | [Persistent stack](docker.md#run-the-persistent-pipeline-stack); preserve shared data/volumes. |
 | P2.4 | HDFS Safe Mode wait | READ_ONLY service readiness | Same guide; blocks before writes, do not bypass. |
 | P3.1 | Module 1 clean/generate/stage/producer owner procedures | LOCAL_WRITE, DATA_MUTATION, RESOURCE_INTENSIVE | [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay); may replace recognized outputs/HDFS or append Kafka. |
@@ -1219,14 +1219,14 @@ The checks ran with host Python 3.14 and temporary lightweight dependencies unde
 python3 -B -m pytest -p no:cacheprovider -q -m 'not integration' \
   --ignore=tests/test_module3_trend_bundle_mongo.py \
   --ignore=tests/test_module4_mongo.py \
-  --ignore=tests/test_module4c_cli_mongo.py \
-  --ignore=tests/test_module4c_data_mongo.py \
-  --ignore=tests/test_module4c_sink_mongo_mongo.py \
-  --ignore=tests/test_module4c_trend_reader_mongo.py \
-  --ignore=tests/test_module4d_api_mongo.py \
-  --ignore=tests/test_module4d_batch_api_mongo.py \
-  --ignore=tests/test_module4c_responsiveness.py \
-  --ignore=tests/test_module4c_streaming_demo.py
+  --ignore=tests/test_hybrid_cli_mongo.py \
+  --ignore=tests/test_hybrid_data_mongo.py \
+  --ignore=tests/test_hybrid_sink_mongo_mongo.py \
+  --ignore=tests/test_hybrid_trend_reader_mongo.py \
+  --ignore=tests/test_dashboard_api_mongo.py \
+  --ignore=tests/test_dashboard_batch_api_mongo.py \
+  --ignore=tests/test_hybrid_responsiveness.py \
+  --ignore=tests/test_hybrid_streaming_demo.py
 ```
 
 Seven Spark-dependent modules were skipped by the selection: Hybrid evaluation parity, Module 3, bundle integration, trend bundle writer, Module 4 Spark fixtures, Spark batch fixtures, and the Module 2 producer-to-Parquet-to-Module 4 reader handoff. Eight live MongoDB modules were excluded to avoid service access. The responsiveness and streaming-demo suites were also excluded because their imports require unavailable PySpark. Those tests are **not run** in this host suite.

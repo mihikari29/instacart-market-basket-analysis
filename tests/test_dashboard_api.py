@@ -14,8 +14,8 @@ from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError, read_ve
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 from src.module4.dashboard import readers
-from tests.module4d_helpers import BASE_TIME, NAMESPACE, make_snapshot
-from tests.test_module4d_readers import ALSDatabase, Database, _als_products, _als_rows
+from tests.dashboard_helpers import BASE_TIME, NAMESPACE, make_snapshot
+from tests.test_dashboard_readers import ALSDatabase, Database, _als_products, _als_rows
 
 
 def _config():

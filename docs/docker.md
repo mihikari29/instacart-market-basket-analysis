@@ -489,9 +489,9 @@ build context is `../..`, resolved from the Compose file directory to the
 repository root. It does not mount main pipeline volumes or the repository:
 
 ```bash
-bash scripts/dashboard/demo.sh up
+python3 scripts/dashboard/demo.py up
 # Open http://127.0.0.1:18501 and retain the printed run ID.
-bash scripts/dashboard/demo.sh down <12-hex-run-id>
+python3 scripts/dashboard/demo.py down <12-hex-run-id>
 ```
 
 Startup builds images, creates a unique MongoDB database, publishes valid
@@ -785,18 +785,18 @@ a separate manual workflow with its own source-data prerequisites and evidence.
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e PYTHONDONTWRITEBYTECODE=1 -e PYTEST_ADDOPTS="-p no:cacheprovider" \
   instacart-spark:3.5.5 python3 -m pytest -q \
-  --ignore=tests/test_module4d_api_mongo.py \
-  --ignore=tests/test_module4d_batch_api_mongo.py \
-  --ignore=tests/test_module4d_ui_app.py \
-  --ignore=tests/test_module4d_ui_client.py \
-  --ignore=tests/test_module4d_ui_evaluation.py
+  --ignore=tests/test_dashboard_api_mongo.py \
+  --ignore=tests/test_dashboard_batch_api_mongo.py \
+  --ignore=tests/test_dashboard_ui_app.py \
+  --ignore=tests/test_dashboard_ui_client.py \
+  --ignore=tests/test_dashboard_ui_evaluation.py
 python3 scripts/dashboard/api_validation.py --mode all
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
   -e PYTEST_ADDOPTS="-p no:cacheprovider" \
   instacart-module4d-ui-dev:local python -m pytest -q \
-  tests/test_module4d_ui_app.py tests/test_module4d_ui_client.py \
-  tests/test_module4d_ui_evaluation.py
+  tests/test_dashboard_ui_app.py tests/test_dashboard_ui_client.py \
+  tests/test_dashboard_ui_evaluation.py
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e RUFF_CACHE_DIR=/tmp/ruff instacart-spark:3.5.5 ruff check .
 docker compose config --quiet
@@ -837,8 +837,8 @@ independent of the authenticated dashboard fixture:
     -e I3_MONGODB_TEST_URI=mongodb://i3-mongo:27017 \
     instacart-spark:3.5.5 python3 -m pytest -q \
     tests/test_module3_trend_bundle_mongo.py tests/test_module4_mongo.py \
-    tests/test_module4c_data_mongo.py tests/test_module4c_trend_reader_mongo.py \
-    tests/test_module4c_sink_mongo_mongo.py tests/test_module4c_cli_mongo.py
+    tests/test_hybrid_data_mongo.py tests/test_hybrid_trend_reader_mongo.py \
+    tests/test_hybrid_sink_mongo_mongo.py tests/test_hybrid_cli_mongo.py
 )
 ```
 

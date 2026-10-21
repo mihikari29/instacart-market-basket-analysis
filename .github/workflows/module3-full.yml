@@ -78,11 +78,11 @@ jobs:
         run: |
           docker compose build spark-master
           docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q \
-            --ignore=tests/test_module4d_api_mongo.py \
-            --ignore=tests/test_module4d_batch_api_mongo.py \
-            --ignore=tests/test_module4d_ui_app.py \
-            --ignore=tests/test_module4d_ui_client.py \
-            --ignore=tests/test_module4d_ui_evaluation.py
+            --ignore=tests/test_dashboard_api_mongo.py \
+            --ignore=tests/test_dashboard_batch_api_mongo.py \
+            --ignore=tests/test_dashboard_ui_app.py \
+            --ignore=tests/test_dashboard_ui_client.py \
+            --ignore=tests/test_dashboard_ui_evaluation.py
       - name: Run Streamlit UI regressions in the UI development image
         run: |
           image="instacart-module4d-ui-dev:module3-${GITHUB_RUN_ID}"
@@ -95,9 +95,9 @@ jobs:
             -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
             -e PYTEST_ADDOPTS="-p no:cacheprovider" "$image" \
             python -m pytest -q \
-            tests/test_module4d_ui_app.py \
-            tests/test_module4d_ui_client.py \
-            tests/test_module4d_ui_evaluation.py
+            tests/test_dashboard_ui_app.py \
+            tests/test_dashboard_ui_client.py \
+            tests/test_dashboard_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
         run: python3 scripts/dashboard/api_validation.py --mode all
       - name: Start services (Spark, Kafka, Mongo)

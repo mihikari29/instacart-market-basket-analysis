@@ -32,11 +32,11 @@ jobs:
           set -o pipefail
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
             -m pytest -q \
-            --ignore=tests/test_module4d_api_mongo.py \
-            --ignore=tests/test_module4d_batch_api_mongo.py \
-            --ignore=tests/test_module4d_ui_app.py \
-            --ignore=tests/test_module4d_ui_client.py \
-            --ignore=tests/test_module4d_ui_evaluation.py 2>&1 | tee module4-pytest.log
+            --ignore=tests/test_dashboard_api_mongo.py \
+            --ignore=tests/test_dashboard_batch_api_mongo.py \
+            --ignore=tests/test_dashboard_ui_app.py \
+            --ignore=tests/test_dashboard_ui_client.py \
+            --ignore=tests/test_dashboard_ui_evaluation.py 2>&1 | tee module4-pytest.log
 
       - name: Verify staged flow and same-version A/B publication replay
         run: |

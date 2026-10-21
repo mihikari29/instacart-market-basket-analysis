@@ -113,6 +113,26 @@ Finite replay is considered complete only when the producer reports success, rec
 
 **Module 4D, API and Streamlit.** FastAPI provides bounded, indexed, read-only views for Hybrid recommendations, ALS outputs where available, batch metrics, order distributions, trends, streaming metrics and registered evidence. API readiness checks are distinct from liveness; the dashboard accesses data only through the API. The four dashboard pages cover overview, real-time and batch views, Hybrid recommendations, and evaluation/performance. Missing, empty, unavailable and malformed snapshots have distinct responses; unavailable scores remain blank instead of being presented as zero. Exact ranking, read and route contracts are in the [Module 4 plan](docs/module4-plan.md#module4c-spec).
 
+## Run it
+
+The fastest way to see the serving layer working is the isolated synthetic
+dashboard. It needs Docker and nothing else — no dataset, no HDFS, no Kafka:
+
+```bash
+python3 scripts/dashboard/demo.py up      # or: bash scripts/dashboard/demo.sh up
+# then open http://127.0.0.1:18501
+```
+
+The command builds the API and UI images, starts a disposable MongoDB on
+tmpfs, publishes a synthetic fixture through the accepted publishers, starts
+the API and the dashboard, and verifies every HTTP response against what was
+stored. It prints the run identifier; `python3 scripts/dashboard/demo.py down
+<run-id>` stops it and discards the data.
+
+The full pipeline needs the persistent Compose stack. The [Docker guide](docs/docker.md)
+owns those commands, and the [Kubernetes guide](docs/kubernetes.md) owns the
+isolated cluster demonstration.
+
 ## Environments and where to work
 
 The root `compose.yaml` is the persistent development stack for Kafka, Spark, HDFS and MongoDB. Its named volumes preserve state. The isolated synthetic dashboard environment in `deploy/dashboard/compose.demo.yaml` uses disposable MongoDB storage and loopback-only API/UI ports; it does not exercise production capacity. The [Docker guide](docs/docker.md) owns verified image targets, prerequisites, operating commands, and cleanup boundaries.

@@ -28,7 +28,7 @@ from src.module4.hybrid.trend_reader import TrendSnapshotIntegrityError
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 from src.module4.dashboard import readers
-from tests.module4d_helpers import (
+from tests.dashboard_helpers import (
     BASE_TIME,
     GRAPH_VERSION,
     MODEL_VERSION,

@@ -22,7 +22,6 @@ This page lists the documents that own a specific subject.
 | [Module 3 contracts](module3-contracts.md) | Kafka event provenance, event-time aggregation, publication, bundles, checkpoints and the Module 4C consumption boundary. |
 | [Module 4 plan](module4-plan.md) | The Module 4A-4D algorithms, data contracts, ranking, evaluation, API routes and dashboard contracts. |
 | [Coding conventions](coding-conventions.md) | The project's Python, PySpark, error-handling and testing rules. |
-| [Module 4C evaluation plan](module4c-evaluation-plan.md) | A compatibility page kept at its former path because the archived C8A report generator references it. |
 
 ## Historical evidence
 

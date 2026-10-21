@@ -44,11 +44,11 @@ jobs:
           mkdir -p results/module4/acceptance-ci
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
             -m pytest -q \
-            --ignore=tests/test_module4d_api_mongo.py \
-            --ignore=tests/test_module4d_batch_api_mongo.py \
-            --ignore=tests/test_module4d_ui_app.py \
-            --ignore=tests/test_module4d_ui_client.py \
-            --ignore=tests/test_module4d_ui_evaluation.py 2>&1 | tee results/module4/acceptance-ci/tests.txt
+            --ignore=tests/test_dashboard_api_mongo.py \
+            --ignore=tests/test_dashboard_batch_api_mongo.py \
+            --ignore=tests/test_dashboard_ui_app.py \
+            --ignore=tests/test_dashboard_ui_client.py \
+            --ignore=tests/test_dashboard_ui_evaluation.py 2>&1 | tee results/module4/acceptance-ci/tests.txt
       - name: Run Streamlit UI regressions in the UI development image
         run: |
           image="instacart-module4d-ui-dev:module4-full-${GITHUB_RUN_ID}"
@@ -61,9 +61,9 @@ jobs:
             -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
             -e PYTEST_ADDOPTS="-p no:cacheprovider" "$image" \
             python -m pytest -q \
-            tests/test_module4d_ui_app.py \
-            tests/test_module4d_ui_client.py \
-            tests/test_module4d_ui_evaluation.py
+            tests/test_dashboard_ui_app.py \
+            tests/test_dashboard_ui_client.py \
+            tests/test_dashboard_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
         run: |
           set -o pipefail

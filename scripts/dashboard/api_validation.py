@@ -18,19 +18,19 @@ ROOT = Path(__file__).resolve().parents[2]
 MONGO_IMAGE = "mongo:7.0.16"
 UNIT_TESTS = (
     "tests/test_module4_package_layout.py",
-    "tests/test_module4d_readers.py",
-    "tests/test_module4d_api.py",
-    "tests/test_module4d_batch_readers.py",
-    "tests/test_module4d_evidence.py",
-    "tests/test_module4d_batch_api.py",
-    "tests/test_module4c_data.py",
-    "tests/test_module4c_cli.py",
-    "tests/test_module4c_ranking.py",
-    "tests/test_module4c_responsiveness.py",
-    "tests/test_module4c_service.py",
-    "tests/test_module4c_sink_mongo.py",
-    "tests/test_module4c_streaming_demo.py",
-    "tests/test_module4c_trend_reader.py",
+    "tests/test_dashboard_readers.py",
+    "tests/test_dashboard_api.py",
+    "tests/test_dashboard_batch_readers.py",
+    "tests/test_dashboard_evidence.py",
+    "tests/test_dashboard_batch_api.py",
+    "tests/test_hybrid_data.py",
+    "tests/test_hybrid_cli.py",
+    "tests/test_hybrid_ranking.py",
+    "tests/test_hybrid_responsiveness.py",
+    "tests/test_hybrid_service.py",
+    "tests/test_hybrid_sink_mongo.py",
+    "tests/test_hybrid_streaming_demo.py",
+    "tests/test_hybrid_trend_reader.py",
 )
 def _run(command: list[str], *, check: bool = True, env=None) -> subprocess.CompletedProcess:
     print("$ " + " ".join(command), flush=True)
@@ -60,10 +60,10 @@ def _copy_context(destination: Path) -> None:
     tests_dir.mkdir()
     for relative in (
         "tests/__init__.py",
-        "tests/module4d_helpers.py",
+        "tests/dashboard_helpers.py",
         *UNIT_TESTS,
-        "tests/test_module4d_api_mongo.py",
-        "tests/test_module4d_batch_api_mongo.py",
+        "tests/test_dashboard_api_mongo.py",
+        "tests/test_dashboard_batch_api_mongo.py",
     ):
         source = ROOT / relative
         target = tests_dir / source.name
@@ -346,8 +346,8 @@ def _mongo(image_tag: str, session_id: str) -> None:
                     "-m",
                     "pytest",
                     "-q",
-                    "tests/test_module4d_api_mongo.py",
-                    "tests/test_module4d_batch_api_mongo.py",
+                    "tests/test_dashboard_api_mongo.py",
+                    "tests/test_dashboard_batch_api_mongo.py",
                 ]
             )
         finally:

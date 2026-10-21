@@ -10,9 +10,9 @@ from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 from src.module4.dashboard.batch_readers import PRODUCT_INDEXES
 from src.module4.dashboard.evidence import EVIDENCE_SPECS
-from tests.test_module4d_batch_readers import BatchDatabase, department, product
-from tests.test_module4d_readers import Database
-from tests.test_module4d_api import _config
+from tests.test_dashboard_batch_readers import BatchDatabase, department, product
+from tests.test_dashboard_readers import Database
+from tests.test_dashboard_api import _config
 
 
 def app_for(database, *, root=None):
