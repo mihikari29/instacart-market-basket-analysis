@@ -38,7 +38,7 @@ from scripts.experiments.module4c_streaming_demo import (
     validate_run_id,
     wait_bounded,
 )
-from src.module3.schemas import KAFKA_EVENT_SCHEMA
+from src.module3.parse import KAFKA_EVENT_SCHEMA
 
 
 RUN_ID = "c8b-20261013t151900z-abc123ef"

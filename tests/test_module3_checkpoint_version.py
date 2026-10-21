@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from src.module3.checkpoint import (
+from src.module3.progress_log import (
     CHECKPOINT_VERSION_MARKER,
     CheckpointCompatibilityError,
     ensure_checkpoint,

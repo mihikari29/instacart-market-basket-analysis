@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import re
 
 TABLES = {
@@ -56,3 +57,17 @@ class Config:
             master=os.environ.get("SPARK_MASTER", cls.master),
             **overrides,
         )
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 2 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module2",
+        total_cores=config.total_cores,
+        executor_memory=config.executor_memory,
+        executor_cores=config.executor_cores,
+    )

@@ -7,6 +7,7 @@ reproducible from the run summary alone.
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import re
 
 # Re-exported so `from .config import parse_bool` keeps working for callers
@@ -148,3 +149,18 @@ class Config:
         }
         values.update(overrides)
         return cls(**values)
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 3 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module3",
+        total_cores=2,
+        executor_memory="1g",
+        executor_cores=2,
+        extra_config={"spark.sql.streaming.metricsEnabled": "true"},
+    )

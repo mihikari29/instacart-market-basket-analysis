@@ -14,8 +14,12 @@ from bson.int64 import Int64
 from fastapi.testclient import TestClient
 import pytest
 
-from src.module3.latency import summarize_ingestion_to_output
-from src.module3.metrics import build_snapshot, publish_snapshot, validate_snapshot
+from src.module3.metrics import (
+    build_snapshot,
+    publish_snapshot,
+    summarize_ingestion_to_output,
+    validate_snapshot,
+)
 from src.module3.progress_log import CompletedBatchPublisher, progress_logger
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig

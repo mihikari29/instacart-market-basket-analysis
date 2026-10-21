@@ -284,8 +284,7 @@ def _app(monkeypatch, api=None, page="Overview"):
 
 
 def test_overview_displays_real_batch_rates_latency_and_clock_skew(monkeypatch):
-    from src.module3.metrics import build_snapshot
-    from src.module3.latency import summarize_ingestion_to_output
+    from src.module3.metrics import build_snapshot, summarize_ingestion_to_output
     api = FakeApi()
     api.metrics_document = build_snapshot(
         {"id": "query-1", "batchId": 3, "numInputRows": 10, "inputRowsPerSecond": 5., "processedRowsPerSecond": 7.},

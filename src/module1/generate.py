@@ -20,8 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import SyntheticConfig, preset_summary
-from .contracts import PARQUET_COMPRESSION, validate_cart_position_range
+from .config import PARQUET_COMPRESSION, SyntheticConfig, preset_summary, validate_cart_position_range
 
 BASE_TIMESTAMP = pd.Timestamp("2024-01-01")  # Monday; order_dow 0..6 aligns with +dow days
 DAY_MS = 86_400_000

@@ -2,7 +2,7 @@
 
 import unittest
 
-from src.module3.latency import summarize_ingestion_to_output
+from src.module3.metrics import summarize_ingestion_to_output
 
 
 class IngestionToOutputLatencyTests(unittest.TestCase):

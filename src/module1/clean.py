@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 import pandas as pd
 
-from .contracts import PARQUET_COMPRESSION
+from .config import PARQUET_COMPRESSION
 
 RAW_DATA_TYPES = {
     "orders": {

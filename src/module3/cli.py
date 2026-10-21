@@ -21,9 +21,8 @@ import platform
 from ..common.runtime import redact_uri, safe_error_text
 from ..common.runtime import new_run_id, validate_run_id
 from ..common.runtime import code_digest, git_revision
-from .config import Config, parse_bool
-from .spark import session
-from .validate import validate_kafka, validate_mongo
+from .config import Config, parse_bool, session
+from .kafka_utils import validate_kafka, validate_mongo
 
 
 def save(path, value):

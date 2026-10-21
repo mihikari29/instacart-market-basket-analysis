@@ -341,9 +341,9 @@ def module4() -> dict:
 def replay() -> dict:
     values = runtime_values()
     from src.module3.config import Config as StreamConfig
-    from src.module3.spark import session
+    from src.module3.config import session
     from src.module3.stream import run_stream
-    from src.module3.validate import validate_kafka, validate_mongo
+    from src.module3.kafka_utils import validate_kafka, validate_mongo
     from src.module3.replay import (
         FIXTURE_REPLAY_SECONDS, FULL_REPLAY_SECONDS, ReplayCompletion,
         kafka_end_offsets, validate_replay_budget, validate_replay_completion,

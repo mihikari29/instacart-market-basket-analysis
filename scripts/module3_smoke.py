@@ -377,7 +377,7 @@ def run_recovery(argv=None) -> int:
     first_send = compose_python(
         [
             "-m",
-            "src.module3.scenario",
+            "src.module3.demo",
             "recovery-first",
             "--topic",
             topic,
@@ -406,7 +406,7 @@ def run_recovery(argv=None) -> int:
     first_artifact = artifact_path(first_run.stdout)
 
     second_send = compose_python(
-        ["-m", "src.module3.scenario", "recovery-second", "--topic", topic],
+        ["-m", "src.module3.demo", "recovery-second", "--topic", topic],
         capture=True,
     )
     second_run = run_command(

@@ -177,6 +177,16 @@ def positive_int(value: Any, field: str, *, error: type[Exception] = ValueError,
     return value
 
 
+def file_sha256(path: str | Path) -> str:
+    """Compute the SHA-256 digest of a file in 8 MiB chunks."""
+    target = Path(path)
+    digest = hashlib.sha256()
+    with target.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def stored_utc(value: Any, field: str, *, error: type[Exception] = ValueError, message: str | None = None) -> datetime:
     """Return a stored BSON datetime as UTC.
 

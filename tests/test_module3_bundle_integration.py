@@ -22,8 +22,7 @@ from pyspark.sql.types import (
 )
 
 from src.module3 import cli, stream
-from src.module3.config import Config
-from src.module3.spark import session
+from src.module3.config import Config, session
 from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     TrendBundleConflictError,

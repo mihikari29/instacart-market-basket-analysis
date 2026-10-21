@@ -11,8 +11,7 @@ import re
 from ..common.runtime import safe_error_text
 from ..common.runtime import new_run_id, save_json
 from ..common.runtime import code_digest, git_revision
-from .config import Config
-from .spark import session
+from .config import Config, session
 from .data import read_tables, validate, require
 from .analytics import analyze, publish_mongo, tag_user_features
 from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache

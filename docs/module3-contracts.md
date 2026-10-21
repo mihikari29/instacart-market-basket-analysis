@@ -33,7 +33,7 @@ needs a separately justified leakage-safe chronology and source provenance.
 
 The Kafka topic defaults to `instacart-purchase-events`; the producer key is
 `user_id`. Its JSON fields are defined in
-[`src/module3/schemas.py`](../src/module3/schemas.py): `event_id`, order/user/
+[`src/module3/parse.py`](../src/module3/parse.py): `event_id`, order/user/
 product identifiers, cart position, reorder flag, aisle/department identifiers,
 order weekday/hour, `event_time_epoch_ms`, `event_time_iso`, and
 `ingestion_time_epoch_ms`.

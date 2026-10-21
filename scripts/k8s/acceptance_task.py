@@ -687,7 +687,7 @@ def run() -> dict[str, Any]:
     if denied_api != {"target": "module4d-api:8000", "connection": "blocked"}:
         raise TaskError("Module 2 pipeline-role deny-path receipt is missing or invalid")
 
-    from src.module3.spark import session
+    from src.module3.config import session
 
     acceptance_root = RUNTIME_ROOT / "results" / os.environ.get("POD_NAME", "acceptance") / "acceptance"
     acceptance_root.mkdir(parents=True, exist_ok=False)

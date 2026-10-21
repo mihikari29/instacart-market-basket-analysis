@@ -18,6 +18,12 @@ INVARIANT_SPARK_CONFIG: dict[str, str] = {
 }
 
 
+def clear_job_group(context: Any) -> None:
+    """Clear group properties through the public PySpark 3.5 API."""
+    for name in ("spark.jobGroup.id", "spark.job.description", "spark.job.interruptOnCancel"):
+        context.setLocalProperty(name, None)
+
+
 def build_session(
     config: Any,
     event_dir: Path | None = None,

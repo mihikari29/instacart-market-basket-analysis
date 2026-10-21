@@ -15,15 +15,16 @@ from .parse import from_kafka
 from .sink_mongo import write_mongo
 from .trend_bundle import BUNDLE_COLLECTION_NAME, write_trend_bundles
 from .trending import build_window_counts, rank_trending_batch, select_top_k
-from .checkpoint import ensure_checkpoint
-from .latency import summarize_ingestion_to_output
+from .metrics import (
+    build_snapshot,
+    publish_snapshot,
+    summarize_ingestion_to_output,
+)
 from .replay import wait_for_replay
-from .metrics import build_snapshot, publish_snapshot
-
-
 from .progress_log import (
     PROGRESS_LOG_NAME,
     CompletedBatchPublisher,
+    ensure_checkpoint,
     progress_logger as _progress_logger,
 )
 CHECKPOINT_STATE_VERSION = "ingestion-latency-v1"

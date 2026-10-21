@@ -4,7 +4,7 @@ import ast
 from pathlib import Path
 import unittest
 
-from src.module1.contracts import INT32_MAX, validate_cart_position_range
+from src.module1.config import INT32_MAX, validate_cart_position_range
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,7 +60,7 @@ class CartPositionContractTests(unittest.TestCase):
         self.assertEqual(cast.func.attr, "astype")
         self.assertEqual(cast.args[0].value, "int32")
 
-        event_schema = ast.parse((ROOT / "src/module3/schemas.py").read_text(encoding="utf-8"))
+        event_schema = ast.parse((ROOT / "src/module3/parse.py").read_text(encoding="utf-8"))
         schema_calls = [node for node in ast.walk(event_schema) if isinstance(node, ast.Call)]
         self.assertTrue(any(
             isinstance(call.func, ast.Name) and call.func.id == "StructField"

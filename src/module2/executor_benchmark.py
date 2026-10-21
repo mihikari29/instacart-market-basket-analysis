@@ -246,7 +246,7 @@ def run_worker(args: argparse.Namespace) -> int:
     from .data import read_tables, validate
     from .eventlog import attach_metrics, parse_event_logs
     from .benchmarks import trial
-    from .spark import session
+    from .config import session
 
     config = Config(
         root=args.root,

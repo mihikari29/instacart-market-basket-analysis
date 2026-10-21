@@ -10,7 +10,7 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
-from .contracts import PARQUET_COMPRESSION
+from .config import PARQUET_COMPRESSION
 
 PARTITION_COLUMNS = ["synthetic_year", "synthetic_month", "synthetic_day"]
 
