@@ -1,5 +1,5 @@
 
-from tests.mongo_fakes import FakeBulkResult, FakeUpdateOne
+from tests.helpers import FakeBulkResult, FakeUpdateOne
 """Focused tests for the optional Module 3 trend-bundle publisher."""
 
 # ruff: noqa: E402 -- PySpark imports follow an optional dependency guard.

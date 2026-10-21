@@ -12,7 +12,7 @@ import yaml
 from scripts.k8s import api_readiness, render as k8s_render
 from scripts.k8s.api_readiness import IndexRequirement
 from scripts.k8s.render import MANAGED_MARKER, _validate_output_path, render_overlay
-from tests.build_context import admitted, context_paths
+from tests.helpers import admitted, context_paths
 from scripts.k8s.pipeline import TREND_SOURCE_NAMESPACE
 from tests.test_k8s_ownership import complete_lock
 
@@ -611,9 +611,7 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertIn('CMD ["python3", "-c", "print(', dockerfile)
         admitted_paths = context_paths(ROOT / ".dockerignore", [
             "scripts/module4.py",
-            "scripts/module4_runtime_smoke.py",
-            "scripts/module4_flow_smoke.py",
-            "scripts/module4_cross_module_smoke.py",
+            "scripts/module4_smoke.py",
             "compose.yaml",
         ])
         for source_path, is_admitted in admitted_paths.items():

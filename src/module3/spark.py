@@ -1,13 +1,13 @@
 """Spark session for the Module 3 speed layer.
 
-The project-wide Spark invariants live in `src.common.spark_session`. The
+The project-wide Spark invariants live in `src.common.spark`. The
 streaming metrics flag is added so that `recentProgress` exposes the
 throughput counters required by Proposal section 15.4.
 """
 
 from pathlib import Path
 
-from ..common.spark_session import build_session
+from ..common.spark import build_session
 
 
 def session(config, event_dir: Path):

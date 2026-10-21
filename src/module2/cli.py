@@ -8,9 +8,9 @@ from pathlib import Path
 import platform
 import re
 
-from ..common.redaction import safe_error_text
-from ..common.run_context import new_run_id, save_json
-from ..common.source_identity import code_digest, git_revision
+from ..common.runtime import safe_error_text
+from ..common.runtime import new_run_id, save_json
+from ..common.runtime import code_digest, git_revision
 from .config import Config
 from .spark import session
 from .data import read_tables, validate, require

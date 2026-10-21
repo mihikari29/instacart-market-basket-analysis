@@ -140,9 +140,7 @@ COPY src/module4/ /workspace/src/module4/
 # These files are part of the established Module 4 provenance digest. Keep
 # their paths and bytes intact even though the API does not execute the CLIs.
 COPY scripts/module4.py /workspace/scripts/module4.py
-COPY scripts/module4_runtime_smoke.py /workspace/scripts/module4_runtime_smoke.py
-COPY scripts/module4_flow_smoke.py /workspace/scripts/module4_flow_smoke.py
-COPY scripts/module4_cross_module_smoke.py /workspace/scripts/module4_cross_module_smoke.py
+COPY scripts/module4_smoke.py /workspace/scripts/module4_smoke.py
 COPY Dockerfile /workspace/Dockerfile
 COPY compose.yaml /workspace/compose.yaml
 COPY requirements.txt /workspace/requirements.txt

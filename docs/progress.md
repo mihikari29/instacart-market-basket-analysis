@@ -158,13 +158,32 @@ unreferenced symbols. The changes below are behaviour-preserving except where
 a measured improvement is stated.
 
 **Shared layer.** A new `src/common/` package owns the building blocks that
-every module had re-implemented: environment readers (`env.py`), credential
-redaction (`redaction.py`), run identity and JSON report writing
-(`run_context.py`), the shared Spark session contract (`spark_session.py`),
-numeric and record guards (`type_guards.py`) and source identity
-(`source_identity.py`). The three Module 2/3/4 Spark session modules now
-differ only in their application name and their module-specific settings, and
-the three configuration modules share their path and environment handling.
+every module had re-implemented: environment readers, credential redaction,
+run identity and JSON report writing, numeric and record guards, and source
+identity in `runtime.py`, and the shared Spark session contract in `spark.py`.
+The three Module 2/3/4 Spark session modules now differ only in their
+application name and their module-specific settings, and the three
+configuration modules share their path and environment handling.
+
+**File count.** The audit started at 426 tracked files and finished at 424,
+with 19 genuinely new files and 47 removed or merged. The new files are the
+shared layer (3), the Kubernetes primitives (1), the compose runner (1), the
+demo entry point (1), the test helpers (1) and the evidence index, checksum
+manifest and compact summaries (11). Everything else was merged or removed:
+
+| Change | Before | After |
+|---|---|---|
+| `src/common/` helper modules | 7 | 3 |
+| Kubernetes primitives | 2 | 1 |
+| Test helper modules | 2 | 1 |
+| Module 3 smoke scripts | 3 | 1 |
+| Module 4 smoke scripts | 3 | 1 |
+| Dashboard demo tools | 8 | 7 |
+| Top-level documents | 18 | 11 |
+| Legacy-named test files | 25 | 0 |
+| Raw evidence dumps | 8 | 0 |
+| `docs/evidence/` | 186 files, 1.55 MB | 188 files, 0.85 MB |
+| Tracked files | 426 | 424 |
 
 **Dependency direction.** Every implementation-to-implementation private
 import was removed. The helpers that cross module boundaries are now public

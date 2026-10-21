@@ -17,8 +17,8 @@ import time
 from typing import Any
 
 from .data_receipts import REQUIRED_HEADERS, source_manifest_digest
-from .constants import als_model_version, graph_version
-from .io import sha256_json
+from .common import als_model_version, graph_version
+from .common import sha256_json
 from .pipeline_task import RUNTIME_ROOT, TaskError, runtime_values, write_json
 
 

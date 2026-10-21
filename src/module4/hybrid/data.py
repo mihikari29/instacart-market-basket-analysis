@@ -1,7 +1,7 @@
 """Bounded MongoDB capture of a verified Module 4A/4B source pair."""
 
 from __future__ import annotations
-from ...common.type_guards import positive_int
+from ...common.runtime import positive_int
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass

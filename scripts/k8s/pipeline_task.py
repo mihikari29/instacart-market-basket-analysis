@@ -18,8 +18,8 @@ from typing import Any
 
 from .data_receipts import inspect_input_directory
 from .fixture_data import write_fixture
-from .constants import als_model_version, demo_database, graph_version
-from .io import redact_secrets, write_json_atomic
+from .common import als_model_version, demo_database, graph_version
+from .common import redact_secrets, write_json_atomic
 from .pipeline import (
     FIXTURE_MAX_EVENTS,
     FIXTURE_MAX_USERS,

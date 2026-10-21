@@ -1,6 +1,6 @@
 """Kafka connectivity validation (the `validate` subcommand, no streaming)."""
 
-from ..common.redaction import redact_sensitive_text, redact_uri
+from ..common.runtime import redact_sensitive_text, redact_uri
 from .config import Config
 
 

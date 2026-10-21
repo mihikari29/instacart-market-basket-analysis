@@ -182,7 +182,9 @@ def progress_logger(
     def _record_error(exc):
         if errors is not None:
             summary = getattr(on_progress, "failure_message", None)
-            errors[:] = [summary or type(exc).__name__]
+            # Keep the exception type and its message, so a failed publisher
+            # is diagnosable instead of only reporting a class name.
+            errors[:] = [summary or f"{type(exc).__name__}: {exc}"]
         if on_error is not None:
             try:
                 on_error()

@@ -1,7 +1,7 @@
 """Bounded read-only access to Module 2's published MongoDB snapshots."""
 
 from __future__ import annotations
-from ...common.type_guards import stored_utc
+from ...common.runtime import stored_utc
 
 from collections.abc import Mapping
 from datetime import datetime

@@ -1,7 +1,7 @@
 """Fail-closed, read-only readers for published Module 4D snapshots."""
 
 from __future__ import annotations
-from ...common.type_guards import stored_utc
+from ...common.runtime import stored_utc
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -434,6 +434,7 @@ def _validate_rows(
 
 
 def _close_cursor(cursor: Any) -> None:
+    # Best effort: a cursor that fails to close must not mask the read result.
     close = getattr(cursor, "close", None)
     if callable(close):
         try:

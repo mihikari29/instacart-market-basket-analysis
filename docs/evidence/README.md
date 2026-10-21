@@ -18,8 +18,8 @@ published MongoDB aggregates and measured join, pruning and cache behavior.
 
 See [full-data validation and batch benchmarks](full/README.md). Compact data is
 available in [current-hardening-2026-10-03.json](full/current-hardening-2026-10-03.json)
-and in the [compact full summary](full/summary-compact.json), with detailed
-plans and metrics in [full/summary.json](full/summary.json).
+and in the [compact full summary](full/summary-compact.json), which carries the
+validation result, the analytics and the benchmark medians.
 
 The technical acceptance checklist for Modules 1 to 3 is in
 [checklist.md](checklist.md).
@@ -63,8 +63,7 @@ equal; fact/event multiset and partition integrity checks pass. The fixture also
 verifies Spark operators, output equivalence, Mongo replacement behavior and
 repeatable join, pruning and cache measurements.
 
-- [Fixture summary](fixture-summary.json) and its
-  [compact form](fixture-summary-compact.json)
+- [Fixture summary](fixture-summary-compact.json)
 - [Fixture analytics](fixture-analytics.json)
 - Historical fixture environment: Windows local mode, Spark 3.5.5, Java 17.0.20.1,
   Python 3.13.2, eight shuffle partitions, one warm-up and three measured trials.

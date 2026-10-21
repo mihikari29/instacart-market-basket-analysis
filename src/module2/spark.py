@@ -1,12 +1,12 @@
 """Spark session for the Module 2 batch layer.
 
-The project-wide Spark invariants live in `src.common.spark_session`; this
+The project-wide Spark invariants live in `src.common.spark`; this
 module only names the application and supplies the Module 2 settings.
 """
 
 from pathlib import Path
 
-from ..common.spark_session import build_session
+from ..common.spark import build_session
 
 
 def session(config, event_dir: Path):

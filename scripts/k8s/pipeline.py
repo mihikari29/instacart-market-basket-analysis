@@ -17,7 +17,7 @@ from typing import Any, Mapping, Protocol
 
 import yaml
 
-from .constants import (
+from .common import (
     PIPELINE_STORAGE_BUDGET,
     claim_names,
     demo_database,

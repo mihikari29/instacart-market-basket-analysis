@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Any, Mapping
 
-from .constants import acceptance_job_name as _acceptance_job_name
+from .common import acceptance_job_name as _acceptance_job_name
 from .acceptance import ACCEPTANCE_SCENARIOS, read_receipt, sha256_bytes, sha256_json
 from .ownership import PROTECTED_NAMESPACES, RunIdentity
 from .pipeline import validate_pipeline_lock

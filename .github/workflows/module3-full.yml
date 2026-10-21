@@ -111,9 +111,9 @@ jobs:
       - name: Validate connectivity (no streaming)
         run: python3 scripts/module3.py validate
       - name: Real Kafka to Spark to Mongo smoke
-        run: python3 scripts/module3_smoke.py --events 5000 --duration-seconds 60
+        run: python3 scripts/module3_smoke.py live --events 5000 --duration-seconds 60
       - name: Checkpoint recovery across separate Spark processes
-        run: python3 scripts/module3_recovery.py --duration-seconds 20
+        run: python3 scripts/module3_smoke.py recovery --duration-seconds 20
       - name: Deterministic late-data and watermark validation
         run: python3 scripts/module3.py late-demo --duration-seconds 60
       - name: Short measured throughput smoke

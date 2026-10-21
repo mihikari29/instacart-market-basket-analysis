@@ -62,7 +62,7 @@ This addendum preserves the original run counts and outcomes above while recordi
 
 ### Module 4 Parquet receipt differences
 
-The four mismatches are the per-table SHA-256 values written to the source receipt. The writer in [`scripts/module4_flow_smoke.py`](../scripts/module4_flow_smoke.py#L75) coalesces each fixed fixture to one Parquet file, and [`src/module4/data.py`](../src/module4/data.py#L98) hashes the raw bytes of that one file through a streaming HDFS read. The hash includes Parquet data pages and its footer, including embedded schema and writer metadata. It does not include the HDFS file name, file status/timestamps, directory or partition layout, `_SUCCESS`, or `_sources.json` as a separate file. The fixture writes one unpartitioned part file per table; UUID-suffixed part filenames differ between runs but are outside the hash.
+The four mismatches are the per-table SHA-256 values written to the source receipt. The writer in [`scripts/module4_flow_smoke.py`](../scripts/module4_smoke.py#L75) coalesces each fixed fixture to one Parquet file, and [`src/module4/data.py`](../src/module4/data.py#L98) hashes the raw bytes of that one file through a streaming HDFS read. The hash includes Parquet data pages and its footer, including embedded schema and writer metadata. It does not include the HDFS file name, file status/timestamps, directory or partition layout, `_SUCCESS`, or `_sources.json` as a separate file. The fixture writes one unpartitioned part file per table; UUID-suffixed part filenames differ between runs but are outside the hash.
 
 | Table | Schema (all fields nullable; no field metadata) | Key | Rows | Baseline hash | Refactored hash | File bytes |
 |---|---|---|---:|---|---|---:|

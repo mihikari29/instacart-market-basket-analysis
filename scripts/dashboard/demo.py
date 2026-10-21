@@ -5,8 +5,8 @@ API and UI images, starts an isolated MongoDB on tmpfs, publishes a synthetic
 fixture through the accepted publishers, starts the API and the dashboard,
 and then verifies that every HTTP response matches what was stored.
 
-The shell wrapper `demo.sh` calls this module, so the documented Linux
-procedure and the Windows and macOS procedure run exactly the same steps.
+The same entry point is used by an operator on any platform and by the
+continuous integration job, so there is one demo procedure.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import argparse
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -78,7 +79,9 @@ def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedPro
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip()
-        raise DemoError(f"{command[0]} {' '.join(command[1:3])} failed: {detail[:400]}")
+        raise DemoError(
+            f"`{' '.join(command[:6])}` failed with exit code {result.returncode}: {detail[:400]}"
+        )
     return result
 
 
@@ -88,6 +91,30 @@ def read_tag(env_file: Path) -> str:
         if line.startswith("MODULE4D_DEMO_TAG="):
             return line.split("=", 1)[1]
     raise DemoError("the private environment file does not record a demo tag")
+
+
+def create_environment_file(path: Path) -> None:
+    """Write the private environment file that owns one demo run.
+
+    The file is created with owner-only permissions and never overwritten.
+    """
+    tag = uuid.uuid4().hex[:12]
+    values = {
+        "MODULE4D_DEMO_TAG": tag,
+        "MODULE4D_DEMO_DATABASE": f"module4d_demo_{tag}",
+        "MODULE4D_DEMO_ROOT_PASSWORD": secrets.token_hex(32),
+        "MODULE4D_DEMO_READONLY_USERNAME": "module4d_reader",
+        "MODULE4D_DEMO_READONLY_PASSWORD": secrets.token_hex(32),
+        "MODULE4D_DEMO_TREND_NAMESPACE": "module4d-demo",
+        "MODULE4D_DEMO_API_HOST_PORT": "18000",
+        "MODULE4D_DEMO_UI_HOST_PORT": "18501",
+    }
+    path = path.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+        output.writelines(f"{key}={value}\n" for key, value in values.items())
+    path.chmod(0o600)
 
 
 def stop_demo(run_id: str) -> None:
@@ -132,7 +159,7 @@ def start_demo(run_id: str | None = None, env_file: Path | None = None) -> str:
     env_file = env_file or env_file_for(run_id)
     env_file.unlink(missing_ok=True)
     try:
-        run([sys.executable, "scripts/dashboard/demo_env.py", "--output", str(env_file)])
+        create_environment_file(env_file)
         if os.name != "nt":
             env_file.chmod(0o600)
         compose = compose_command(run_id)

@@ -1,7 +1,7 @@
 """Single-user orchestration for the verified Module 4C serving path."""
 
 from __future__ import annotations
-from ...common.type_guards import aware_utc_millisecond
+from ...common.runtime import aware_utc_millisecond
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta

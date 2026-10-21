@@ -1,7 +1,7 @@
 """Immutable MongoDB publication for one user's final hybrid snapshot."""
 
 from __future__ import annotations
-from ...common.type_guards import aware_utc_millisecond, positive_int
+from ...common.runtime import aware_utc_millisecond, positive_int
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -735,7 +735,8 @@ def _write_and_verify_rows(
     processing_time: datetime,
 ) -> datetime:
     ensure_final_recommendation_indexes(collection)
-    existing, existing_generated_at = _verify_stored_rows(collection, prepared, []) if not prepared.rows else ([], None)
+    existing: list[Mapping[str, Any]] = []
+    existing_generated_at: datetime | None = None
     if prepared.rows:
         # The initial lookup is against the exact immutable version and bounded to 21.
         existing, existing_generated_at = _verify_stored_rows(

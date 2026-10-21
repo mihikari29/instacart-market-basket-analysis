@@ -18,8 +18,8 @@ import traceback
 import uuid
 from urllib.parse import urlsplit, urlunsplit
 
-from ..common.run_context import new_run_id, save_json
-from ..common.source_identity import REPOSITORY_ROOT
+from ..common.runtime import new_run_id, save_json
+from ..common.runtime import REPOSITORY_ROOT
 from .als import (
     ALSParams,
     fit_model,
@@ -93,9 +93,7 @@ def source_digest() -> str:
         *REPO_ROOT.joinpath("src/module4").glob("*.py"),
         *REPO_ROOT.joinpath("src/common").glob("*.py"),
         REPO_ROOT / "scripts/module4.py",
-        REPO_ROOT / "scripts/module4_runtime_smoke.py",
-        REPO_ROOT / "scripts/module4_flow_smoke.py",
-        REPO_ROOT / "scripts/module4_cross_module_smoke.py",
+        REPO_ROOT / "scripts/module4_smoke.py",
         REPO_ROOT / "Dockerfile",
         REPO_ROOT / "compose.yaml",
         REPO_ROOT / "requirements.txt",

@@ -67,7 +67,7 @@ from .runtime import (
     measure_host_capacity,
     validate_host_capacity,
 )
-from .io import (
+from .common import (
     read_json_object,
     sha256_file as _sha256,
     sha256_json as sha256_json,

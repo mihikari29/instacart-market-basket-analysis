@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from scripts.dashboard.api_validation import _copy_context
-from tests.build_context import admitted
+from tests.helpers import admitted
 
 
 ROOT = Path(__file__).resolve().parents[1]

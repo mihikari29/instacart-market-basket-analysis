@@ -1,7 +1,7 @@
 """Read and validate one immutable Module 3 trending-window bundle."""
 
 from __future__ import annotations
-from ...common.type_guards import positive_int
+from ...common.runtime import positive_int
 
 from collections.abc import Mapping
 from dataclasses import dataclass

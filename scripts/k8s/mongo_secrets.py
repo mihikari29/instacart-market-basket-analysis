@@ -8,7 +8,7 @@ import secrets
 from typing import Any
 from urllib.parse import quote
 
-from .constants import demo_database
+from .common import demo_database
 from .ownership import OWNER_LABEL, OWNER_VALUE, RUN_LABEL, RunIdentity
 from .runtime import CommandExecutor, RuntimePreflightError, kubectl
 

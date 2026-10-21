@@ -62,7 +62,7 @@ source digest and `*-optimized` run IDs/model/graph versions.
 HDFS storage was subsequently cloned, after clean service stops, into the same
 D: ext4 filesystem to leave room for model checkpoints and replay. Original
 NameNode/DataNode volumes remain intact. The job that was reading HDFS during
-the move [failed during input validation](../full-ab-20261009-optimized/summary.json);
+the move [failed during input validation](../full-ab-20261009-optimized/summary-compact.json);
 its failed artifacts are retained. The restored services are healthy, safe mode
 is off, and curated directories are present. The final run IDs are
 `full-ab-20261009-final` and `full-ab-20261009-final-replay`, with the same frozen

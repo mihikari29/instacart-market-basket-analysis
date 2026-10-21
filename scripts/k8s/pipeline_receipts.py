@@ -15,7 +15,7 @@ from .ownership import (
     OwnerReferenceIdentity,
     RunIdentity,
 )
-from .constants import (
+from .common import (
     PIPELINE_CLAIMS,
     acceptance_job_name,
     pipeline_job_name,

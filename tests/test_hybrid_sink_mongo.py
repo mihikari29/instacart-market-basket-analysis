@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from tests.mongo_fakes import FakeClient
+from tests.helpers import FakeClient
 
 from contextlib import contextmanager
 from dataclasses import replace

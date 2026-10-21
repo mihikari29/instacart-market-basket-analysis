@@ -12,7 +12,7 @@ import subprocess
 
 import yaml
 
-from scripts.k8s.constants import demo_database
+from scripts.k8s.common import demo_database
 from scripts.k8s.lock_lifecycle import load_version_lock, validate_static_lock
 from scripts.k8s.ownership import (
     OWNER_LABEL,

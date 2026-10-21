@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from tests.mongo_fakes import FakeBulkResult, FakeUpdateOne
+from tests.helpers import FakeBulkResult, FakeUpdateOne
 
 from datetime import datetime, timedelta, timezone
 

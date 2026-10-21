@@ -119,7 +119,7 @@ The fastest way to see the serving layer working is the isolated synthetic
 dashboard. It needs Docker and nothing else — no dataset, no HDFS, no Kafka:
 
 ```bash
-python3 scripts/dashboard/demo.py up      # or: bash scripts/dashboard/demo.sh up
+python3 scripts/dashboard/demo.py up
 # then open http://127.0.0.1:18501
 ```
 
@@ -180,7 +180,8 @@ src/common/                        shared building blocks: env, redaction, run c
                                    Spark session, type guards, source identity
 src/module1/ … src/module4/        processing and application packages
 scripts/module1.py … module4.py    project pipeline entry points
-scripts/module3_harness.py         shared Compose harness for the Module 3 checks
+scripts/module3_smoke.py          bounded Module 3 live and checkpoint-recovery checks
+scripts/module4_smoke.py          bounded Module 4 runtime, flow and cross-module checks
 scripts/dashboard/                 Module 4D demo, fixture, validator and browser tools
 scripts/experiments/               archived Module 4C experiment harnesses
 scripts/k8s/                       Kubernetes demo coordinator (io, constants and phases)

@@ -95,7 +95,7 @@ and the measurements do not establish cluster-scale performance.
 
 - [current-hardening-2026-10-03.json](current-hardening-2026-10-03.json): compact
   configuration, reconciliation and benchmark record.
-- [summary.json](summary.json): detailed validation, trial timings, checksums,
+- [summary.json](summary-compact.json): detailed validation, trial timings, checksums,
   physical plans and Spark task metrics.
 - [analytics.json](analytics.json): observed full-data aggregates.
 - [manifest.json](manifest.json): generated feed identity and calendar statistics.

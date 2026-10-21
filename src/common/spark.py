@@ -1,30 +1,11 @@
-"""The Spark session contract shared by Modules 2, 3 and 4.
-
-Each module needs a slightly different session, but they must agree on the
-project-wide safety invariants. Those invariants are fixed here so a future
-module cannot accidentally enable adaptive execution, auto-broadcast, or a
-timezone other than UTC.
-
-The invariants and the reason for each one:
-
-* Adaptive query execution is disabled. Module 2's join benchmark asserts
-  that no `AdaptiveSparkPlan` appears in the physical plan, so enabling it
-  would change a published benchmark result.
-* Automatic broadcast is disabled. The Module 4 ALS factor cross-join collapses
-  into too few tasks and exhausts the executor heap when the small reloaded
-  factor files are broadcast.
-* The session timezone is UTC so that synthetic event times, window boundaries
-  and stored timestamps are comparable across hosts.
-* ANSI mode is enabled so that invalid input fails instead of returning null.
-* The event log is written uncompressed-per-run and rotated off, so one run
-  owns one directory. Compression is enabled because an uncompressed event log
-  is the largest artifact a full run produces.
-"""
+"""The Spark session contract shared by Modules 2, 3 and 4."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+
+
 
 #: Configuration keys every module session must set identically.
 INVARIANT_SPARK_CONFIG: dict[str, str] = {

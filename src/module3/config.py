@@ -11,7 +11,7 @@ import re
 
 # Re-exported so `from .config import parse_bool` keeps working for callers
 # that treat the Module 3 configuration module as the owner of the flag.
-from ..common.env import parse_bool
+from ..common.runtime import parse_bool
 
 DEFAULT_TOPIC = "instacart-purchase-events"
 DEFAULT_MONGO_TOP_K = 20

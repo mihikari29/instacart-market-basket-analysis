@@ -1,11 +1,11 @@
 """Spark runtime used by the Module 4A/4B batch jobs.
 
-The project-wide Spark invariants live in `src.common.spark_session`.
+The project-wide Spark invariants live in `src.common.spark`.
 """
 
 from pathlib import Path
 
-from ..common.spark_session import build_session
+from ..common.spark import build_session
 
 
 def clear_job_group(context):

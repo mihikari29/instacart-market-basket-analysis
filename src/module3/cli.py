@@ -18,9 +18,9 @@ import os
 from pathlib import Path
 import platform
 
-from ..common.redaction import redact_uri, safe_error_text
-from ..common.run_context import new_run_id, validate_run_id
-from ..common.source_identity import code_digest, git_revision
+from ..common.runtime import redact_uri, safe_error_text
+from ..common.runtime import new_run_id, validate_run_id
+from ..common.runtime import code_digest, git_revision
 from .config import Config, parse_bool
 from .spark import session
 from .validate import validate_kafka, validate_mongo

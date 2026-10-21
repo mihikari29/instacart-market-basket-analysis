@@ -319,9 +319,9 @@ checkpoint, and volume ownership:
 ```bash
 test -s data/synthesized/scatter_3m/events.parquet
 test -s data/synthesized/scatter_3m/manifest.json
-python3 scripts/module3_smoke.py --feed data/synthesized/scatter_3m \
+python3 scripts/module3_smoke.py live --feed data/synthesized/scatter_3m \
   --events 50000 --duration-seconds 120
-python3 scripts/module3_recovery.py --duration-seconds 25
+python3 scripts/module3_smoke.py recovery --duration-seconds 25
 ```
 
 The smoke command depends on the selected generated feed already existing; the
@@ -388,8 +388,14 @@ full-data workload. The `full_data` scope requires
 
 ```bash
 docker compose --profile tools run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-  scripts/module4_flow_smoke.py
+  scripts/module4_smoke.py flow
 ```
+
+The same script carries the other two bounded checks:
+`scripts/module4_smoke.py runtime` proves the image can run a standalone
+worker, GraphFrames, an HDFS round trip and a MongoDB ping, and
+`scripts/module4_smoke.py cross-module` runs the Module 2 batch step in front
+of the Module 4 step.
 
 For a new Linux full-data rehearsal, first verify the source receipt and
 `data/clean/` tables. Use an explicitly named Compose project so its persistent

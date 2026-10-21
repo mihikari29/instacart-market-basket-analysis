@@ -25,7 +25,7 @@ jobs:
         run: |
           set -o pipefail
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-            scripts/module4_runtime_smoke.py 2>&1 | tee module4-runtime-smoke.log
+            scripts/module4_smoke.py runtime 2>&1 | tee module4-runtime-smoke.log
 
       - name: Run repository, Spark and live MongoDB tests
         run: |
@@ -42,9 +42,9 @@ jobs:
         run: |
           set -o pipefail
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-            scripts/module4_flow_smoke.py 2>&1 | tee module4-flow-smoke.log
+            scripts/module4_smoke.py flow 2>&1 | tee module4-flow-smoke.log
           docker compose run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-            scripts/module4_cross_module_smoke.py 2>&1 | tee module4-cross-module-smoke.log
+            scripts/module4_smoke.py cross-module 2>&1 | tee module4-cross-module-smoke.log
 
       - name: Check style, syntax and Compose configuration
         run: |

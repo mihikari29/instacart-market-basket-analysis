@@ -1,19 +1,35 @@
-"""Run a bounded staged-layout Module 4 flow and same-version publication replay."""
+"""Bounded Module 4 checks against the pinned Docker runtime.
+
+`runtime` proves the image can run a standalone worker, GraphFrames
+PageRank, an HDFS round trip and a MongoDB ping. `flow` publishes a
+staged fixture and replays the same model version. `cross-module` adds
+the Module 2 batch step in front of the Module 4 step.
+"""
 
 from __future__ import annotations
 
+import argparse
+import hashlib
+from importlib import metadata
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import uuid
 
+from pymongo import MongoClient
+
+from src.module2.analytics import analyze
+from src.module2.config import Config as BatchConfig
+from src.module2.data import read_tables, validate
+from src.module2.fixtures import create_fixture
 from src.module4.config import Config
-from src.module4.data import hdfs_sha256
+from src.module4.data import hdfs_sha256, read_inputs, validate_inputs, validate_source_receipts
+from src.module4.graph import pagerank
 from src.module4.sink_mongo import validate_snapshot
 from src.module4.spark import session
-
 
 def _write_json_hdfs(spark, path: str, value: dict):
     jvm = spark._jvm
@@ -133,7 +149,7 @@ def run_cli(root: Path, fixture_root: str, output_root: str, run_id: str, model_
     return summary
 
 
-def main():
+def run_flow() -> int:
     from pymongo import MongoClient
 
     runtime = Config.environment()
@@ -223,5 +239,136 @@ def main():
             client.drop_database(mongo_database)
 
 
+def run_runtime() -> int:
+    from pymongo import MongoClient
+
+    config = Config.environment()
+    if not config.master.startswith("spark://"):
+        raise RuntimeError(f"Standalone smoke requires spark:// master, got {config.master!r}")
+    run_id = uuid.uuid4().hex
+    smoke_root = config.root.rstrip("/") + f"/_module4_runtime_smoke/{run_id}"
+    spark = None
+    fs = None
+    smoke_path = None
+    try:
+        spark = session(config)
+        if not spark.sparkContext.master.startswith("spark://"):
+            raise RuntimeError("Spark did not connect to the configured standalone master")
+
+        vertices = spark.createDataFrame([(1,), (2,), (3,)], "id int")
+        edges = spark.createDataFrame([(1, 2), (2, 1)], "src int, dst int")
+        ranks = pagerank(vertices, edges, backend="graphframes")
+        rank_rows = ranks.collect()
+        if {row.id for row in rank_rows} != {1, 2, 3}:
+            raise RuntimeError("GraphFrames PageRank lost an isolated catalog vertex")
+        if any(row.pagerank is None or row.pagerank != row.pagerank or abs(row.pagerank) == float("inf") for row in rank_rows):
+            raise RuntimeError("GraphFrames returned a null or non-finite PageRank")
+
+        smoke_path = spark._jvm.org.apache.hadoop.fs.Path(smoke_root)
+        fs = smoke_path.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
+        if fs.exists(smoke_path):
+            raise FileExistsError(f"Refusing to reuse runtime smoke path {smoke_root}")
+        spark.createDataFrame([(run_id, 1), (run_id, 2)], "run_id string, value int").repartition(2).write.parquet(
+            smoke_root
+        )
+        hdfs_count = spark.read.parquet(smoke_root).where(f"run_id = '{run_id}'").count()
+        if hdfs_count != 2:
+            raise RuntimeError(f"HDFS worker write/read count mismatch: {hdfs_count}")
+
+        with MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=5000) as client:
+            client.admin.command("ping")
+
+        graphframes_jars = []
+        for path in sorted(Path("/opt/spark/jars").glob("graphframes*.jar")):
+            graphframes_jars.append(
+                {"file": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            )
+        result = {
+            "status": "passed",
+            "run_id": run_id,
+            "spark_master": spark.sparkContext.master,
+            "spark_version": spark.version,
+            "scala_version": spark._jvm.scala.util.Properties.versionNumberString(),
+            "graphframes_backend": "graphframes",
+            "graphframes_python_version": metadata.version("graphframes"),
+            "graphframes_jars": graphframes_jars,
+            "pagerank_vertices": len(rank_rows),
+            "hdfs_rows_round_tripped": hdfs_count,
+            "mongodb_ping": "passed",
+        }
+        print(json.dumps(result, indent=2, sort_keys=True))
+    finally:
+        if spark is not None:
+            spark.stop()
+        if fs is not None and smoke_path is not None and fs.exists(smoke_path):
+            fs.delete(smoke_path, True)
+
+
+def run_cross_module() -> int:
+    runtime = Config.environment()
+    token = uuid.uuid4().hex
+    root = runtime.root.rstrip("/") + f"/_module4_cross_module/{token}"
+    database = f"module4_cross_{token}"
+    os.environ["MODULE4_MONGO_DATABASE"] = database
+    spark = session(runtime)
+    path = spark._jvm.org.apache.hadoop.fs.Path(root)
+    fs = path.getFileSystem(spark.sparkContext._jsc.hadoopConfiguration())
+    try:
+        if fs.exists(path):
+            raise FileExistsError(root)
+        with tempfile.TemporaryDirectory(prefix="module4-cross-") as directory:
+            fixture = create_fixture(Path(directory) / "fixture")
+            fs.copyFromLocalFile(False, False, spark._jvm.org.apache.hadoop.fs.Path(str(fixture)), path)
+        batch_config = BatchConfig(root=root, master=runtime.master, shuffle_partitions=2)
+        tables = read_tables(spark, batch_config)
+        batch_validation = validate(spark, batch_config, tables)
+        _, outputs = analyze(spark, tables, batch_validation["counts"], min_support=1)
+        outputs["user_features"].write.mode("error").parquet(batch_config.features())
+        feature_users = spark.read.parquet(batch_config.features()).count()
+        module4_tables = read_inputs(spark, Config(root=root))
+        module4_validation = validate_inputs(module4_tables)
+        receipt = validate_source_receipts(spark, Config(root=root), module4_tables)
+        for name in ("orders", "prior", "train", "products"):
+            if batch_validation["counts"][name] != module4_validation["counts"][name]:
+                raise RuntimeError(f"Module 2/4 handoff mismatch for {name}")
+        spark.stop()
+        spark = None
+        run_id = f"cross-{token}"
+        result = run_cli(Path.cwd(), root, "results/module4-cross", run_id,
+                          f"als-{run_id}", f"graph-{run_id}")
+        with MongoClient(runtime.mongodb_uri, serverSelectionTimeoutMS=5000) as client:
+            if client[database]["user_recommendations"].count_documents({}) != 24:
+                raise RuntimeError("cross-module recommendation count mismatch")
+            if client[database]["product_graph_metrics"].count_documents({}) != 6:
+                raise RuntimeError("cross-module graph count mismatch")
+        print(json.dumps({"status": "passed", "scope": "staged_fixture", "run_id": run_id,
+                          "module1_partition_receipt_validated": True,
+                          "module2_user_features": feature_users,
+                          "module2_module4_counts_match": True, "source_receipt": receipt,
+                          "pair_ready": result["pair_readiness"]["ready"]}, indent=2), flush=True)
+    finally:
+        if spark is not None:
+            spark.stop()
+        if fs.exists(path):
+            fs.delete(path, True)
+        with MongoClient(runtime.mongodb_uri, serverSelectionTimeoutMS=5000) as client:
+            client.drop_database(database)
+
+
+def main(argv=None) -> int:
+    """Run one Module 4 smoke scenario."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="scenario", required=True)
+    commands.add_parser("runtime", help="check the standalone worker, GraphFrames, HDFS and MongoDB")
+    commands.add_parser("flow", help="publish a staged fixture and replay the same version")
+    commands.add_parser("cross-module", help="run the Module 2 batch step in front of Module 4")
+    arguments = parser.parse_args(argv)
+    if arguments.scenario == "runtime":
+        return run_runtime()
+    if arguments.scenario == "flow":
+        return run_flow()
+    return run_cross_module()
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

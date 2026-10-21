@@ -1,7 +1,7 @@
 # Service diagnostics summary
 
-Source: `docs/evidence/module4/acceptance-20261010/service-diagnostics.txt` (400 lines, 93579 bytes).
-The raw dump is retained unchanged; this note records what it contains.
+Source: the container log dump of the 10 October 2026 acceptance run (400 lines).
+This note records what that dump contained.
 
 ## Lines per service
 

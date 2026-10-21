@@ -14,8 +14,8 @@ from typing import Any, Mapping, Protocol
 
 import yaml
 
-from .constants import acceptance_job_name, demo_database
-from .io import redact_secrets, sha256_bytes, sha256_json
+from .common import acceptance_job_name, demo_database
+from .common import redact_secrets, sha256_bytes, sha256_json
 from .ownership import RunIdentity
 from .pipeline import PIPELINE_MANIFESTS, PipelineError, locked_image, validate_pipeline_lock
 from .pipeline_receipts import (
