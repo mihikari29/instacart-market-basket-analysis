@@ -113,8 +113,11 @@ def validate_pipeline_policy_inventory(policies: list[Mapping[str, Any]]) -> Non
             },
         ),
         "allow-pipeline-to-hdfs": (
-            {"app.kubernetes.io/name": "hdfs-namenode"}, "Ingress",
-            {("it4931.instacart.edu/role", "pipeline", (8020, 9870))},
+            {"app.kubernetes.io/name": "hdfs-namenode"}, "Both",
+            {
+                ("it4931.instacart.edu/role", "pipeline", (8020, 9870)),
+                ("app.kubernetes.io/name", "hdfs-namenode", (8020, 9870)),
+            },
         ),
         "allow-pipeline-to-datanode": (
             {"app.kubernetes.io/name": "hdfs-datanode"}, "Ingress",
