@@ -203,7 +203,7 @@ spec:
               value: "1"
             - name: HDFS_CONF_dfs_namenode_webhdfs_enabled
               value: "true"
-            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip_hostname_check
+            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check
               value: "false"
             - name: HDFS_CONF_dfs_client_use_datanode_hostname
               value: "false"
@@ -261,7 +261,7 @@ spec:
               value: "1"
             - name: SERVICE_PRECONDITION
               value: namenode:9870
-            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip_hostname_check
+            - name: HDFS_CONF_dfs_namenode_datanode_registration_ip___hostname___check
               value: "false"
             - name: HDFS_CONF_dfs_client_use_datanode_hostname
               value: "false"
@@ -320,7 +320,7 @@ spec:
             - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT"}
             - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: INTERNAL}
             - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
-            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: 1@kafka:9093}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: 1@127.0.0.1:9093}
             - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
             - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}

@@ -122,11 +122,11 @@ def validate_pipeline_policy_inventory(policies: list[Mapping[str, Any]]) -> Non
         ),
         "allow-datanode-to-namenode": (
             {"app.kubernetes.io/name": "hdfs-namenode"}, "Ingress",
-            {("app.kubernetes.io/name", "hdfs-datanode", (8020,))},
+            {("app.kubernetes.io/name", "hdfs-datanode", (8020, 9870))},
         ),
         "allow-datanode-egress-to-namenode": (
             {"app.kubernetes.io/name": "hdfs-datanode"}, "Egress",
-            {("app.kubernetes.io/name", "hdfs-namenode", (8020,))},
+            {("app.kubernetes.io/name", "hdfs-namenode", (8020, 9870))},
         ),
         "allow-kafka-controller-self": (
             {"app.kubernetes.io/name": "kafka"}, "Both",
@@ -620,7 +620,7 @@ def validate_pipeline_manifest_sources(manifest_directory: Path | str = PIPELINE
         "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT",
         "KAFKA_INTER_BROKER_LISTENER_NAME": "INTERNAL",
         "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
-        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@kafka:9093",
+        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@127.0.0.1:9093",
         "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
         "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
         "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
