@@ -132,6 +132,18 @@ def build_provenance_record(
     }
 
 
+def _matches_image_tag(candidate: str, expected: str) -> bool:
+    if candidate == expected:
+        return True
+    prefixes = ("docker.io/library/", "docker.io/", "library/")
+    for prefix in prefixes:
+        if candidate.startswith(prefix) and candidate[len(prefix):] == expected:
+            return True
+        if expected.startswith(prefix) and expected[len(prefix):] == candidate:
+            return True
+    return False
+
+
 def verify_loaded_image_inventory(
     raw_inventory: str | bytes,
     expected: Mapping[str, Mapping[str, str]],
@@ -166,7 +178,7 @@ def verify_loaded_image_inventory(
             or not IMAGE_DIGEST_PATTERN.fullmatch(config)
         ):
             raise ImageProvenanceError(f"expected immutable identity for {role} is incomplete")
-        repo_digest = f"{reference.split('@', 1)[0]}@{manifest}"
+        expected_tag = reference.split("@", 1)[0]
         matches = []
         for image in images:
             if not isinstance(image, Mapping):
@@ -174,9 +186,15 @@ def verify_loaded_image_inventory(
             repo_digests = image.get("repoDigests") or []
             image_id = image.get("id")
             repo_tags = image.get("repoTags") or []
-            has_manifest = isinstance(repo_digests, list) and repo_digest in repo_digests
+            has_manifest = isinstance(repo_digests, list) and any(
+                _matches_image_tag(c.split("@", 1)[0], expected_tag) and c.endswith(f"@{manifest}")
+                for c in repo_digests if isinstance(c, str) and "@" in c
+            )
             has_config = isinstance(image_id, str) and image_id.removeprefix("sha256:") == config.removeprefix("sha256:")
-            has_tag = isinstance(repo_tags, list) and reference.split("@", 1)[0] in repo_tags
+            has_tag = isinstance(repo_tags, list) and any(
+                _matches_image_tag(tag, expected_tag)
+                for tag in repo_tags if isinstance(tag, str)
+            )
             if has_manifest or (has_config and has_tag):
                 matches.append(image)
         if len(matches) != 1:
