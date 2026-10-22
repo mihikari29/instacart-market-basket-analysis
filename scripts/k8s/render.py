@@ -265,7 +265,14 @@ def render_overlay(
         "spec": {
             "volumeClaimTemplates": [
                 {
-                    "metadata": {"name": "data", "labels": labels},
+                    "metadata": {
+                        "name": "data",
+                        "labels": {
+                            **labels,
+                            "app.kubernetes.io/name": "module4d-mongo",
+                            "app.kubernetes.io/component": "database",
+                        },
+                    },
                     "spec": {
                         "accessModes": ["ReadWriteOnce"],
                         "resources": {"requests": {"storage": "2Gi"}},
