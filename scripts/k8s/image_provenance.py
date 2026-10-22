@@ -403,7 +403,8 @@ def collect_image_environment(
             if not lines or not re.fullmatch(r"python_version=\d+\.\d+\.\d+", lines[0]):
                 raise ImageProvenanceError("image Python runtime version is missing")
             package_lines = lines[1:]
-            if package_lines != sorted(package_lines) or any(
+            package_names = [line.split("==", 1)[0] for line in package_lines]
+            if (package_lines != sorted(package_lines) and package_names != sorted(package_names)) or any(
                 not re.fullmatch(r"[a-z0-9][a-z0-9.+-]*==[A-Za-z0-9_.+-]+", line)
                 for line in package_lines
             ):

@@ -25,7 +25,7 @@ def environment_text() -> str:
             raise RuntimeError("installed Python distributions contain a duplicate name")
         packages[canonical_name] = version
     lines = [f"python_version={platform.python_version()}"]
-    lines.extend(f"{name}=={version}" for name, version in sorted(packages.items()))
+    lines.extend(sorted(f"{name}=={version}" for name, version in packages.items()))
     return "\n".join(lines) + "\n"
 
 
