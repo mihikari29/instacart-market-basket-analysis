@@ -344,10 +344,15 @@ def validate_locked_overlay(
     ):
         raise ValueError("locked render serving configuration differs from the run's B3 source contract")
     claim_templates = mongo_pvc_patch.get("spec", {}).get("volumeClaimTemplates", [])
+    expected_claim_labels = {
+        **identity.labels,
+        "app.kubernetes.io/name": "module4d-mongo",
+        "app.kubernetes.io/component": "database",
+    }
     if (
         len(claim_templates) != 1
         or claim_templates[0].get("metadata", {}).get("name") != "data"
-        or claim_templates[0].get("metadata", {}).get("labels") != identity.labels
+        or claim_templates[0].get("metadata", {}).get("labels") not in (identity.labels, expected_claim_labels)
     ):
         raise ValueError("locked render Mongo PVC ownership labels do not match the run")
     expected_resources = sorted(path.name for path in (output_root / "base").glob("*.yaml") if path.name != "kustomization.yaml")
