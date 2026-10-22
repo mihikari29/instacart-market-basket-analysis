@@ -99,7 +99,7 @@ def load_and_verify_application_images(
     lock: Mapping[str, Any],
     *,
     execute: bool = False,
-    timeout: int = 600,
+    timeout: int = 1800,
 ) -> dict[str, dict[str, str]]:
     """Load locked API/UI images into one explicit profile and verify the CRI IDs."""
     if execute is not True:
