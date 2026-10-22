@@ -136,6 +136,20 @@ def load_and_verify_application_images(
             raise ImageOperationError(f"{role} image load failed ({type(exc).__name__})") from exc
         if result.returncode != 0:
             raise ImageOperationError(f"{role} image load failed with status {result.returncode}")
+        full_ref = f"{tag}@{provenance['image_digest']}"
+        source_ref = f"docker.io/library/{tag}"
+        repo_prefix = tag.split(":", 1)[0]
+        for t_ref in (
+            full_ref,
+            f"docker.io/library/{full_ref}",
+            f"{repo_prefix}@{provenance['image_digest']}",
+            f"docker.io/library/{repo_prefix}@{provenance['image_digest']}",
+        ):
+            tag_cmd = [
+                "minikube", "-p", identity.profile, "ssh", "--",
+                "sudo", "ctr", "-n", "k8s.io", "images", "tag", source_ref, t_ref,
+            ]
+            executor.run(tag_cmd, timeout=30)
     try:
         inventory = checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout
         return verify_loaded_image_inventory(inventory, expected)

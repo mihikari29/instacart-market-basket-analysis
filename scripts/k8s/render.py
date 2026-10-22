@@ -266,6 +266,10 @@ def render_overlay(
             "volumeClaimTemplates": [
                 {
                     "metadata": {"name": "data", "labels": labels},
+                    "spec": {
+                        "accessModes": ["ReadWriteOnce"],
+                        "resources": {"requests": {"storage": "2Gi"}},
+                    },
                 }
             ]
         },
