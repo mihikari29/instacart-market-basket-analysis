@@ -199,6 +199,8 @@ spec:
               value: instacart-__RUN_ID__
             - name: CORE_CONF_fs_defaultFS
               value: hdfs://namenode:8020
+            - name: HDFS_CONF_dfs_namenode_rpc___address
+              value: namenode:8020
             - name: HDFS_CONF_dfs_replication
               value: "1"
             - name: HDFS_CONF_dfs_namenode_webhdfs_enabled

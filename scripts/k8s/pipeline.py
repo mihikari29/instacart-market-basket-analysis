@@ -382,6 +382,22 @@ def load_pipeline_images(
             raise PipelineError(f"B3 {role} image load failed ({type(exc).__name__})") from exc
         if result.returncode != 0:
             raise PipelineError(f"B3 {role} image load failed")
+    app_image = lock["images"]["pipeline_application_image"]
+    app_tag = app_image["reference"].split("@", 1)[0]
+    app_digest = app_image["immutable_digest"]
+    source_ref = f"docker.io/library/{app_tag}"
+    repo_prefix = app_tag.split(":", 1)[0]
+    for t_ref in (
+        f"{app_tag}@{app_digest}",
+        f"docker.io/library/{app_tag}@{app_digest}",
+        f"{repo_prefix}@{app_digest}",
+        f"docker.io/library/{repo_prefix}@{app_digest}",
+    ):
+        tag_cmd = [
+            "minikube", "-p", identity.profile, "ssh", "--",
+            "sudo", "ctr", "-n", "k8s.io", "images", "tag", source_ref, t_ref,
+        ]
+        executor.run(tag_cmd, timeout=30)
     from .image_provenance import verify_loaded_image_inventory
 
     try:

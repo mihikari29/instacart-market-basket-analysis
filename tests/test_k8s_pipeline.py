@@ -449,9 +449,9 @@ class PipelinePlannerTests(unittest.TestCase):
         executor = LoaderExecutor()
         loaded = load_pipeline_images(executor, self.identity, lock, execute=True)
         self.assertEqual(set(loaded), {"pipeline_application_image", "kafka", "hdfs_namenode", "hdfs_datanode"})
-        self.assertEqual(len(executor.calls), 5)
+        self.assertEqual(len(executor.calls), 9)
         self.assertTrue(all(call[0][:4] == ["minikube", "image", "load", "-p"] for call in executor.calls[:4]))
-        self.assertEqual(executor.calls[4][0][:3], ["minikube", "-p", self.identity.profile])
+        self.assertEqual(executor.calls[-1][0][:3], ["minikube", "-p", self.identity.profile])
 
     def test_pipeline_executes_verified_image_load_before_workload_apply_without_api_restart(self):
         lock = complete_b3_lock()
