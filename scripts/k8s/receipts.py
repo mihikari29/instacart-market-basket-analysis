@@ -222,6 +222,12 @@ def _containerd_config_digest(raw: str, image_reference: str, manifest_digest: s
                 for value in repo_tags
             )
             if not tag_matches:
+                expected_repo = expected_tail.split(":", 1)[0]
+                tag_matches = any(
+                    isinstance(value, str) and value.split("@", 1)[0].rsplit("/", 1)[-1] == expected_repo
+                    for value in repo_digests
+                )
+            if not tag_matches:
                 continue
             config = image_id if image_id.startswith("sha256:") else "sha256:" + image_id
             if IMAGE_DIGEST_PATTERN.fullmatch(config):
