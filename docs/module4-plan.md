@@ -1,12 +1,9 @@
-# Kế hoạch kỹ thuật và nghiệm thu Module 4A–4D
+# Engineering Plan and Acceptance Specification for Modules 4A–4D
 
-## English abstract
+## Overview and Scope
 
-> Sections 1 to 18 of this document are written in Vietnamese, the author's
-> working language. Sections 19 and 20 are in English. This abstract gives a
-> reader who does not read Vietnamese the scope, the contracts and the
-> acceptance status, plus a map of every section. The Vietnamese text below
-> remains the authoritative version.
+> This document is the unified technical and acceptance specification for Modules 4A through 4D.
+> All sections are presented in English. Historical dated evidence and run logs remain archived in their respective directories.
 
 **What Module 4 is.** Module 4 turns the prior-history data staged by Module 1
 into recommendations and then serves them. It has four parts:
@@ -72,7 +69,7 @@ Ngày 10/10, historical full-data A/B acceptance passed **21/21 gates**. The rec
 
 ALS did not outperform personal frequency. The search tested one bounded baseline configuration, not a global optimum. This acceptance does not establish Hybrid quality, dashboard production readiness, or production scalability. See the [dated acceptance record](evidence/module4/acceptance-20261010/README.md), the [historical implementation archive](evidence/module4/ab-implementation-history.md), and [current progress and limitations](progress.md). Operational instructions are maintained in [docker.md](docker.md); the evidence index is [here](evidence/README.md).
 
-## Mục lục
+## Table of Contents
 
 - [1. Phạm vi](#1-phạm-vi)
 - [2. Mục tiêu nghiệm thu](#2-mục-tiêu-nghiệm-thu)
@@ -95,7 +92,7 @@ ALS did not outperform personal frequency. The search tested one bounded baselin
 - [19. Module 4C — Hybrid recommendation and serving](#module4c-spec)
 - [20. Module 4D — Read API and dashboard specification](#module4d-spec)
 
-## 1. Phạm vi
+## 1. Scope
 
 Phần A/B của tài liệu giữ nguyên phạm vi và tiêu chí ban đầu:
 
@@ -116,7 +113,7 @@ cho:
 Đây là technical plan của Module 4A–4D, không thay đổi yêu cầu, scope đã duyệt
 hay các acceptance record trong [Proposal.md](Proposal.md) và evidence.
 
-## 2. Mục tiêu nghiệm thu
+## 2. Acceptance Objectives
 
 Module 4A–4B được xem là hoàn thành khi:
 
@@ -134,7 +131,7 @@ Module 4A–4B được xem là hoàn thành khi:
 
 Checklist chi tiết bắt buộc ở mục 17; bảng này chỉ tóm tắt mục tiêu.
 
-## 3. Hợp đồng dữ liệu
+## 3. Data Contracts
 
 ### 3.1. Input
 
@@ -185,7 +182,7 @@ computed_at
 run_id
 ```
 
-## 4. Cấu trúc mã đề xuất
+## 4. Proposed Code Structure
 
 ```text
 src/module4/
@@ -465,7 +462,7 @@ index(graph_version, weighted_degree)
 Publish bằng collection tạm rồi rename. Report phải lưu Top-20 theo PageRank,
 weighted degree và neighbor count, kèm product name để kiểm tra thủ công.
 
-## 7. Chiến lược kiểm thử
+## 7. Test Strategy
 
 ### 7.1. Unit/fixture tests
 
@@ -513,7 +510,7 @@ validate
 -> pair readiness + evidence finalization
 ```
 
-## 8. Ma trận đánh giá/nghiệm thu
+## 8. Evaluation and Acceptance Matrix
 
 | Nhóm | Điều kiện đạt | Evidence |
 |---|---|---|
@@ -531,7 +528,7 @@ validate
 | Reproducibility | Fixture cho kết quả xác định; source/config digest được lưu | tests, `manifest.json` |
 | Performance | Runtime, resources, shuffle, graph/model size được ghi | `performance.json` |
 
-## 9. Evidence bắt buộc
+## 9. Required Evidence
 
 ```text
 docs/evidence/module4/<run_id>/
@@ -557,7 +554,7 @@ version và graph version. Với dữ liệu HDFS do Module 1 stage, `_sources.j
 receipt bắt buộc. Fixture tự tạo phải có manifest fixture và nhãn scope riêng.
 Không trộn summary, plans hoặc metrics của các run khác nhau.
 
-## 10. Kế hoạch thực hiện
+## 10. Implementation Plan
 
 | Giai đoạn | Công việc | Thời lượng | Exit gate |
 |---|---|---:|---|
@@ -576,7 +573,7 @@ thời gian fit/graph/publish, dung lượng HDFS và khả năng chạy đồng
 việc, một người phụ trách ALS/evaluation và một người phụ trách graph; cả hai
 dùng chung data validation, versioning và evidence format.
 
-## 11. Thứ tự ưu tiên khi thiếu thời gian
+## 11. Prioritisation When Time is Short
 
 1. Đóng lỗi P0 runner/config/schema ALS và runtime smoke.
 2. Data contract, receipts và chống leakage.
@@ -589,7 +586,7 @@ dùng chung data validation, versioning và evidence format.
 Không nên bỏ internal validation để chạy nhiều hyperparameter hơn. Không nên thêm
 Connected Components trước khi các graph invariants và PageRank cơ bản đã đạt.
 
-## 12. Kết quả kiểm tra hiện tại
+## 12. Current Check Results
 
 Các tiểu mục dưới đây tóm tắt checkpoint lịch sử; chi tiết gốc, run IDs và trạng thái tại thời điểm ghi được lưu trong [archive Module 4A/4B](evidence/module4/ab-implementation-history.md).
 
@@ -617,11 +614,11 @@ Hướng dẫn resume W01–W12 phản ánh môi trường và trạng thái d�
 
 Historical Module 4A/4B full-data acceptance passed **21/21 gates** on 10 October 2026. full-ab-20261010-fixed-first and full-ab-20261010-fixed-replay passed with the same model and graph versions; evidence preserves their source revisions. This predates later refactoring and does not establish a fresh post-refactor full-data run. The dated results are in [acceptance-20261010](evidence/module4/acceptance-20261010/README.md) and the [archived section 12.6](evidence/module4/ab-implementation-history.md#history-12-6); the prior [09 October acceptance record](evidence/module4/acceptance-20261009/README.md) remains available for its earlier attempt and CI evidence. Current implementation status remains in [progress.md](progress.md).
 
-## 13. Backlog thực hiện và thứ tự phụ thuộc
+## 13. Implementation Backlog and Dependency Order
 
 W01–W13 was a historical implementation plan, not a current open-work register. Its original descriptions, dependencies, gates, and optional P2 work are preserved in the [archived backlog](evidence/module4/ab-implementation-history.md#history-13). Current status belongs to [progress.md](progress.md); optional Connected Components and optimization work are not A/B acceptance requirements.
 
-## 14. Chi tiết công việc theo thành phần
+## 14. Work Breakdown by Component
 
 The following subsections define the current Module 4A/4B engineering and evidence contracts. Historical R/W identifiers and dated implementation notes remain in the [archive](evidence/module4/ab-implementation-history.md); an archive-only note does not replace a requirement stated here.
 
@@ -705,7 +702,7 @@ The following subsections define the current Module 4A/4B engineering and eviden
 - Report implemented, fixture-validated, integration-validated, and full-data-accepted status separately. Update README/progress/plan/Proposal claims consistently from evidence; preserve dated Module 1–3 records as historical.
 - Keep A/B completion separate from Module 4C/4D. Update the Proposal only when an approved contract field/scope changes; acceptance does not imply Hybrid quality, dashboard readiness, or production capacity.
 
-## 15. Ma trận test bắt buộc để đóng backlog
+## 15. Required Test Matrix to Close Backlog
 
 Các case dưới đây cần triển khai/chạy; tên test là mô tả mục tiêu, không phải
 khẳng định các test này đã tồn tại.
@@ -733,7 +730,7 @@ subgroup, short lists, equal-score boundary, negative data/receipt/backend
 cases, exact holdout baskets, reload execution plan và cache release. Kết quả
 suite mới ngày 10/10 được lưu trong evidence, không cộng các suite lịch sử.
 
-## 16. Quy trình chạy nghiệm thu sau khi sửa code
+## 16. Acceptance Execution Procedure After Code Changes
 
 Use this section to define validation scope and evidence for a new run. Current prerequisites, command ownership, and operational sequences are maintained in the [Docker runbook](docker.md#module-4a4b-operation-and-full-data-acceptance). The exact commands from the historical 10 October acceptance remain in [run-acceptance.sh](evidence/module4/acceptance-20261010/run-acceptance.sh) for provenance and reproduction review; those machine-specific commands are not universal current procedures.
 
@@ -758,7 +755,7 @@ The default accepted graph scope is the full catalog with all prior baskets. If 
 
 Evaluate each applicable condition in §17 and link its run ID, source identity, manifest, test/command logs, and artifacts. Preserve partial, failed, and interrupted records; report scope, skips, failures, limitations, and measured performance honestly. A static or documentation check is not a new runtime or full-data result.
 
-## 17. Checklist đóng Module 4A–4B
+## 17. Module 4A–4B Acceptance Checklist
 
 The following are the acceptance conditions for a new validation run; this list does not itself record new execution results.
 
@@ -787,7 +784,7 @@ The following are the acceptance conditions for a new validation run; this list 
 
 The historical 10 October result remains **21/21** in the concise summary and the [archived checked record](evidence/module4/ab-implementation-history.md#history-17); its run details remain in [acceptance-20261010](evidence/module4/acceptance-20261010/README.md). Connected Components, quality above the personal-frequency baseline, and Module 4C/4D are not part of the mandatory A/B acceptance criteria.
 
-## 18. Quy tắc cập nhật tiến độ và bàn giao
+## 18. Handover and Progress Update Rules
 
 - Mỗi Wxx cập nhật ngày thực hiện, files thay đổi, test commands/results,
   artifact/run ID, remaining issues và người thực hiện nếu làm nhóm.
@@ -802,7 +799,7 @@ The historical 10 October result remains **21/21** in the concise summary and th
   của A/B; ghi riêng backlog C/D. Nếu sau này dùng trend trong official evaluation,
   thêm cutoff/prior-train leakage gate trước khi công bố metric.
 
-## Tài liệu kỹ thuật đối chiếu
+## Technical Reference Documents
 
 - [Spark 3.5.5 ALS API](https://spark.apache.org/docs/3.5.5/api/java/org/apache/spark/ml/recommendation/ALS.html)
 - [Spark 3.5.5 ALS recommendation implementation](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala)
