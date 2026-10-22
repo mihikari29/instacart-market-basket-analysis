@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 from typing import Any, Mapping
 
 from .ownership import (
@@ -223,39 +224,49 @@ def collect_cluster_component_images(
     """Collect every locked Kubernetes/Calico node image and the installed CNI version."""
     if execute is not True:
         raise ImageProvenanceError("cluster image discovery requires explicit execute=True authorization")
-    try:
-        result = executor.run(containerd_image_inventory_command(identity), timeout=timeout)
-    except Exception as exc:
-        raise ImageProvenanceError("profile image inventory could not be read") from exc
-    if result.returncode != 0:
-        raise ImageProvenanceError("profile image inventory query failed")
-    try:
-        payload = json.loads(result.stdout)
-    except (TypeError, json.JSONDecodeError) as exc:
-        raise ImageProvenanceError("profile image inventory is not valid JSON") from exc
-    images = payload.get("images") if isinstance(payload, Mapping) else None
-    if not isinstance(images, list):
-        raise ImageProvenanceError("profile image inventory has an unsupported shape")
-    if set(CONTROL_PLANE_REPOSITORIES) != {
-        "kube-apiserver", "kube-controller-manager", "kube-scheduler", "kube-proxy", "etcd", "pause", "coredns"
-    } or set(CALICO_REPOSITORIES) != {"cni", "node", "kube-controllers"}:
-        raise ImageProvenanceError("cluster image role inventory is inconsistent")
-    control_plane = _component_references_from_inventory(images, CONTROL_PLANE_REPOSITORIES)
-    calico = _component_references_from_inventory(images, CALICO_REPOSITORIES)
-    versions = set()
-    for reference in calico.values():
-        name, _digest = reference.rsplit("@", 1)
-        tag = name.rsplit(":", 1)[-1] if ":" in name.rsplit("/", 1)[-1] else ""
-        if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
-            raise ImageProvenanceError("Calico image version tags are missing or not exact")
-        versions.add(tag)
-    if len(versions) != 1:
-        raise ImageProvenanceError("Calico component images do not share one exact release")
-    return {
-        "kubernetes_control_plane_images": control_plane,
-        "calico_images": calico,
-        "cni_version": next(iter(versions)),
-    }
+    deadline = time.time() + max(timeout, 120)
+    last_error: ImageProvenanceError | None = None
+    while True:
+        try:
+            result = executor.run(containerd_image_inventory_command(identity), timeout=30)
+            if result.returncode != 0:
+                raise ImageProvenanceError("profile image inventory query failed")
+            try:
+                payload = json.loads(result.stdout)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise ImageProvenanceError("profile image inventory is not valid JSON") from exc
+            images = payload.get("images") if isinstance(payload, Mapping) else None
+            if not isinstance(images, list):
+                raise ImageProvenanceError("profile image inventory has an unsupported shape")
+            if set(CONTROL_PLANE_REPOSITORIES) != {
+                "kube-apiserver", "kube-controller-manager", "kube-scheduler", "kube-proxy", "etcd", "pause", "coredns"
+            } or set(CALICO_REPOSITORIES) != {"cni", "node", "kube-controllers"}:
+                raise ImageProvenanceError("cluster image role inventory is inconsistent")
+            control_plane = _component_references_from_inventory(images, CONTROL_PLANE_REPOSITORIES)
+            calico = _component_references_from_inventory(images, CALICO_REPOSITORIES)
+            versions = set()
+            for reference in calico.values():
+                name, _digest = reference.rsplit("@", 1)
+                tag = name.rsplit(":", 1)[-1] if ":" in name.rsplit("/", 1)[-1] else ""
+                if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+                    raise ImageProvenanceError("Calico image version tags are missing or not exact")
+                versions.add(tag)
+            if len(versions) != 1:
+                raise ImageProvenanceError("Calico component images do not share one exact release")
+            return {
+                "kubernetes_control_plane_images": control_plane,
+                "calico_images": calico,
+                "cni_version": next(iter(versions)),
+            }
+        except ImageProvenanceError as exc:
+            last_error = exc
+            if time.time() >= deadline:
+                raise last_error
+            time.sleep(3)
+        except Exception as exc:
+            if time.time() >= deadline:
+                raise ImageProvenanceError("profile image inventory could not be read") from exc
+            time.sleep(3)
 
 
 def _component_references_from_inventory(
