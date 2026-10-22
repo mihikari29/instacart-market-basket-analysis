@@ -45,15 +45,15 @@ def source_revision_evidence(repository: Path | str) -> dict[str, Any]:
     try:
         revision = subprocess.run(
             ["git", "rev-parse", "--verify", "HEAD"], cwd=root, check=False,
-            capture_output=True, text=True, timeout=10, shell=False,
+            capture_output=True, text=True, timeout=30, shell=False,
         )
         status = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=all"], cwd=root,
-            check=False, capture_output=True, text=True, timeout=15, shell=False,
+            check=False, capture_output=True, text=True, timeout=60, shell=False,
         )
         tree = subprocess.run(
             ["git", "ls-tree", "-r", "-z", "--full-tree", "HEAD"], cwd=root,
-            check=False, capture_output=True, timeout=30, shell=False,
+            check=False, capture_output=True, timeout=60, shell=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ImageProvenanceError("Git source identity could not be inspected") from exc
