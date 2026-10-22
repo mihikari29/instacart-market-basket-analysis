@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import math
 import os
+from pathlib import Path
 
 
 TABLES = {
@@ -127,3 +128,17 @@ class Config:
         }
         values.update(overrides)
         return cls(**values)
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 4 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module4",
+        total_cores=config.total_cores,
+        executor_memory=config.executor_memory,
+        executor_cores=config.executor_cores,
+    )

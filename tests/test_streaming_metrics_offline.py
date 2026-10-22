@@ -24,7 +24,7 @@ from src.module3.progress_log import CompletedBatchPublisher, progress_logger
 from src.module4.dashboard.api import create_app
 from src.module4.dashboard.config import ApiConfig
 from src.module4.dashboard.readers import InvalidSnapshot
-from src.module4.dashboard.streaming_reader import read_streaming_metrics
+from src.module4.dashboard.readers import read_streaming_metrics
 from src.module4.dashboard.ui.api_client import _validate_response
 
 

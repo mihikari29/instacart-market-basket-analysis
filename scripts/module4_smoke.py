@@ -25,11 +25,10 @@ from src.module2.analytics import analyze
 from src.module2.config import Config as BatchConfig
 from src.module2.data import read_tables, validate
 from src.module2.fixtures import create_fixture
-from src.module4.config import Config
+from src.module4.config import Config, session
 from src.module4.data import hdfs_sha256, read_inputs, validate_inputs, validate_source_receipts
 from src.module4.graph import pagerank
 from src.module4.sink_mongo import validate_snapshot
-from src.module4.spark import session
 
 def _write_json_hdfs(spark, path: str, value: dict):
     jvm = spark._jvm

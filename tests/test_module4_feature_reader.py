@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.module4.feature_reader import (
+from src.module4.data import (
     USER_FEATURE_COLUMNS,
     inspect_user_feature_rows,
     validate_user_feature_columns,

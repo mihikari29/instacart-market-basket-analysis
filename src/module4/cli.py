@@ -37,7 +37,7 @@ from .data import (
     validate_inputs,
     validate_source_receipts,
 )
-from .feature_reader import read_user_features
+from .data import read_user_features
 from .evaluation import (
     PRIOR_ONLY_HYBRID_LAMBDAS,
     evaluate_at_k,
@@ -67,7 +67,8 @@ from .sink_mongo import (
     update_pair_readiness,
 )
 from .split import make_internal_holdout
-from .spark import clear_job_group, session
+from ..common.spark import clear_job_group
+from .config import session
 
 
 REPO_ROOT = REPOSITORY_ROOT

@@ -20,7 +20,7 @@ from src.module4.hybrid.trend_reader import (
 )
 
 from .config import ApiConfig
-from .streaming_reader import read_streaming_metrics
+from .readers import read_streaming_metrics
 from .batch_readers import (
     BatchDatabaseFailure,
     BatchIndexUnavailable,

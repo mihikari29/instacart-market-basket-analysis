@@ -6,7 +6,7 @@ pytest.importorskip("pyspark")
 from pyspark.sql import SparkSession
 from src.module2.analytics import metrics, tag_user_features
 from src.module2.config import Config
-from src.module4.feature_reader import read_user_features
+from src.module4.data import read_user_features
 
 
 def test_module2_features_roundtrip_to_descriptive_reader_without_train_leakage(tmp_path):
