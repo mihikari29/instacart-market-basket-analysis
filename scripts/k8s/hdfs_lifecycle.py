@@ -12,7 +12,7 @@ def bootstrap_hdfs(executor, identity: RunIdentity, *, execute: bool = False) ->
     if execute is not True or not isinstance(identity, RunIdentity):
         raise ValueError("HDFS bootstrap requires an explicit validated run and execute=True")
     root = f"/instacart/{identity.run_id}"
-    prefix = kubectl(identity, "--namespace", identity.namespace, "exec", "statefulset/hdfs-namenode", "--")
+    prefix = kubectl(identity, "--namespace", identity.namespace, "exec", "statefulset/hdfs-namenode", "--", "env", "HADOOP_OPTS=-Dfs.defaultFS=hdfs://localhost:8020")
 
     def checked(arguments, timeout=60):
         result = executor.run(prefix + arguments, timeout=timeout)

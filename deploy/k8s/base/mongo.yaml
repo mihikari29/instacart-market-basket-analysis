@@ -176,8 +176,8 @@ spec:
                   --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin
                   --eval 'db.adminCommand("ping").ok' 2>/dev/null | grep -qx 1
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            timeoutSeconds: 15
+            failureThreshold: 10
           readinessProbe:
             exec:
               command:
