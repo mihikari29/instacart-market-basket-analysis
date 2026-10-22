@@ -193,14 +193,16 @@ def prepare_run_lock(
     _journal_preparation(directory, "local_identity", "completed", source_revision=source["source_revision"])
 
     _journal_preparation(directory, "profile_creation", "running")
+    target_cpus = 4 if (capacity.get("cpu_cores") or 6) < 6 or capacity.get("wsl_guest") else 6
+    target_memory_mib = 6144 if (capacity.get("memory_gib") or 12.0) < 12.0 or capacity.get("wsl_guest") else 12 * 1024
     try:
         create_dedicated_cluster(
             executor,
             identity,
             host_capacity=capacity,
             kubernetes_version=template["cluster"]["kubernetes_version"],
-            cpus=6,
-            memory_mib=12 * 1024,
+            cpus=target_cpus,
+            memory_mib=target_memory_mib,
             disk_gib=40,
             execute=True,
         )

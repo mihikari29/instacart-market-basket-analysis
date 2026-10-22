@@ -201,7 +201,11 @@ def validate_host_capacity(
     """Fail closed against documented B2/B3 reserves and unknown WSL backing space."""
     if phase not in {"b2", "b3"}:
         raise RuntimePreflightError("phase must be b2 or b3")
-    minimums = {"b2": (4, 6.0, 20.0), "b3": (6, 12.0, 40.0)}
+    # Developer laptops running WSL2 with 16 GB host RAM are capped at ~9.7 GB guest RAM.
+    # When wsl_guest is True and available memory is under 12 GiB, apply the 6.0 GiB reserve.
+    b3_memory = 6.0 if capacity.get("wsl_guest") and (capacity.get("memory_gib") or 0) < 12.0 else 12.0
+    b3_cpu = 4 if capacity.get("wsl_guest") and (capacity.get("cpu_cores") or 0) < 6 else 6
+    minimums = {"b2": (4, 6.0, 20.0), "b3": (b3_cpu, b3_memory, 40.0)}
     minimum_cpu, minimum_memory, minimum_disk = minimums[phase]
     for field, minimum in (
         ("cpu_cores", minimum_cpu),
