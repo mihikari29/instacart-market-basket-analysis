@@ -269,6 +269,18 @@ def collect_cluster_component_images(
             time.sleep(3)
 
 
+def _matches_repo(candidate_name: str, expected_repo: str) -> bool:
+    if candidate_name == expected_repo:
+        return True
+    prefixes = ("quay.io/calico/", "docker.io/calico/")
+    for p1 in prefixes:
+        for p2 in prefixes:
+            if candidate_name.startswith(p1) and expected_repo.startswith(p2):
+                if candidate_name[len(p1):] == expected_repo[len(p2):]:
+                    return True
+    return False
+
+
 def _component_references_from_inventory(
     images: list[Any], repositories: Mapping[str, str]
 ) -> dict[str, str]:
@@ -276,6 +288,7 @@ def _component_references_from_inventory(
     for role, repository in repositories.items():
         digests = set()
         tags = set()
+        matched_repo_name = repository
         for image in images:
             if not isinstance(image, Mapping):
                 continue
@@ -287,12 +300,13 @@ def _component_references_from_inventory(
                 if not isinstance(candidate, str) or "@" not in candidate:
                     continue
                 repo_name, digest = candidate.rsplit("@", 1)
-                if repo_name != repository or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
+                if not _matches_repo(repo_name, repository) or not IMAGE_DIGEST_PATTERN.fullmatch(digest):
                     continue
                 digests.add(digest)
+                matched_repo_name = repo_name
                 if isinstance(repo_tags, list):
                     for tag in repo_tags:
-                        if isinstance(tag, str) and tag.rsplit(":", 1)[0] == repository:
+                        if isinstance(tag, str) and _matches_repo(tag.rsplit(":", 1)[0], repository):
                             tags.add(tag.rsplit(":", 1)[1])
         if len(digests) != 1:
             raise ImageProvenanceError(f"profile component image digest is missing or ambiguous for {role}")
@@ -300,7 +314,7 @@ def _component_references_from_inventory(
         if len(exact_tags) > 1:
             raise ImageProvenanceError(f"profile component image tags are ambiguous for {role}")
         selected_tag = next(iter(exact_tags)) if exact_tags else (next(iter(tags)) if len(tags) == 1 else None)
-        image_name = f"{repository}:{selected_tag}" if selected_tag else repository
+        image_name = f"{matched_repo_name}:{selected_tag}" if selected_tag else matched_repo_name
         found[role] = f"{image_name}@{next(iter(digests))}"
     return found
 
