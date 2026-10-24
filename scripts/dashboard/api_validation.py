@@ -60,6 +60,7 @@ def _copy_context(destination: Path) -> None:
     tests_dir.mkdir()
     for relative in (
         "tests/__init__.py",
+        "tests/helpers.py",
         "tests/dashboard_helpers.py",
         *UNIT_TESTS,
         "tests/test_dashboard_api_mongo.py",
