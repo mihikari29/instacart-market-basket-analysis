@@ -173,7 +173,9 @@ def _read_trend_rows(
     return scores
 
 
-def _read_catalog(catalog: Iterable[ProductMetadata | Mapping[str, Any]]) -> dict[int, str]:
+def _read_catalog_details(
+    catalog: Iterable[ProductMetadata | Mapping[str, Any]] | Mapping[int, str]
+) -> tuple[dict[int, str], dict[int, float]]:
     if isinstance(catalog, Mapping):
         # A compact product_id -> product_name map is convenient for callers;
         # record-shaped mappings are also accepted as an iterable of records.
@@ -188,7 +190,8 @@ def _read_catalog(catalog: Iterable[ProductMetadata | Mapping[str, Any]]) -> dic
     else:
         catalog_rows = catalog
 
-    result: dict[int, str] = {}
+    names: dict[int, str] = {}
+    pageranks: dict[int, float] = {}
     for row in _rows(catalog_rows, "product catalog"):
         product_id = _positive_integer(
             _value(row, "product_id", "product catalog"), "product_id", "catalog"
@@ -196,10 +199,18 @@ def _read_catalog(catalog: Iterable[ProductMetadata | Mapping[str, Any]]) -> dic
         product_name = _value(row, "product_name", "product catalog")
         if not isinstance(product_name, str) or not product_name.strip():
             raise RankingContractError(f"catalog.product_name for product {product_id} must be non-empty")
-        if product_id in result:
+        if product_id in names:
             raise RankingContractError(f"product catalog contains duplicate product_id {product_id}")
-        result[product_id] = product_name
-    return result
+        names[product_id] = product_name
+        pr = getattr(row, "pagerank", None) if not isinstance(row, Mapping) else row.get("pagerank")
+        if pr is not None and isinstance(pr, (int, float)) and math.isfinite(pr):
+            pageranks[product_id] = float(pr)
+    return names, pageranks
+
+
+def _read_catalog(catalog: Iterable[ProductMetadata | Mapping[str, Any]]) -> dict[int, str]:
+    names, _ = _read_catalog_details(catalog)
+    return names
 
 
 def rank_hybrid_recommendations(
@@ -236,7 +247,7 @@ def rank_hybrid_recommendations(
 
     als_scores = _read_als_rows(requested_user_id, als_recommendations, config.als_top_n)
     trend_scores = _read_trend_rows(trend_snapshot, config.trend_top_m)
-    catalog = _read_catalog(product_catalog)
+    catalog, pagerank_scores = _read_catalog_details(product_catalog)
 
     for product_id in als_scores:
         if product_id not in catalog:
@@ -260,6 +271,14 @@ def rank_hybrid_recommendations(
         normalized_trend = {
             product_id: score / trend_denominator for product_id, score in trend_scores.items()
         }
+
+    max_pr = max(pagerank_scores.values(), default=0.0)
+    min_pr = min(pagerank_scores.values(), default=0.0)
+    pr_span = max_pr - min_pr
+    normalized_pr = {
+        pid: (score - min_pr) / (pr_span + config.epsilon) if pr_span > 0 else (1.0 if max_pr > 0 else 0.0)
+        for pid, score in pagerank_scores.items()
+    }
 
     has_als = bool(als_scores)
     trend_available = trend_snapshot.available
@@ -325,10 +344,20 @@ def rank_hybrid_recommendations(
         trend_score = trend_scores.get(product_id) if from_trend else None
         normalized_als_score = normalized_als.get(product_id, 0.0)
         normalized_trend_score = normalized_trend.get(product_id, 0.0)
-        final_score = (
-            lambda_effective * normalized_als_score
-            + (1.0 - lambda_effective) * normalized_trend_score
-        )
+        norm_pr = normalized_pr.get(product_id, 0.0)
+        pr_score = pagerank_scores.get(product_id)
+
+        if config.beta > 0.0 and pagerank_scores:
+            final_score = (
+                config.alpha * normalized_als_score
+                + config.beta * norm_pr
+                + config.gamma * normalized_trend_score
+            )
+        else:
+            final_score = (
+                lambda_effective * normalized_als_score
+                + (1.0 - lambda_effective) * normalized_trend_score
+            )
         candidates.append(
             Recommendation(
                 user_id=requested_user_id,
@@ -342,6 +371,8 @@ def rank_hybrid_recommendations(
                 rank=0,
                 from_als=from_als,
                 from_trend=from_trend,
+                pagerank_score=pr_score,
+                normalized_pagerank_score=norm_pr,
             )
         )
 
@@ -359,6 +390,8 @@ def rank_hybrid_recommendations(
             rank=rank,
             from_als=row.from_als,
             from_trend=row.from_trend,
+            pagerank_score=row.pagerank_score,
+            normalized_pagerank_score=row.normalized_pagerank_score,
         )
         for rank, row in enumerate(ordered[: config.output_top_k], start=1)
     )

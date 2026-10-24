@@ -22,5 +22,5 @@ infrastructure:
 
 capacity_reserve:
   cpu_cores: 6
-  memory_gib: 6
+  memory_gib: 12
   free_disk_gib: 40

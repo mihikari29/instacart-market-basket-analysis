@@ -20,6 +20,13 @@ from .data_receipts import inspect_input_directory
 from .fixture_data import write_fixture
 from .common import als_model_version, demo_database, graph_version
 from .common import redact_secrets, write_json_atomic
+from .config import (
+    get_execution_config,
+    get_models_config,
+    get_step_timeout,
+    get_streaming_config,
+    get_synthesis_config,
+)
 from .pipeline import (
     FIXTURE_MAX_EVENTS,
     FIXTURE_MAX_USERS,
@@ -39,6 +46,11 @@ class TaskError(RuntimeError):
 
 def _safe(value: str) -> str:
     return redact_secrets(value)
+
+
+def _is_resume_allowed() -> bool:
+    policy = str(get_execution_config().get("resume_policy", "enabled")).strip().lower()
+    return policy != "disabled"
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -122,8 +134,19 @@ def runtime_values() -> dict[str, str]:
     return values
 
 
-def input_stage() -> dict:
+def step_input() -> dict:
     values = runtime_values()
+    receipt_path = RUNTIME_ROOT / "evidence" / "input-stage-receipt.json"
+    source_path = RUNTIME_ROOT / "evidence" / "source-receipt.json"
+    if _is_resume_allowed() and receipt_path.is_file() and source_path.is_file():
+        try:
+            cached = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if cached.get("run_id") == values["PIPELINE_RUN_ID"] and cached.get("status") == "completed":
+                print(f"[RESUME] Reusing existing completed input-stage receipt for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached
+        except Exception:
+            pass
+
     fixture_manifest = None
     if values["PIPELINE_MODE"] == "fixture":
         fixture_manifest = write_fixture(INPUT_ROOT)
@@ -150,22 +173,22 @@ def input_stage() -> dict:
         "files": input_manifest["files"],
         "fixture": fixture_manifest,
     }
-    write_json(RUNTIME_ROOT / "evidence" / "source-receipt.json", source_receipt)
+    write_json(source_path, source_receipt)
     receipt = {
         "schema_version": 1,
         "run_id": values["PIPELINE_RUN_ID"],
         "status": "completed",
         "source_manifest_sha256": input_manifest["manifest_sha256"],
-        "source_receipt": str(RUNTIME_ROOT / "evidence" / "source-receipt.json"),
+        "source_receipt": str(source_path),
         "source_files": input_manifest["files"],
         "fixture_manifest": fixture_manifest,
     }
-    write_json(RUNTIME_ROOT / "evidence" / "input-stage-receipt.json", receipt)
+    write_json(receipt_path, receipt)
     print(json.dumps(receipt, sort_keys=True), flush=True)
     return receipt
 
 
-def module1() -> dict:
+def step_module1() -> dict:
     values = runtime_values()
     input_manifest = inspect_input_directory(INPUT_ROOT)
     records = input_manifest["files"]
@@ -189,26 +212,44 @@ def module1() -> dict:
     work_root = RUNTIME_ROOT / "work" / os.environ.get("POD_NAME", "module1")
     clean_dir = work_root / "clean"
     feed_dir = work_root / "feed"
-    if work_root.exists():
-        raise TaskError("this Pod's Module 1 work path already exists; refusing to overwrite it")
+    receipt_path = RUNTIME_ROOT / "evidence" / f"module1-{os.environ.get('POD_NAME', 'module1')}.json"
+
+    if _is_resume_allowed() and receipt_path.is_file() and (feed_dir / "events.parquet").is_file():
+        try:
+            cached = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if cached.get("run_id") == values["PIPELINE_RUN_ID"] and cached.get("status") == "completed":
+                print(f"[RESUME] Reusing existing completed Module 1 feed and staging for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached
+        except Exception:
+            pass
+
+    synthesis_cfg = get_synthesis_config()
+    scenario = synthesis_cfg.get("scenario", "deterministic")
+    scatter_weeks = str(synthesis_cfg.get("scatter_weeks", 1))
+    seed = str(synthesis_cfg.get("seed", 42))
+    step_timeout = get_step_timeout("module1", values["PIPELINE_MODE"])
+
     env = dict(os.environ)
     _subprocess(
         [sys.executable, "-m", "src.module1.clean", "--data-dir", str(work_root), "--raw-dir", str(INPUT_ROOT), "--output-dir", str(clean_dir), "--validate"],
-        env=env, log_path=work_root / "clean.log", timeout=1800,
+        env=env, log_path=work_root / "clean.log", timeout=min(1800, step_timeout),
     )
     generate = [
         sys.executable, "-m", "src.module1.generate", "--data-dir", str(clean_dir),
-        "--out-dir", str(feed_dir), "--scenario", "deterministic", "--scatter-weeks", "1", "--seed", "42",
+        "--out-dir", str(feed_dir), "--scenario", scenario, "--scatter-weeks", scatter_weeks, "--seed", seed,
     ]
     if values["PIPELINE_MODE"] == "fixture":
-        generate += ["--limit-users", str(FIXTURE_MAX_USERS)]
-    _subprocess(generate, env=env, log_path=work_root / "generate.log", timeout=1800)
+        limit_users = synthesis_cfg.get("limit_users", FIXTURE_MAX_USERS)
+        generate += ["--limit-users", str(limit_users)]
+    _subprocess(generate, env=env, log_path=work_root / "generate.log", timeout=min(1800, step_timeout))
 
     import pyarrow.parquet as pq
 
     event_count = pq.ParquetFile(feed_dir / "events.parquet").metadata.num_rows
-    if values["PIPELINE_MODE"] == "fixture" and event_count > FIXTURE_MAX_EVENTS:
-        raise TaskError("generated fixture event count exceeds the configured hard bound")
+    if values["PIPELINE_MODE"] == "fixture":
+        max_events = synthesis_cfg.get("limit_events", FIXTURE_MAX_EVENTS)
+        if event_count > max_events:
+            raise TaskError("generated fixture event count exceeds the configured hard bound")
     _subprocess(
         [
             sys.executable, "-m", "src.module1.stage_hdfs", "--feed", str(feed_dir),
@@ -217,7 +258,7 @@ def module1() -> dict:
             "--clean-dir", str(clean_dir), "--no-rewrite-datanode-to-localhost",
             "--user", "k8spipeline",
         ],
-        env=env, log_path=work_root / "stage.log", timeout=3600,
+        env=env, log_path=work_root / "stage.log", timeout=step_timeout,
     )
     receipt = {
         "schema_version": 1, "run_id": values["PIPELINE_RUN_ID"], "mode": values["PIPELINE_MODE"],
@@ -228,8 +269,7 @@ def module1() -> dict:
         "synthetic_event_time_provenance": "Synthetic event time for replay simulation",
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
     }
-    output = RUNTIME_ROOT / "evidence" / f"module1-{os.environ.get('POD_NAME', 'module1')}.json"
-    write_json(output, receipt)
+    write_json(receipt_path, receipt)
     return receipt
 
 
@@ -250,20 +290,32 @@ def _verify_api_egress_is_blocked() -> dict[str, Any]:
         return {"target": f"{host}:{port}", "connection": "blocked"}
 
 
-def module2() -> dict:
+def step_module2() -> dict:
     values = runtime_values()
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise TaskError("Module 2 requires the dedicated Mongo publisher Secret")
+    output = _result_root("module2")
+    experiment_path = output / f"k8s-{values['PIPELINE_RUN_ID']}" / "summary.json"
+    step_receipt_path = RUNTIME_ROOT / "evidence" / "steps" / "module2.json"
+
+    if _is_resume_allowed() and experiment_path.is_file() and step_receipt_path.is_file():
+        try:
+            cached = json.loads(step_receipt_path.read_text(encoding="utf-8"))
+            if cached.get("status") == "completed":
+                print(f"[RESUME] Reusing existing completed Module 2 analysis and benchmarks for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached.get("receipt", cached)
+        except Exception:
+            pass
+
+    step_timeout = get_step_timeout("module2", values["PIPELINE_MODE"])
     env = dict(os.environ, MODULE2_ROOT=values["PIPELINE_HDFS_URI"], SPARK_MASTER="local[2]", MONGODB_URI=uri)
     _subprocess(
         [sys.executable, "-m", "src.module2.cli", "all", "--root", values["PIPELINE_HDFS_URI"],
-         "--master", "local[2]", "--output", str(_result_root("module2")),
+         "--master", "local[2]", "--output", str(output),
          "--run-id", f"k8s-{values['PIPELINE_RUN_ID']}", "--min-support", "1"],
-        env=env, log_path=_result_root("module2") / "orchestrator.log", timeout=3600,
+        env=env, log_path=output / "orchestrator.log", timeout=step_timeout,
     )
-    output = _result_root("module2")
-    experiment_path = output / f"k8s-{values['PIPELINE_RUN_ID']}" / "summary.json"
     try:
         experiment_summary = json.loads(experiment_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -302,25 +354,48 @@ def module2() -> dict:
     }
 
 
-def module4() -> dict:
+def step_module4() -> dict:
     values = runtime_values()
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise TaskError("Module 4 requires the dedicated Mongo publisher Secret")
     output = _result_root("module4")
+    step_receipt_path = RUNTIME_ROOT / "evidence" / "steps" / "module4.json"
+
+    if _is_resume_allowed() and step_receipt_path.is_file() and (output / "orchestrator.log").is_file():
+        try:
+            cached = json.loads(step_receipt_path.read_text(encoding="utf-8"))
+            if cached.get("status") == "completed":
+                print(f"[RESUME] Reusing existing completed Module 4 models for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached.get("receipt", cached)
+        except Exception:
+            pass
+
     source_receipt = RUNTIME_ROOT / "evidence" / "source-receipt.json"
+    models_cfg = get_models_config()
+    als_cfg = models_cfg.get("als", {})
+    graph_cfg = models_cfg.get("graph", {})
+
+    graph_backend = graph_cfg.get("backend", "graphframes")
+    graph_weight = str(graph_cfg.get("min_edge_weight", 2))
+    step_timeout = get_step_timeout("module4", values["PIPELINE_MODE"])
+
     args = [
         sys.executable, "-m", "src.module4.cli", "all", "--root", values["PIPELINE_HDFS_URI"],
         "--master", "local[2]", "--output", str(output), "--run-id", f"k8s-{values['PIPELINE_RUN_ID']}",
         "--model-version", als_model_version(values['PIPELINE_RUN_ID']),
         "--graph-version", graph_version(values['PIPELINE_RUN_ID']),
-        "--graph-backend", "graphframes", "--graph-min-edge-weight", "2",
+        "--graph-backend", graph_backend, "--graph-min-edge-weight", graph_weight,
         "--scope", "staged_fixture" if values["PIPELINE_MODE"] == "fixture" else "full_data",
     ]
     if values["PIPELINE_MODE"] == "fixture":
-        args += ["--pilot-users", str(FIXTURE_MAX_USERS), "--max-trials", "3"]
+        pilot_users = als_cfg.get("pilot_users", FIXTURE_MAX_USERS)
+        max_trials = als_cfg.get("max_trials", 3)
+        args += ["--pilot-users", str(pilot_users), "--max-trials", str(max_trials)]
     else:
-        args += ["--pilot-users", "5000", "--max-trials", "12", "--source-receipt", str(source_receipt)]
+        pilot_users = als_cfg.get("pilot_users", 5000)
+        max_trials = als_cfg.get("max_trials", 12)
+        args += ["--pilot-users", str(pilot_users), "--max-trials", str(max_trials), "--source-receipt", str(source_receipt)]
     database = os.environ.get("MODULE4D_MONGO_DATABASE", "")
     if database != demo_database(values['PIPELINE_RUN_ID']):
         raise TaskError("Module 4 requires the exact run-scoped Mongo database")
@@ -331,14 +406,45 @@ def module4() -> dict:
         MONGODB_URI=uri,
         MODULE4_MONGO_DATABASE=database,
     )
-    _subprocess(args, env=env, log_path=output / "orchestrator.log", timeout=7200)
+    _subprocess(args, env=env, log_path=output / "orchestrator.log", timeout=step_timeout)
     return {
         "status": "completed", "run_id": values["PIPELINE_RUN_ID"],
         "module4_output": str(output), "artifacts": _artifact_inventory(output),
     }
 
 
-def replay() -> dict:
+def _ensure_topic(config) -> None:
+    """Create the run-scoped one-partition topic idempotently with bounded retries."""
+    from kafka import KafkaAdminClient
+    from kafka.admin import NewTopic
+    from kafka.errors import TopicAlreadyExistsError
+
+    last_error = None
+    for attempt in range(12):
+        admin = None
+        try:
+            admin = KafkaAdminClient(bootstrap_servers=config.bootstrap_servers, request_timeout_ms=5000)
+            try:
+                admin.create_topics([NewTopic(config.topic, num_partitions=1, replication_factor=1)])
+            except TopicAlreadyExistsError:
+                pass
+            topics = admin.describe_topics([config.topic])
+            record = next((item for item in topics if item.get("name", item.get("topic")) == config.topic), None)
+            if record is None or len(record.get("partitions", [])) != 1:
+                raise TaskError("run-scoped Kafka topic does not have exactly one partition")
+            return
+        except TaskError:
+            raise
+        except Exception as exc:
+            last_error = type(exc).__name__
+            time.sleep(min(2 + attempt, 10))
+        finally:
+            if admin is not None:
+                admin.close()
+    raise TaskError(f"Kafka broker did not become ready ({last_error or 'unknown failure'})")
+
+
+def step_replay() -> dict:
     values = runtime_values()
     from src.module3.config import Config as StreamConfig
     from src.module3.config import session
@@ -354,29 +460,44 @@ def replay() -> dict:
     if not uri:
         raise TaskError("Module 3 requires the dedicated Mongo publisher Secret")
     output = _result_root("module3") / f"k8s-{values['PIPELINE_RUN_ID']}"
-    output.mkdir(parents=True, exist_ok=False)
+    receipt_path = output / "replay-receipt.json"
+
+    if _is_resume_allowed() and receipt_path.is_file():
+        try:
+            cached = json.loads(receipt_path.read_text(encoding="utf-8"))
+            if cached.get("run_id") == values["PIPELINE_RUN_ID"] and cached.get("status") == "completed":
+                print(f"[RESUME] Reusing existing completed streaming replay for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached
+        except Exception:
+            pass
+
+    output.mkdir(parents=True, exist_ok=True)
     output.chmod(0o700)
-    event_feed = RUNTIME_ROOT / "work" / "module1" / "feed"
     candidates = sorted((RUNTIME_ROOT / "work").glob("*/feed/events.parquet"))
     if len(candidates) != 1:
         raise TaskError("Module 3 requires exactly one validated run-scoped Module 1 event feed")
     event_feed = candidates[0].parent
     expected_events = pq.ParquetFile(candidates[0]).metadata.num_rows
-    rate = 100 if values["PIPELINE_MODE"] == "fixture" else 1000
-    duration = FIXTURE_REPLAY_SECONDS if values["PIPELINE_MODE"] == "fixture" else FULL_REPLAY_SECONDS
+
+    streaming_cfg = get_streaming_config()
+    default_rate = 100 if values["PIPELINE_MODE"] == "fixture" else 1000
+    rate = streaming_cfg.get("fixture_rate" if values["PIPELINE_MODE"] == "fixture" else "full_rate", default_rate)
+    default_duration = FIXTURE_REPLAY_SECONDS if values["PIPELINE_MODE"] == "fixture" else FULL_REPLAY_SECONDS
+    duration = streaming_cfg.get("fixture_duration_seconds" if values["PIPELINE_MODE"] == "fixture" else "full_duration_seconds", default_duration)
     validate_replay_budget(expected_events, rate, duration)
+
     config = StreamConfig(
         root=values["PIPELINE_HDFS_URI"], master="local[2]",
         bootstrap_servers=os.environ.get("PIPELINE_KAFKA_BOOTSTRAP", ""),
         topic=values["PIPELINE_TOPIC"], starting_offsets="earliest", fail_on_data_loss=True,
         mongodb_uri=uri, mongo_database=os.environ.get("MODULE4D_MONGO_DATABASE", ""),
-        mongo_top_k_per_window=20, publish_trend_bundles=True,
+        mongo_top_k_per_window=streaming_cfg.get("mongo_top_k", 20), publish_trend_bundles=True,
         trend_source_namespace=os.environ.get("PIPELINE_TREND_NAMESPACE", TREND_SOURCE_NAMESPACE),
         trend_source_scope="synthetic_fixture" if values["PIPELINE_MODE"] == "fixture" else "full_data_input",
     )
     _ensure_topic(config)
     start_offsets = kafka_end_offsets(config.bootstrap_servers, config.topic)
-    if any(value != 0 for value in start_offsets.values()):
+    if not _is_resume_allowed() and any(value != 0 for value in start_offsets.values()):
         raise TaskError("replay requires a fresh empty run-scoped topic")
     kafka_health = validate_kafka(config)
     mongo_health = validate_mongo(config)
@@ -451,42 +572,11 @@ def replay() -> dict:
         "completion": stream_receipt["completion"],
         "synthetic_event_time_provenance": "Synthetic event time for replay simulation",
     }
-    write_json(output / "replay-receipt.json", receipt)
+    write_json(receipt_path, receipt)
     return receipt
 
 
-def _ensure_topic(config) -> None:
-    """Create the run-scoped one-partition topic idempotently with bounded retries."""
-    from kafka import KafkaAdminClient
-    from kafka.admin import NewTopic
-    from kafka.errors import TopicAlreadyExistsError
-
-    last_error = None
-    for attempt in range(12):
-        admin = None
-        try:
-            admin = KafkaAdminClient(bootstrap_servers=config.bootstrap_servers, request_timeout_ms=5000)
-            try:
-                admin.create_topics([NewTopic(config.topic, num_partitions=1, replication_factor=1)])
-            except TopicAlreadyExistsError:
-                pass
-            topics = admin.describe_topics([config.topic])
-            record = next((item for item in topics if item.get("name", item.get("topic")) == config.topic), None)
-            if record is None or len(record.get("partitions", [])) != 1:
-                raise TaskError("run-scoped Kafka topic does not have exactly one partition")
-            return
-        except TaskError:
-            raise
-        except Exception as exc:
-            last_error = type(exc).__name__
-            time.sleep(min(2 + attempt, 10))
-        finally:
-            if admin is not None:
-                admin.close()
-    raise TaskError(f"Kafka broker did not become ready ({last_error or 'unknown failure'})")
-
-
-def hybrid() -> dict:
+def step_hybrid() -> dict:
     values = runtime_values()
     user_id = os.environ.get("PIPELINE_DEMO_USER_ID", "1")
     if not re.fullmatch(r"[1-9][0-9]*", user_id):
@@ -498,14 +588,24 @@ def hybrid() -> dict:
         raise TaskError("PIPELINE_AS_OF_EVENT_TIME must be the stable UTC time in the reviewed run plan") from exc
     if parsed_as_of.tzinfo is None or parsed_as_of.utcoffset() != timezone.utc.utcoffset(parsed_as_of):
         raise TaskError("PIPELINE_AS_OF_EVENT_TIME must use UTC")
-    from src.module4.hybrid.cli import main as hybrid_main
 
     output_path = _result_root("hybrid") / "hybrid-receipt.json"
+    if _is_resume_allowed() and output_path.is_file():
+        try:
+            cached = json.loads(output_path.read_text(encoding="utf-8"))
+            if cached.get("run_id") == values["PIPELINE_RUN_ID"]:
+                print(f"[RESUME] Reusing existing completed hybrid recommendations for {values['PIPELINE_RUN_ID']}", flush=True)
+                return cached
+        except Exception:
+            pass
+
+    from src.module4.hybrid.cli import main as hybrid_main
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     uri = os.environ.get("MONGODB_URI")
     if not uri:
         raise TaskError("Hybrid publication requires the dedicated Mongo publisher Secret")
-    # The CLI emits only a sanitized success document or a redacted exception.
+
     from contextlib import redirect_stdout
     import io
 
@@ -529,7 +629,22 @@ def hybrid() -> dict:
     return receipt
 
 
-STEPS = {"input": input_stage, "module1": module1, "module2": module2, "module4": module4, "replay": replay, "hybrid": hybrid}
+STEPS = {
+    "input": step_input,
+    "module1": step_module1,
+    "module2": step_module2,
+    "module4": step_module4,
+    "replay": step_replay,
+    "hybrid": step_hybrid,
+}
+
+# Monotonic aliases for backward compatibility
+input_stage = step_input
+module1 = step_module1
+module2 = step_module2
+module4 = step_module4
+replay = step_replay
+hybrid = step_hybrid
 
 
 def main(argv: list[str] | None = None) -> int:

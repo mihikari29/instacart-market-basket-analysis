@@ -1,0 +1,87 @@
+version: 1.0
+
+# 1. Dataset Synthesis & Ingestion Knobs
+synthesis:
+  scenario: "deterministic"        # options: default, mobile-fast, desktop-browse, uniform, deterministic
+  scatter_weeks: 1                 # options: 1, 4, 13, 26, 52
+  seed: 42
+  time_mode: "hash"                # uniform or hash
+  limit_users: 50                  # null for full run, integer for sample/fixture
+  limit_events: 5000
+  delta_sampler:
+    kind: "exponential"            # exponential or uniform
+    mean_s: 30.0
+    lo_s: 5.0
+    hi_s: 120.0
+
+# 2. Recommendation Models Hyperparameters
+models:
+  als:
+    rank: 32
+    max_iter: 10
+    reg_param: 0.1
+    alpha: 10.0
+    strength_col: "strength_raw"   # strength_raw or strength_log
+    recommendation_k: 20
+    pilot_users: 5000
+    max_trials: 1                  # 1 to use explicit params above; >1 for grid search
+  graph:
+    backend: "graphframes"         # graphframes or dataframe
+    min_edge_weight: 2
+    reset_probability: 0.15
+    max_iter: 10
+    top_products: 20
+  hybrid:
+    alpha: 0.5                     # ALS weight
+    beta: 0.2                      # Graph / PageRank weight (restores 3-way hybrid)
+    gamma: 0.3                     # Real-time Trend weight
+    window_minutes: 30
+    output_top_k: 20
+
+# 3. Streaming & Replay Knobs
+streaming:
+  trigger_interval: "2 seconds"
+  watermark: "10 minutes"
+  window_short: "5 minutes"
+  window_long: "30 minutes"
+  slide: "1 minute"
+  fixture_rate: 100               # events/sec
+  full_rate: 1000
+  fixture_duration_seconds: 90
+  full_duration_seconds: 3600
+  mongo_top_k: 20
+
+# 4. Operational Deadlines & Timeouts
+timeouts:
+  steps:
+    input: 7200
+    module1: 1800
+    module2: 7200
+    module4: 7200
+    replay_fixture: 1800
+    replay_full: 65400
+    hybrid: 900
+  acceptance:
+    checkpoint_recovery_duration: 35
+    command_timeout: 60
+  infrastructure:
+    rollout_timeout: 900
+    pod_ready_timeout: 300
+
+# 5. Resources & Host Capacity Reserve
+resources:
+  pipeline_job:
+    cpu_request: "2"
+    cpu_limit: "2"
+    memory_request: "4Gi"
+    memory_limit: "6Gi"
+  capacity_reserve:
+    cpu_cores: 6
+    memory_gib: 12
+    free_disk_gib: 40
+
+# 6. Checkpoint & Resume Policy
+execution:
+  resume_policy: "enabled"         # enabled, strict, or disabled
+  checkpoint_dir: "/run/checkpoints"
+  data_dir: "/run/pipeline"

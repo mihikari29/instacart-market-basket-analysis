@@ -15,6 +15,9 @@ class HybridRankingConfig:
     trend_top_m: int = 20
     output_top_k: int = 20
     lambda_weight: float = 0.7
+    alpha: float = 0.5
+    beta: float = 0.0
+    gamma: float = 0.5
     epsilon: float = 1e-12
     algorithm_version: str = "hybrid-v1"
 
@@ -117,6 +120,7 @@ class ProductMetadata:
 
     product_id: int
     product_name: str
+    pagerank: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +138,8 @@ class Recommendation:
     rank: int
     from_als: bool
     from_trend: bool
+    pagerank_score: float | None = None
+    normalized_pagerank_score: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

@@ -1072,7 +1072,18 @@ def execute_pipeline(
         collect_network_policy_inventory(executor, identity, execute=True)
     except Exception as exc:
         raise PipelineError("B2 deny-first policy inventory failed before B3; no pipeline resources were applied") from exc
-    _require_pipeline_namespace_clear(executor, identity)
+    execution_receipt_path = directory / "execution-receipt.json"
+    completed_steps: list[str] = []
+    if execution_receipt_path.is_file():
+        try:
+            cached_receipt = json.loads(execution_receipt_path.read_text(encoding="utf-8"))
+            if cached_receipt.get("run_id") == identity.run_id and isinstance(cached_receipt.get("completed_steps"), list):
+                completed_steps = list(cached_receipt["completed_steps"])
+        except Exception:
+            pass
+
+    if not completed_steps:
+        _require_pipeline_namespace_clear(executor, identity)
     try:
         load_pipeline_images(executor, identity, lock, execute=True)
     except PipelineError as exc:
@@ -1081,28 +1092,31 @@ def execute_pipeline(
     receipt: dict[str, Any] = {
         "schema_version": 1, "run_id": identity.run_id, "profile": identity.profile,
         "namespace": identity.namespace, "mode": plan["mode"], "status": "running",
-        "started_at_utc": datetime.now(timezone.utc).isoformat(), "completed_steps": [],
+        "started_at_utc": datetime.now(timezone.utc).isoformat(), "completed_steps": list(completed_steps),
     }
-    execution_receipt_path = directory / "execution-receipt.json"
-    _checked(executor, kubectl(identity, "apply", "-f", str(directory / "platform.yaml")), "pipeline platform apply", 120)
-    _checked(executor, kubectl(identity, "apply", "-f", str(directory / "network-policies.yaml")), "pipeline network-policy apply", 120)
-    for claim in claim_names():
-        _checked(
-            executor,
-            kubectl(identity, "--namespace", identity.namespace, "wait", "--for=jsonpath={.status.phase}=Bound", f"pvc/{claim}", "--timeout=900s"),
-            f"{claim} binding",
-            930,
-        )
-    for resource, timeout_seconds in (("statefulset/hdfs-namenode", 900), ("statefulset/hdfs-datanode", 900), ("statefulset/kafka", 900)):
-        _checked(executor, kubectl(identity, "--namespace", identity.namespace, "rollout", "status", resource, f"--timeout={timeout_seconds}s"), f"{resource} readiness", timeout_seconds + 30)
-    from .hdfs_lifecycle import bootstrap_hdfs
 
-    receipt["hdfs_bootstrap"] = bootstrap_hdfs(executor, identity, execute=True)
-    receipt["completed_steps"].append("platform")
-    execution_receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    execution_receipt_path.chmod(0o600)
+    if "platform" not in completed_steps:
+        _checked(executor, kubectl(identity, "apply", "-f", str(directory / "platform.yaml")), "pipeline platform apply", 120)
+        _checked(executor, kubectl(identity, "apply", "-f", str(directory / "network-policies.yaml")), "pipeline network-policy apply", 120)
+        for claim in claim_names():
+            _checked(
+                executor,
+                kubectl(identity, "--namespace", identity.namespace, "wait", "--for=jsonpath={.status.phase}=Bound", f"pvc/{claim}", "--timeout=900s"),
+                f"{claim} binding",
+                930,
+            )
+        for resource, timeout_seconds in (("statefulset/hdfs-namenode", 900), ("statefulset/hdfs-datanode", 900), ("statefulset/kafka", 900)):
+            _checked(executor, kubectl(identity, "--namespace", identity.namespace, "rollout", "status", resource, f"--timeout={timeout_seconds}s"), f"{resource} readiness", timeout_seconds + 30)
+        from .hdfs_lifecycle import bootstrap_hdfs
+
+        receipt["hdfs_bootstrap"] = bootstrap_hdfs(executor, identity, execute=True)
+        receipt["completed_steps"].append("platform")
+        execution_receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        execution_receipt_path.chmod(0o600)
 
     for step in plan["steps"]:
+        if step["name"] in completed_steps:
+            continue
         manifest = directory / f"job-{step['name']}.yaml"
         expected_name = step["job_name"]
         if not manifest.is_file():

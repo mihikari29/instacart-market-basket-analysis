@@ -36,6 +36,7 @@ GRAPH_PROJECTION = {
     "_id": 0,
     "product_id": 1,
     "product_name": 1,
+    "pagerank": 1,
     "graph_version": 1,
     "run_id": 1,
 }
@@ -275,6 +276,7 @@ def _read_graph_catalog(
         raise SourceSnapshotError("graph query returned more rows than the bounded product ID set")
 
     products: dict[int, str] = {}
+    pageranks: dict[int, float] = {}
     requested_set = set(requested_ids)
     for row in rows:
         if row.get("graph_version") != identity.graph_version:
@@ -290,6 +292,9 @@ def _read_graph_catalog(
         if product_id in products:
             raise SourceSnapshotError(f"graph catalog contains duplicate product_id {product_id}")
         products[product_id] = product_name
+        pr_val = row.get("pagerank")
+        if isinstance(pr_val, (int, float)):
+            pageranks[product_id] = float(pr_val)
 
     missing_als = tuple(sorted(set(als_product_ids).difference(products)))
     if missing_als:
@@ -298,7 +303,10 @@ def _read_graph_catalog(
     missing_prospective = tuple(
         sorted(set(prospective_trend_product_ids).difference(products).difference(als_product_ids))
     )
-    catalog = tuple(ProductMetadata(product_id, products[product_id]) for product_id in sorted(products))
+    catalog = tuple(
+        ProductMetadata(product_id, products[product_id], pageranks.get(product_id))
+        for product_id in sorted(products)
+    )
     return catalog, missing_prospective
 
 

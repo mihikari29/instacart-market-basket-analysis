@@ -158,8 +158,23 @@ def _sample_users(frame, limit: int | None, seed: int):
 def _trial_grid(max_trials: int = 12) -> list[ALSParams]:
     if not 1 <= max_trials <= 12:
         raise ValueError("max_trials must be between 1 and 12")
+    custom_params = None
+    try:
+        from scripts.k8s.config import get_models_config
+        als_cfg = get_models_config().get("als", {})
+        if als_cfg:
+            custom_params = ALSParams(
+                rank=int(als_cfg.get("rank", 32)),
+                max_iter=int(als_cfg.get("max_iter", 10)),
+                reg_param=float(als_cfg.get("reg_param", 0.1)),
+                alpha=float(als_cfg.get("alpha", 10.0)),
+                strength_col=str(als_cfg.get("strength_col", "strength_raw")),
+            )
+    except Exception:
+        pass
+
     candidates = [
-        ALSParams(),
+        custom_params or ALSParams(),
         ALSParams(rank=16, reg_param=0.01, alpha=10.0, max_iter=5, strength_col="strength_raw"),
         ALSParams(rank=16, reg_param=0.05, alpha=10.0, max_iter=10),
         ALSParams(rank=32, reg_param=0.05, alpha=10.0, max_iter=10),
