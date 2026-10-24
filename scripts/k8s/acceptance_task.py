@@ -357,7 +357,7 @@ def _check_checkpoint_recovery(run_id: str, config, spark) -> dict[str, Any]:
         phase_output.mkdir(parents=True, exist_ok=False)
         receipt = run_stream(
             spark, recovery_config, phase_output, f"b4-checkpoint-{run_id}",
-            duration_seconds=12, checkpoint_id=checkpoint_id,
+            duration_seconds=35, checkpoint_id=checkpoint_id,
             checkpoint_root=checkpoint_root, on_query_started=publish_after_start,
         )
         progress_path = phase_output / "streaming_progress.jsonl"
