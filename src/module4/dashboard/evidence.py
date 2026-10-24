@@ -317,7 +317,7 @@ def _analytics_summary(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _metric_record(record: Any, cohort: str, model: str, k: int) -> dict[str, Any]:
+def _metric_record(record: Any, _cohort: str, _model: str, k: int) -> dict[str, Any]:
     if not isinstance(record, dict) or record.get("status") != "evaluated":
         raise InvalidEvidence("evaluation metric record is malformed or unavailable")
     if _integer(record.get("k"), "evaluation.k", minimum=1, maximum=100) != k:

@@ -621,7 +621,7 @@ def prepare_hybrid_snapshot(
 
 def ensure_final_recommendation_indexes(collection: Any) -> None:
     """Create and verify the two immutable per-version uniqueness indexes."""
-    if not callable(getattr(collection, "create_index", None)):
+    if not hasattr(collection, "create_index"):
         raise HybridSnapshotContractError("final recommendation collection must support create_index")
     for keys, options in _ROW_INDEXES:
         try:

@@ -839,8 +839,10 @@ class ApiClient:
         self.timeout = timeout
         self.max_response_bytes = max_response_bytes
         self.session = session or requests.Session()
-        if hasattr(self.session, "trust_env"):
+        try:
             self.session.trust_env = False
+        except AttributeError:
+            pass
 
     def _read_response(self, response: requests.Response) -> bytes:
         length = response.headers.get("Content-Length")

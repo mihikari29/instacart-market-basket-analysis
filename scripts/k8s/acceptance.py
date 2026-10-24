@@ -195,7 +195,7 @@ def read_receipt(source: Path | str | Mapping[str, Any], description: str) -> tu
     return value, sha256_bytes(encoded)
 
 
-def _get_json(executor: AcceptanceExecutor, identity: RunIdentity, command: list[str], description: str) -> dict[str, Any]:
+def _get_json(executor: AcceptanceExecutor, _identity: RunIdentity, command: list[str], description: str) -> dict[str, Any]:
     try:
         result = checked(executor, command)
         value = json_output(result, description)

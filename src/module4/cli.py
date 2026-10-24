@@ -1000,7 +1000,7 @@ def _validate_directed_edges(edges):
     return actual
 
 
-def run_graph(spark, tables, prior, config: Config, run_id: str, graph_version: str):
+def run_graph(spark, tables, prior, config: Config, _run_id: str, graph_version: str):
     from pyspark.sql import functions as F
 
     started = time.perf_counter()

@@ -357,7 +357,7 @@ def _publish_hybrid(
     }
 
 
-def _provision_and_verify_indexes(database: Any, namespace: str) -> dict[str, Any]:
+def _provision_and_verify_indexes(database: Any, _namespace: str) -> dict[str, Any]:
     for order, (name, keys) in PRODUCT_INDEXES.items():
         database["batch_product_metrics"].create_index(list(keys), name=name)
     database[BUNDLE_COLLECTION_NAME].create_index(

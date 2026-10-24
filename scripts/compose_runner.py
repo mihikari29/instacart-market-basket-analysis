@@ -81,7 +81,7 @@ class ModuleRunner:
         publishes = "--skip-serving" not in forwarded and forwarded[:1] != ["validate"]
         return self.services + ((self.serving_service,) if publishes else ())
 
-    def help_command(self, root: Path) -> list[str]:
+    def help_command(self, _root: Path) -> list[str]:
         """Return the container command that renders this module's usage."""
         return [
             "docker", "compose", "--profile", "tools", "run", "--rm",

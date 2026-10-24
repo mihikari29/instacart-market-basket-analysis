@@ -31,9 +31,10 @@ def _value(row: Any, key: str, source: str) -> Any:
         if key not in row:
             raise RankingContractError(f"{source}: missing required field {key!r}")
         return row[key]
-    if not hasattr(row, key):
-        raise RankingContractError(f"{source}: missing required field {key!r}")
-    return getattr(row, key)
+    try:
+        return getattr(row, key)
+    except AttributeError:
+        raise RankingContractError(f"{source}: missing required field {key!r}") from None
 
 
 def _positive_integer(value: Any, field: str, source: str) -> int:

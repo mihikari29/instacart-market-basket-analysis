@@ -44,8 +44,79 @@ Module 1 creates replay timestamps because the source has weekday and hour field
 | **3 — Speed layer** | Consume Kafka, validate and deduplicate events within watermark state, aggregate event-time trends, and publish finalized results and telemetry. |
 | **4A — ALS recommendations** | Fit implicit-feedback ALS from prior-history user/product counts, evaluate against held-out data, and publish versioned recommendations. |
 | **4B — Product graph** | Build prior-basket product co-purchase relationships and graph metrics for the full catalog. |
-| **4C — Hybrid serving** | Validate eligible source generations, combine ALS and trend candidates deterministically, evaluate prior-only inputs, and publish a versioned snapshot. |
+| **4C — Hybrid serving** | Validate eligible source generations, combine ALS, PageRank, and trend candidates deterministically, evaluate prior-only inputs, and publish a versioned snapshot. |
 | **4D — Read interface** | Serve bounded, read-only API views for recommendations, metrics, trends and registered evidence; render them in Streamlit. |
+
+## Centralized Pipeline Configuration & Execution Control
+
+All modules, model hyperparameters, timeouts, resource limits, and execution policies are unified and controlled declaratively via [`config/pipeline.yaml`](config/pipeline.yaml). No hyperparameters or timeouts are hardcoded.
+
+```yaml
+# config/pipeline.yaml summary
+execution:
+  resume_policy: "step"         # "step" (checkpoint & resume) | "disabled" (force fresh run)
+  skip_completed_steps: true    # Reuses existing verified step receipts without re-running
+  stage_output_check: true
+
+synthesis:
+  user_count: 500
+  product_count: 500
+  reorder_probability: 0.59
+  batch_size: 50000
+
+models:
+  als:
+    rank: 10
+    max_iter: 10
+    reg_param: 0.05
+    alpha: 20.0
+    strength_col: "log_events"
+    max_trials: 1               # 1 uses exact candidate #1 parameters; >1 performs hyperparameter search
+  graph:
+    reset_probability: 0.15
+    max_iter: 20
+    tol: 0.0001
+  hybrid:
+    alpha: 0.50                 # ALS collaborative filtering weight
+    beta: 0.20                  # Graph PageRank importance weight
+    gamma: 0.30                 # Event-time trending score weight
+    recommendation_k: 20
+
+streaming:
+  window_duration_seconds: 7200
+  slide_duration_seconds: 300
+  watermark_delay_seconds: 600
+  top_k_per_window: 20
+  bundle_retention_seconds: 86400
+
+timeouts:
+  step_timeout_seconds: 7200
+  job_timeout_seconds: 3600
+  service_timeout_seconds: 600
+  recovery_timeout_seconds: 35
+
+resources:
+  cpu_cores: 4
+  memory_gib: 8
+  capacity_reserve_memory_gib: 12  # Dynamic host reserve (override with IT4931_CAPACITY_RESERVE_MEMORY_GIB)
+```
+
+### Recommendation Model Control & 3-Way Hybrid Scoring
+The recommendation engine combines collaborative filtering, graph centrality, and real-time streaming trends:
+$$\text{final\_score} = \alpha \cdot \text{ALS}_{\text{norm}} + \beta \cdot \text{PageRank}_{\text{norm}} + \gamma \cdot \text{Trend}_{\text{norm}}$$
+- **Module 4A (ALS)**: Configured in `models.als` (`rank`, `max_iter`, `reg_param`, `alpha`). When `max_trials: 1`, it trains directly with these specified hyperparameters without running wasteful search sweeps.
+- **Module 4B (Product Graph)**: Configured in `models.graph` (`reset_probability`, `max_iter`). Calculates PageRank from prior-history co-purchase interactions.
+- **Module 4C (Hybrid Ranker)**: Fully connects ALS recommendations, Graph PageRank metrics, and real-time trend bundles with weights $\alpha, \beta, \gamma$. If $\beta = 0.0$, it falls back cleanly to 2-way $\lambda \cdot \text{ALS} + (1-\lambda) \cdot \text{Trend}$.
+
+### Checkpointing & Step Resumption
+When `execution.resume_policy: "step"` and `execution.skip_completed_steps: true`, the pipeline checks for verified step completion receipts (`stage-*-receipt.json`). Any step already successfully executed for the current `run_id` is automatically skipped (`[RESUME] step already complete`), eliminating wasteful re-computations and enabling seamless recovery from failures.
+
+### Structured Data Directory Layout
+Data assets are segregated by monotonic role:
+- `data/raw/`: Untouched raw upstream Instacart CSV source tables (`orders.csv`, `order_products__prior.csv`, etc.).
+- `data/samples/medium/`: Curated relationally-complete 500-user sample dataset and its `manifest.json`.
+- `data/clean/`: Parquet tables produced by the deterministic cleaning stage.
+- `data/synthesized/`: Deterministic event-time synthetic feeds generated for streaming replay.
 
 ## Dataset and source relationships
 

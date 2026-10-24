@@ -18,14 +18,6 @@ from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache
 from .eventlog import parse_event_logs, attach_metrics
 
 
-def save(path, value):
-    save_json(path, value)
-
-
-def revision():
-    return git_revision("MODULE2_COMMIT")
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -92,7 +84,7 @@ def main(argv=None):
         print("[HANDOFF VALIDATION]", report["validation"]["counts"], flush=True)
         if args.command in ("all", "stats"):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
-            save(output / "analytics.json", summary)
+            save_json(output / "analytics.json", summary)
             feature_timestamp = report["environment"]["timestamp_utc"]
             tag_user_features(outputs["user_features"], run_id, feature_timestamp).write.mode(
                 "overwrite"
@@ -127,12 +119,12 @@ def main(argv=None):
         spark = None
         attach_metrics(report, parse_event_logs(output / "eventlog"))
         report["status"] = "passed"
-        save(output / "summary.json", report)
+        save_json(output / "summary.json", report)
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
         return 0
     except Exception as exc:
         report.update(status="failed", error=safe_error_text(exc))
-        save(output / "summary.json", report)
+        save_json(output / "summary.json", report)
         raise
     finally:
         if spark is not None:

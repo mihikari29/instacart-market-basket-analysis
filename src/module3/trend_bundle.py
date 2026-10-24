@@ -437,23 +437,23 @@ def _duplicate_key_outcome(exc: Exception, documents: list[dict[str, Any]]):
     """Return reliable partial counts only for duplicate _id write errors."""
     from pymongo.errors import BulkWriteError, DuplicateKeyError
 
-    details = getattr(exc, "details", None)
-    if not isinstance(details, Mapping):
-        return None
-
     if isinstance(exc, BulkWriteError):
+        details = exc.details
+        if not isinstance(details, Mapping):
+            return None
         write_errors = details.get("writeErrors")
         if not isinstance(write_errors, list) or not write_errors:
             return None
         if details.get("writeConcernErrors"):
             return None
     elif isinstance(exc, DuplicateKeyError) and len(documents) == 1:
+        details = getattr(exc, "details", None)
         write_errors = [
             {
                 "index": 0,
-                "code": exc.code,
-                "keyPattern": details.get("keyPattern"),
-                "keyValue": details.get("keyValue"),
+                "code": getattr(exc, "code", None),
+                "keyPattern": details.get("keyPattern") if isinstance(details, Mapping) else None,
+                "keyValue": details.get("keyValue") if isinstance(details, Mapping) else None,
             }
         ]
     else:
@@ -586,8 +586,8 @@ def _upsert_chunk(
     try:
         result = collection.bulk_write(operations, ordered=False)
     except Exception as exc:
-        details = getattr(exc, "details", None) or {}
-        if isinstance(exc, BulkWriteError) and isinstance(details, Mapping):
+        if isinstance(exc, BulkWriteError) and isinstance(exc.details, Mapping):
+            details = exc.details
             partial_upserted = details.get("nUpserted", 0)
             partial_matched = details.get("nMatched", 0)
             if type(partial_upserted) is int and partial_upserted >= 0:
@@ -659,11 +659,6 @@ def write_trend_bundles(
     collection_name = getattr(collection, "name", None)
     if collection_name is not None and collection_name != BUNDLE_COLLECTION_NAME:
         invalid(f"collection must be {BUNDLE_COLLECTION_NAME!r}")
-    if any(
-        not callable(getattr(collection, method, None))
-        for method in ("index_information", "find", "create_index", "drop_index", "bulk_write")
-    ):
-        invalid("collection must provide Mongo index, find, and bulk-write operations")
 
     try:
         namespace = validate_namespace(source_namespace, "source_namespace", maximum=256)

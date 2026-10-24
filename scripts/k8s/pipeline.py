@@ -859,7 +859,7 @@ def _checked(executor: PipelineCommandExecutor, command: list[str], description:
         result = executor.run(command, timeout=timeout)
     except Exception as exc:
         raise PipelineError(f"{description} failed ({type(exc).__name__}); resources are retained") from exc
-    if getattr(result, "returncode", 1) != 0:
+    if result.returncode != 0:
         raise PipelineError(f"{description} failed with exit status {result.returncode}; resources are retained")
     return result
 
@@ -877,7 +877,7 @@ def _require_pipeline_namespace_clear(executor: PipelineCommandExecutor, identit
             payload = json.loads(result.stdout)
         except Exception as exc:
             raise PipelineError(f"B3 {resource_type} preflight failed ({type(exc).__name__}); no resources were applied") from exc
-        if getattr(result, "returncode", 1) != 0 or not isinstance(payload, Mapping) or not isinstance(payload.get("items"), list):
+        if result.returncode != 0 or not isinstance(payload, Mapping) or not isinstance(payload.get("items"), list):
             raise PipelineError(f"B3 {resource_type} preflight returned an invalid inventory; no resources were applied")
         for item in payload["items"]:
             if not isinstance(item, Mapping) or not isinstance(item.get("metadata"), Mapping):
@@ -1137,8 +1137,8 @@ def execute_pipeline(
                 )
             except Exception as exc:
                 raise PipelineError(f"full-data input stager Pod lookup failed ({type(exc).__name__}); resources are retained") from exc
-            pod_name = getattr(pod_result, "stdout", "").strip()
-            if getattr(pod_result, "returncode", 1) != 0 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", pod_name):
+            pod_name = pod_result.stdout.strip()
+            if pod_result.returncode != 0 or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", pod_name):
                 raise PipelineError("full-data input stager did not resolve to exactly one valid run-scoped Pod")
             from .data_receipts import REQUIRED_HEADERS
 

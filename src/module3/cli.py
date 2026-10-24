@@ -29,15 +29,6 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
 
 
-def revision():
-    return git_revision("MODULE3_COMMIT")
-
-
-def _redact_mongodb_uri(uri: str) -> str:
-    """Keep the Mongo host and database visible without recording credentials."""
-    return redact_uri(uri)
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -213,11 +204,11 @@ def main(argv=None):
         "run_id": run_id,
         "status": "running",
         "environment": {
-            **revision(),
+            **git_revision("MODULE3_COMMIT"),
             "source_code_sha256": code_digest(),
             "config": {
                 **asdict(config),
-                "mongodb_uri": _redact_mongodb_uri(config.mongodb_uri),
+                "mongodb_uri": redact_uri(config.mongodb_uri),
             },
             "python": platform.python_version(),
             "platform": platform.platform(),
