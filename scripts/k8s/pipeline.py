@@ -26,7 +26,7 @@ from .common import (
 )
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
 from .runtime import containerd_image_inventory_command, kubectl
-from .config import get_infrastructure_timeout, get_step_timeout
+from .config import get_infrastructure_timeout, get_step_timeout, get_capacity_reserve
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -48,7 +48,7 @@ TREND_SOURCE_NAMESPACE = "instacart-k8s-demo-v1"
 PIPELINE_STEPS = ("input", "module1", "module2", "module4", "replay", "hybrid")
 FIXTURE_MAX_USERS = 50
 FIXTURE_MAX_EVENTS = 5_000
-FULL_DATA_RESERVE = {"cpu_cores": 6, "memory_gib": 12, "free_disk_gib": 40}
+FULL_DATA_RESERVE = get_capacity_reserve()
 FULL_PIPELINE_CLAIM_BYTES = 16 * 1024**3
 FULL_PIPELINE_RESERVE_BYTES = 2 * 1024**3
 FULL_PIPELINE_WORKING_SET_MULTIPLIER = 3

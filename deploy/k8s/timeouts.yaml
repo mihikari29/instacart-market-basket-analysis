@@ -1,4 +1,4 @@
-# IT4931 Kubernetes Demonstration and Operational Timeouts (seconds)
+# IT4931 Kubernetes Demonstration and Operational Configuration
 pipeline_steps:
   input: 7200
   module1: 1800
@@ -19,3 +19,8 @@ infrastructure:
   rollout_timeout: 900
   pvc_bound_timeout: 900
   pod_ready_timeout: 300
+
+capacity_reserve:
+  cpu_cores: 6
+  memory_gib: 6
+  free_disk_gib: 40
