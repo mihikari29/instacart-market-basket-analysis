@@ -126,7 +126,7 @@ def extract_sample_dataset(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Extract a clean relationally complete Instacart sample")
     parser.add_argument("--source-dir", default="data/raw", help="Directory containing raw Instacart CSVs")
-    parser.add_argument("--output-dir", default="data/sample_medium", help="Output directory for sample CSVs")
+    parser.add_argument("--output-dir", default="data/synthesized/sample_medium", help="Output directory for sample CSVs")
     parser.add_argument("--users", type=int, default=500, help="Number of users to sample")
     args = parser.parse_args()
 
