@@ -26,6 +26,7 @@ from .common import (
 )
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
 from .runtime import containerd_image_inventory_command, kubectl
+from .config import get_infrastructure_timeout, get_step_timeout
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -437,14 +438,14 @@ class PipelinePlan:
 
 def _step_specs(identity: RunIdentity, mode: str = "fixture") -> tuple[PipelineStep, ...]:
     return tuple(
-        PipelineStep(name, f"it4931-{name}-{identity.run_id}", timeout, retry, retry_text)
-        for name, timeout, retry, retry_text in (
-            ("input", 7200, 0, "fixture is deterministic; full input transfer is verified by the six-file manifest hash"),
-            ("module1", 1800, 0, "no automatic retry; inspect partial staging before a new run identity"),
-            ("module2", 7200, 0, "no automatic retry; includes bounded local[1]/local[2] executor benchmark"),
-            ("module4", 7200, 0, "no automatic retry; stable model versions require a reviewed new attempt"),
-            ("replay", 65_400 if mode == "full" else 1800, 0, "no automatic retry; resume requires verified Kafka offsets and checkpoint receipt"),
-            ("hybrid", 900, 0, "insert-only source identity; no automatic conflict repair"),
+        PipelineStep(name, f"it4931-{name}-{identity.run_id}", get_step_timeout(name, mode), retry, retry_text)
+        for name, retry, retry_text in (
+            ("input", 0, "fixture is deterministic; full input transfer is verified by the six-file manifest hash"),
+            ("module1", 0, "no automatic retry; inspect partial staging before a new run identity"),
+            ("module2", 0, "no automatic retry; includes bounded local[1]/local[2] executor benchmark"),
+            ("module4", 0, "no automatic retry; stable model versions require a reviewed new attempt"),
+            ("replay", 0, "no automatic retry; resume requires verified Kafka offsets and checkpoint receipt"),
+            ("hybrid", 0, "insert-only source identity; no automatic conflict repair"),
         )
     )
 

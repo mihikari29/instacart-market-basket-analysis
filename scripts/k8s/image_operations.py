@@ -10,6 +10,7 @@ from .image_provenance import verify_loaded_image_inventory
 from .lock_lifecycle import validate_static_lock
 from .ownership import OwnershipError, RunIdentity, validate_version_lock
 from .runtime import CommandExecutor, RuntimePreflightError, checked, containerd_image_inventory_command
+from .config import get_infrastructure_timeout
 
 
 class ImageOperationError(RuntimeError):
@@ -149,7 +150,7 @@ def load_and_verify_application_images(
                 "minikube", "-p", identity.profile, "ssh", "--",
                 "sudo", "ctr", "-n", "k8s.io", "images", "tag", source_ref, t_ref,
             ]
-            executor.run(tag_cmd, timeout=120)
+            executor.run(tag_cmd, timeout=get_infrastructure_timeout("image_tag_timeout"))
 
     try:
         inventory = checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout

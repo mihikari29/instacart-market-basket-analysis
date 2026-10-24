@@ -20,6 +20,7 @@ from .data_receipts import REQUIRED_HEADERS, source_manifest_digest
 from .common import als_model_version, graph_version
 from .common import sha256_json
 from .pipeline_task import RUNTIME_ROOT, TaskError, runtime_values, write_json
+from .config import get_checkpoint_recovery_duration
 
 
 def _canonical_digest(value: Any) -> str:
@@ -357,7 +358,7 @@ def _check_checkpoint_recovery(run_id: str, config, spark) -> dict[str, Any]:
         phase_output.mkdir(parents=True, exist_ok=False)
         receipt = run_stream(
             spark, recovery_config, phase_output, f"b4-checkpoint-{run_id}",
-            duration_seconds=35, checkpoint_id=checkpoint_id,
+            duration_seconds=get_checkpoint_recovery_duration(), checkpoint_id=checkpoint_id,
             checkpoint_root=checkpoint_root, on_query_started=publish_after_start,
         )
         progress_path = phase_output / "streaming_progress.jsonl"
