@@ -442,8 +442,8 @@ def _assert_recommendation_cohort(frame, requested_users, products, k, item_fact
 
     expected_users = requested_users.select("user_id").distinct()
     actual_users = frame.select("user_id").distinct()
-    missing = expected_users.join(actual_users, "user_id", "left_anti").limit(1).count()
-    unexpected = actual_users.join(expected_users, "user_id", "left_anti").limit(1).count()
+    missing = [r.user_id for r in expected_users.join(F.broadcast(actual_users), "user_id", "left_anti").take(1)]
+    unexpected = [r.user_id for r in actual_users.join(F.broadcast(expected_users), "user_id", "left_anti").take(1)]
     if missing or unexpected:
         raise ValueError("recommendation user set does not match prior factor-backed users")
     target_rows = min(k, item_factor_count)
@@ -765,8 +765,8 @@ def run_als(
 
         factor_users = model.userFactors.select(F.col("id").alias("user_id")).distinct().cache()
         factor_items = model.itemFactors.select(F.col("id").alias("product_id")).distinct().cache()
-        missing_factors = all_prior_users.join(factor_users, "user_id", "left_anti").count()
-        extra_factors = factor_users.join(all_prior_users, "user_id", "left_anti").count()
+        missing_factors = all_prior_users.join(F.broadcast(factor_users), "user_id", "left_anti").count()
+        extra_factors = factor_users.join(F.broadcast(all_prior_users), "user_id", "left_anti").count()
         if missing_factors or extra_factors:
             raise ValueError("ALS user factors do not exactly match prior-active users")
 

@@ -214,6 +214,7 @@ def _materialize_top_k(fetch, requested, available_items, k, retain):
 
     limit = min(available_items, max(1, k + 1))
     candidates = retain(fetch(requested, limit))
+    candidates.count()
     while limit < available_items:
         by_rank = Window.partitionBy("user_id").orderBy(
             F.desc("als_score"), F.asc("product_id")
@@ -226,19 +227,20 @@ def _materialize_top_k(fetch, requested, available_items, k, retain):
             F.count("*").alias("_candidate_count"), F.min("als_score").alias("_last_score")
         )
         ambiguous = (
-            boundary.join(last, "user_id")
+            boundary.join(F.broadcast(last), "user_id")
             .where(
                 (F.col("_candidate_count") >= limit)
                 & (F.col("_last_score") == F.col("_boundary_score"))
             )
             .select("user_id")
         )
-        if not ambiguous.limit(1).count():
+        if not [r.user_id for r in ambiguous.take(1)]:
             candidates = ranked.drop("_candidate_rank")
             break
-        stable = candidates.join(ambiguous, "user_id", "left_anti")
+        stable = candidates.join(F.broadcast(ambiguous), "user_id", "left_anti")
         limit = min(available_items, limit * 2)
         candidates = retain(stable.unionByName(fetch(ambiguous, limit)))
+        candidates.count()
 
     ranking = Window.partitionBy("user_id").orderBy(
         F.desc("als_score"), F.asc("product_id")
@@ -268,8 +270,8 @@ def recommend_with_fallback(model, users, interactions, k: int = 20):
     """
     warm = recommend_top_k(model, users, k)
     requested = users.select("user_id").distinct()
-    missing = requested.join(warm.select("user_id").distinct(), "user_id", "left_anti")
-    if not missing.limit(1).count():
+    missing = requested.join(F.broadcast(warm.select("user_id").distinct()), "user_id", "left_anti")
+    if not [r.user_id for r in missing.take(1)]:
         return warm
     from .evaluation import global_popularity
 
