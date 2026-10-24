@@ -717,7 +717,11 @@ def run_als(
             reused = True
         else:
             model = fit_model(interactions, selected, config.seed, config.als_blocks)
-            verification_users = interactions.select("user_id").distinct().orderBy("user_id").limit(5)
+            verification_user_ids = [
+                r.user_id
+                for r in interactions.select("user_id").distinct().orderBy("user_id").limit(5).collect()
+            ]
+            verification_users = spark.createDataFrame([(u,) for u in verification_user_ids], "user_id int")
             verification = recommend_top_k(model, verification_users, config.recommendation_k)
             try:
                 before_save = verification.orderBy("user_id", "als_rank").collect()

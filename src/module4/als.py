@@ -167,7 +167,15 @@ def recommend_top_k(model, users, k: int = 20):
     if missing:
         raise ValueError(f"users: missing required columns {sorted(missing)}")
 
-    requested = users.select(F.col("user_id").cast("int").alias("user_id")).distinct()
+    user_rows = [
+        int(r.user_id)
+        for r in users.select(F.col("user_id").cast("int").alias("user_id")).distinct().collect()
+    ]
+    if not user_rows:
+        return users.sparkSession.createDataFrame(
+            [], "user_id int, product_id int, als_score double, als_rank int"
+        )
+    requested = users.sparkSession.createDataFrame([(u,) for u in user_rows], "user_id int")
     available_items = int(model.itemFactors.select("id").distinct().count())
     if available_items == 0:
         return model.userFactors.sparkSession.createDataFrame(
