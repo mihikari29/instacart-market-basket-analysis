@@ -3,8 +3,7 @@ on:
   push:
     branches:
       - main
-      - module3-speed-layer
-      - fix/module3-hardening
+      - 'feat/**'
     paths:
       - 'src/module3/**'
       - 'src/module1/producer.py'
@@ -12,9 +11,9 @@ on:
       - 'src/module1/generate.py'
       - 'src/module1/config.py'
       - 'scripts/module3*.py'
-      - 'scripts/module4/module4d_demo_fixture.py'
-      - 'scripts/module4/module4d_demo_validate.py'
-      - 'deploy/module4/compose.demo.yaml'
+      - 'scripts/dashboard/demo_fixture.py'
+      - 'scripts/dashboard/demo_validate.py'
+      - 'deploy/dashboard/compose.demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -32,9 +31,9 @@ on:
       - 'src/module1/event_reader.py'
       - 'src/module1/generate.py'
       - 'scripts/module3*.py'
-      - 'scripts/module4/module4d_demo_fixture.py'
-      - 'scripts/module4/module4d_demo_validate.py'
-      - 'deploy/module4/compose.demo.yaml'
+      - 'scripts/dashboard/demo_fixture.py'
+      - 'scripts/dashboard/demo_validate.py'
+      - 'deploy/dashboard/compose.demo.yaml'
       - 'tests/test_module3.py'
       - 'tests/test_module1_hardening.py'
       - 'compose.yaml'
@@ -66,18 +65,24 @@ jobs:
       - name: Regenerate bounded Module 1 feed
         run: |
           python scripts/fetch_instacart.py
-          python -m src.module1.clean --validate
+          if python -m src.module1.clean --validate; then
+            :
+          else
+            validation_status=$?
+            python -m src.module1.raw_diagnostic --raw-dir data/raw || true
+            exit "$validation_status"
+          fi
           python -m src.module1.generate --scenario default --scatter-weeks 13 \
             --limit-users 500 --batch-users 500 --out-dir data/synthesized/module3_dev
       - name: Build pinned Spark runtime and run streaming tests
         run: |
           docker compose build spark-master
           docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q \
-            --ignore=tests/test_module4d_api_mongo.py \
-            --ignore=tests/test_module4d_batch_api_mongo.py \
-            --ignore=tests/test_module4d_ui_app.py \
-            --ignore=tests/test_module4d_ui_client.py \
-            --ignore=tests/test_module4d_ui_evaluation.py
+            --ignore=tests/test_dashboard_api_mongo.py \
+            --ignore=tests/test_dashboard_batch_api_mongo.py \
+            --ignore=tests/test_dashboard_ui_app.py \
+            --ignore=tests/test_dashboard_ui_client.py \
+            --ignore=tests/test_dashboard_ui_evaluation.py
       - name: Run Streamlit UI regressions in the UI development image
         run: |
           image="instacart-module4d-ui-dev:module3-${GITHUB_RUN_ID}"
@@ -90,11 +95,11 @@ jobs:
             -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
             -e PYTEST_ADDOPTS="-p no:cacheprovider" "$image" \
             python -m pytest -q \
-            tests/test_module4d_ui_app.py \
-            tests/test_module4d_ui_client.py \
-            tests/test_module4d_ui_evaluation.py
+            tests/test_dashboard_ui_app.py \
+            tests/test_dashboard_ui_client.py \
+            tests/test_dashboard_ui_evaluation.py
       - name: Run D1A/D1B API and isolated MongoDB tests
-        run: python3 scripts/module4/module4d_api_validation.py --mode all
+        run: python3 scripts/dashboard/api_validation.py --mode all
       - name: Start services (Spark, Kafka, Mongo)
         run: |
           docker compose up -d --wait spark-master spark-worker kafka mongodb
@@ -106,9 +111,9 @@ jobs:
       - name: Validate connectivity (no streaming)
         run: python3 scripts/module3.py validate
       - name: Real Kafka to Spark to Mongo smoke
-        run: python3 scripts/module3_smoke.py --events 5000 --duration-seconds 60
+        run: python3 scripts/module3_smoke.py live --events 5000 --duration-seconds 60
       - name: Checkpoint recovery across separate Spark processes
-        run: python3 scripts/module3_recovery.py --duration-seconds 20
+        run: python3 scripts/module3_smoke.py recovery --duration-seconds 20
       - name: Deterministic late-data and watermark validation
         run: python3 scripts/module3.py late-demo --duration-seconds 60
       - name: Short measured throughput smoke

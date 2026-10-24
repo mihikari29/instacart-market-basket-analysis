@@ -17,8 +17,31 @@ used 32,434,489 prior facts for analytics, verified equal pivot/unpivot totals,
 published MongoDB aggregates and measured join, pruning and cache behavior.
 
 See [full-data validation and batch benchmarks](full/README.md). Compact data is
-available in [current-hardening-2026-10-03.json](full/current-hardening-2026-10-03.json),
-with detailed plans and metrics in [full/summary.json](full/summary.json).
+available in [current-hardening-2026-10-03.json](full/current-hardening-2026-10-03.json)
+and in the [compact full summary](full/summary-compact.json), which carries the
+validation result, the analytics and the benchmark medians.
+
+The technical acceptance checklist for Modules 1 to 3 is in
+[checklist.md](checklist.md).
+
+## Files registered by live code
+
+Five archived artifacts are served by the Module 4D API through the registry in
+`src/module4/dashboard/evidence.py`. Their paths are a **runtime contract**:
+the API resolves them by path and enforces a 256 KiB per-artifact limit. They
+must never be moved, renamed or trimmed.
+
+| Evidence ID | Path |
+|---|---|
+| `module2-full-analytics` | `full/analytics.json` |
+| `module2-full-hardening-benchmarks` | `full/current-hardening-2026-10-03.json` |
+| `module4a-full-als-evaluation` | `module4/full-ab-20261010-fixed-first/evaluation.json` |
+| `module4c-c8a-responsiveness` | `module4c/c8a-receipt.json` |
+| `module4c-c8b-streaming-demo` | `module4c/c8b-receipt.json` |
+
+Every other archived file is documentation. [SHA256SUMS](SHA256SUMS) records
+the digest of each one, so an accidental rewrite of history is detectable and
+the byte-identical relationships between run directories can be re-checked.
 
 ## Module 3 streaming validation
 
@@ -40,7 +63,7 @@ equal; fact/event multiset and partition integrity checks pass. The fixture also
 verifies Spark operators, output equivalence, Mongo replacement behavior and
 repeatable join, pruning and cache measurements.
 
-- [Fixture summary](fixture-summary.json)
+- [Fixture summary](fixture-summary-compact.json)
 - [Fixture analytics](fixture-analytics.json)
 - Historical fixture environment: Windows local mode, Spark 3.5.5, Java 17.0.20.1,
   Python 3.13.2, eight shuffle partitions, one warm-up and three measured trials.
@@ -51,7 +74,8 @@ dataset; they are not full-scale performance claims.
 ## Module 4 acceptance and release evidence
 
 Module 4A–4B full-data acceptance records, failed/interrupted attempts, and
-same-version replay receipts remain under [module4/](module4/). The
+same-version replay receipts remain under [module4/](module4/), which carries
+its own [run-directory index](module4/README.md). The
 [Module 4A/4B implementation history](module4/ab-implementation-history.md)
 preserves the R01–R12 audit, W01–W13 backlog, partial/failed/interrupted
 checkpoints, 10 October acceptance and checked gates, and historical reproduction

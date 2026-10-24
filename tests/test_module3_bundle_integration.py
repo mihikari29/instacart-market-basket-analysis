@@ -1,6 +1,9 @@
+
+from tests.helpers import FakeBulkResult, FakeUpdateOne
 """Focused tests for the optional Module 3 trend-bundle publisher."""
 
 # ruff: noqa: E402 -- PySpark imports follow an optional dependency guard.
+
 
 from datetime import datetime, timedelta
 import json
@@ -19,8 +22,7 @@ from pyspark.sql.types import (
 )
 
 from src.module3 import cli, stream
-from src.module3.config import Config
-from src.module3.spark import session
+from src.module3.config import Config, session
 from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     TrendBundleConflictError,
@@ -41,17 +43,8 @@ WINDOW_SCHEMA = StructType(
 )
 
 
-class FakeUpdateOne:
-    def __init__(self, filter_document, update_document, upsert):
-        self.filter = filter_document
-        self.update = update_document
-        self.upsert = upsert
 
 
-class FakeBulkResult:
-    def __init__(self, upserted=0, matched=0):
-        self.upserted_count = upserted
-        self.matched_count = matched
 
 
 class FakeBundleCollection:
@@ -299,6 +292,8 @@ def test_disabled_publisher_keeps_legacy_report_and_never_connects(tmp_path, mon
         "top_k_per_window",
         "replaced_documents",
         "duration_ms",
+        "sink_write_duration_ms",
+        "ingestion_to_output_latency",
         "upserted",
         "modified",
         "matched",

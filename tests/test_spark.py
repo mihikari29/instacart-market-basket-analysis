@@ -6,8 +6,7 @@ import pytest
 pyspark = pytest.importorskip("pyspark")
 from pyspark.sql import functions as F
 from src.module2.fixtures import create_fixture
-from src.module2.config import Config
-from src.module2.spark import session
+from src.module2.config import Config, session
 from src.module2.data import read_tables, validate
 from src.module2.analytics import analyze, department_hour_pivot_unpivot, history
 from src.module2.benchmarks import (

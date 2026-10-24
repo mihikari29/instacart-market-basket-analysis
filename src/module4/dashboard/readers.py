@@ -1,6 +1,7 @@
 """Fail-closed, read-only readers for published Module 4D snapshots."""
 
 from __future__ import annotations
+from ...common.runtime import stored_utc
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -21,9 +22,12 @@ from src.module4.hybrid.trend_reader import (
 
 READINESS_COLLECTION = "module4_snapshot_readiness"
 FINAL_RECOMMENDATIONS_COLLECTION = "final_recommendations"
+ALS_RECOMMENDATIONS_COLLECTION = "user_recommendations"
+GRAPH_METRICS_COLLECTION = "product_graph_metrics"
 TREND_BUNDLE_COLLECTION = BUNDLE_COLLECTION_NAME
 SERVING_SCHEMA_VERSION = 1
 MAX_RECOMMENDATIONS = 20
+MAX_ALS_RECOMMENDATIONS = 20
 MAX_PRODUCT_NAME_CHARS = 4096
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _POINTER_FIELDS = {
@@ -120,6 +124,22 @@ class TrendSnapshotIndexUnavailable(SnapshotReadError):
     """The administrator-provisioned index required by C5 selection is absent."""
 
 
+class ALSModelNotFound(SnapshotReadError):
+    """No active ALS model, or the requested model is not the active snapshot."""
+
+
+class ALSModelNotReady(SnapshotReadError):
+    """The active A/B pointer does not confirm a complete ALS publication."""
+
+
+class ALSSnapshotChanged(SnapshotReadError):
+    """The active A/B generation changed while ALS rows were being read."""
+
+
+class InvalidALSSnapshot(SnapshotReadError):
+    """Stored ALS recommendation rows violate the Module 4A contract."""
+
+
 @dataclass(frozen=True, slots=True)
 class _ValidatedPointer:
     document: dict[str, Any]
@@ -127,16 +147,6 @@ class _ValidatedPointer:
     def identity(self) -> tuple[Any, ...]:
         return tuple(self.document.get(field) for field in _POINTER_IDENTITY_FIELDS)
 
-
-def _stored_utc(value: Any, field: str) -> datetime:
-    if not isinstance(value, datetime):
-        raise SnapshotNotReady(f"pointer {field} is not a BSON datetime")
-    try:
-        if value.tzinfo is None or value.utcoffset() is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-    except (OverflowError, ValueError) as exc:
-        raise SnapshotNotReady(f"pointer {field} is not a valid UTC instant") from exc
 
 
 def _finite_number(value: Any, field: str, *, minimum: float | None = None, maximum: float | None = None) -> float:
@@ -233,10 +243,10 @@ def _validated_pointer(document: Any, user_id: int) -> _ValidatedPointer:
     normalized["trend_window_end"] = (
         None
         if document.get("trend_window_end") is None
-        else _stored_utc(document.get("trend_window_end"), "trend_window_end")
+        else stored_utc(document.get("trend_window_end"), "trend_window_end", error=SnapshotNotReady)
     )
-    normalized["as_of_event_time"] = _stored_utc(document.get("as_of_event_time"), "as_of_event_time")
-    normalized["updated_at"] = _stored_utc(document.get("updated_at"), "updated_at")
+    normalized["as_of_event_time"] = stored_utc(document.get("as_of_event_time"), "as_of_event_time", error=SnapshotNotReady)
+    normalized["updated_at"] = stored_utc(document.get("updated_at"), "updated_at", error=SnapshotNotReady)
     if normalized["trend_window_end"] is not None and normalized["trend_window_end"] > normalized[
         "as_of_event_time"
     ]:
@@ -424,12 +434,188 @@ def _validate_rows(
 
 
 def _close_cursor(cursor: Any) -> None:
+    # Best effort: a cursor that fails to close must not mask the read result.
     close = getattr(cursor, "close", None)
     if callable(close):
         try:
             close()
         except Exception:
             pass
+
+
+def _active_als_identity(document: Any) -> tuple[str, str, str]:
+    if not isinstance(document, Mapping):
+        raise ALSModelNotReady("active A/B readiness document is missing")
+    if document.get("_id") != "active" or document.get("status") != "ready" or document.get("ready") is not True:
+        raise ALSModelNotReady("active A/B readiness does not identify a ready model")
+    if document.get("recommendation_published") is not True or document.get("graph_published") is not True:
+        raise ALSModelNotReady("active A/B readiness does not confirm both published snapshots")
+    if document.get("single_writer_policy") != "module4_publication_lock" or document.get("error"):
+        raise ALSModelNotReady("active A/B readiness violates the publication contract")
+    values = []
+    for field in ("run_id", "model_version", "graph_version"):
+        value = document.get(field)
+        if (
+            not isinstance(value, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value)
+            or ".." in value
+        ):
+            raise ALSModelNotReady(f"active A/B readiness has an invalid {field}")
+        values.append(value)
+    return tuple(values)
+
+
+def _read_bounded_cursor(collection: Any, query: dict[str, Any], projection: dict[str, int], index: str, sort: list[tuple[str, int]], limit: int, max_time_ms: int) -> list[Mapping[str, Any]]:
+    cursor = None
+    try:
+        cursor = collection.find(query, projection=projection, max_time_ms=max_time_ms)
+        cursor = cursor.hint(index).sort(sort).limit(limit).max_time_ms(max_time_ms)
+        rows = list(cursor)
+    except Exception as exc:
+        raise DatabaseReadFailure("MongoDB could not complete a bounded source read") from exc
+    finally:
+        if cursor is not None:
+            _close_cursor(cursor)
+    if any(not isinstance(row, Mapping) for row in rows):
+        raise InvalidALSSnapshot("stored ALS source contains a non-document row")
+    return rows
+
+
+def read_als_snapshot(
+    database: Any,
+    user_id: int,
+    *,
+    model_version: str | None = None,
+    limit: int = MAX_ALS_RECOMMENDATIONS,
+    max_time_ms: int = 5_000,
+) -> dict[str, Any]:
+    """Read one bounded user ALS list from the active, paired A/B generation.
+
+    The active readiness identity is read before and after immutable ALS rows
+    and optional graph-catalog metadata. This path is strictly read-only.
+    """
+    if type(user_id) is not int or not 0 < user_id <= 9_223_372_036_854_775_807:
+        raise ValueError("user_id must be a positive signed 64-bit integer")
+    if type(limit) is not int or not 1 <= limit <= MAX_ALS_RECOMMENDATIONS:
+        raise ValueError("limit must be between 1 and 20")
+    if type(max_time_ms) is not int or not 1 <= max_time_ms <= 60_000:
+        raise ValueError("max_time_ms must be between 1 and 60000")
+
+    readiness = database[READINESS_COLLECTION]
+    try:
+        first_raw = readiness.find_one({"_id": "active"}, max_time_ms=max_time_ms)
+    except Exception as exc:
+        raise DatabaseReadFailure("MongoDB readiness lookup failed") from exc
+    if first_raw is None:
+        raise ALSModelNotFound("no active ALS model is published")
+    first = _active_als_identity(first_raw)
+    run_id, active_model, graph_version = first
+    if model_version is not None:
+        if (
+            not isinstance(model_version, str)
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", model_version)
+            or ".." in model_version
+        ):
+            raise ValueError("model_version has an invalid format")
+        if model_version != active_model:
+            raise ALSModelNotFound("requested model_version is not the active published ALS model")
+
+    query = {"model_version": active_model, "run_id": run_id, "user_id": user_id}
+    rows = _read_bounded_cursor(
+        database[ALS_RECOMMENDATIONS_COLLECTION],
+        query,
+        {"_id": 0, "user_id": 1, "product_id": 1, "als_score": 1, "als_rank": 1, "model_version": 1, "run_id": 1},
+        "uq_model_user_rank",
+        [("als_rank", 1), ("product_id", 1)],
+        MAX_ALS_RECOMMENDATIONS + 1,
+        max_time_ms,
+    )
+    if len(rows) > MAX_ALS_RECOMMENDATIONS:
+        raise InvalidALSSnapshot("ALS recommendation rows exceed the published Top-20 bound")
+
+    product_ids: list[int] = []
+    ranks: list[int] = []
+    validated_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("model_version") != active_model or row.get("run_id") != run_id:
+            raise InvalidALSSnapshot("ALS row provenance does not match the active A/B pointer")
+        if type(row.get("user_id")) is not int or row["user_id"] != user_id:
+            raise InvalidALSSnapshot("ALS row user_id does not match the request")
+        product_id, rank = row.get("product_id"), row.get("als_rank")
+        if type(product_id) is not int or product_id <= 0:
+            raise InvalidALSSnapshot("ALS row product_id must be a positive integer")
+        if type(rank) is not int or not 1 <= rank <= MAX_ALS_RECOMMENDATIONS:
+            raise InvalidALSSnapshot("ALS row als_rank is outside the published Top-20 bound")
+        try:
+            score = _finite_number(row.get("als_score"), "als_score")
+        except InvalidSnapshot as exc:
+            raise InvalidALSSnapshot("ALS score must be finite") from exc
+        product_ids.append(product_id)
+        ranks.append(rank)
+        validated_rows.append({"product_id": product_id, "als_rank": rank, "als_score": score})
+    if len(set(product_ids)) != len(product_ids) or len(set(ranks)) != len(ranks):
+        raise InvalidALSSnapshot("ALS rows contain duplicate products or ranks")
+    if ranks != list(range(1, len(ranks) + 1)):
+        raise InvalidALSSnapshot("ALS ranks must be contiguous from 1 in deterministic order")
+    score_order = sorted(validated_rows, key=lambda row: (-row["als_score"], row["product_id"]))
+    if [(row["als_rank"], row["product_id"]) for row in validated_rows] != [
+        (row["als_rank"], row["product_id"]) for row in score_order
+    ]:
+        raise InvalidALSSnapshot("ALS ranks do not follow descending score and ascending product ID")
+
+    names: dict[int, str] = {}
+    if product_ids:
+        catalog_rows = _read_bounded_cursor(
+            database[GRAPH_METRICS_COLLECTION],
+            {"graph_version": graph_version, "run_id": run_id, "product_id": {"$in": product_ids}},
+            {"_id": 0, "product_id": 1, "product_name": 1, "graph_version": 1, "run_id": 1},
+            "uq_graph_product",
+            [("product_id", 1)],
+            len(product_ids) + 1,
+            max_time_ms,
+        )
+        if len(catalog_rows) > len(product_ids):
+            raise InvalidALSSnapshot("graph metadata query exceeded its requested product IDs")
+        for row in catalog_rows:
+            product_id = row.get("product_id")
+            name = row.get("product_name")
+            if (
+                row.get("graph_version") != graph_version
+                or row.get("run_id") != run_id
+                or type(product_id) is not int
+                or product_id not in product_ids
+                or product_id in names
+            ):
+                raise InvalidALSSnapshot("graph metadata provenance or product identity is invalid")
+            if name is None:
+                continue
+            if not isinstance(name, str) or not name.strip() or len(name) > MAX_PRODUCT_NAME_CHARS:
+                raise InvalidALSSnapshot("graph product metadata has an invalid product_name")
+            names[product_id] = name
+
+    try:
+        second_raw = readiness.find_one({"_id": "active"}, max_time_ms=max_time_ms)
+    except Exception as exc:
+        raise DatabaseReadFailure("MongoDB readiness recheck failed") from exc
+    if second_raw is None or _active_als_identity(second_raw) != first:
+        raise ALSSnapshotChanged("active A/B source identity changed during the ALS read")
+
+    items = [
+        {"product_id": row["product_id"], "product_name": names.get(row["product_id"]),
+         "als_rank": row["als_rank"], "als_score": row["als_score"]}
+        for row in validated_rows[:limit]
+    ]
+    return {
+        "user_id": user_id,
+        "model_version": active_model,
+        "status": "available" if items else "empty",
+        "reason": None if items else "no_als_rows_for_user_in_selected_model",
+        "recommendation_count": len(items),
+        "requested_limit": limit,
+        "has_more": len(validated_rows) > limit,
+        "source": {"run_id": run_id, "model_version": active_model, "graph_version": graph_version},
+        "recommendations": items,
+    }
 
 
 def read_hybrid_snapshot(database: Any, user_id: int, *, max_time_ms: int = 5_000) -> dict[str, Any]:
@@ -652,3 +838,23 @@ def read_trend_snapshot(
         raise
     except Exception as exc:
         raise TrendSnapshotQueryError("failed to read the finalized trend bundle") from exc
+
+
+def read_streaming_metrics(database: Any, source_namespace: str, *, max_time_ms: int) -> dict[str, Any]:
+    """Read one bounded metrics document through MongoDB's built-in _id index."""
+    from src.module3.metrics import COLLECTION, FIELDS, canonicalize_snapshot_for_json
+
+    try:
+        document = database[COLLECTION].find_one(
+            {"_id": source_namespace}, {"_id": 0, **{key: 1 for key in FIELDS}}, max_time_ms=max_time_ms
+        )
+    except Exception as exc:
+        raise DatabaseReadFailure("streaming metrics query failed") from exc
+    if document is not None:
+        try:
+            document = canonicalize_snapshot_for_json(document)
+            if document["source_namespace"] != source_namespace:
+                raise ValueError("metrics namespace mismatch")
+        except (TypeError, ValueError, KeyError, OverflowError) as exc:
+            raise InvalidSnapshot("streaming metrics failed validation") from exc
+    return {"available": document is not None, "source_namespace": source_namespace, "metrics": document}

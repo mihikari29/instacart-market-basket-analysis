@@ -1,0 +1,225 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pipeline-egress
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {it4931.instacart.edu/role: pipeline}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-namenode}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-datanode}}
+      ports:
+        - {protocol: TCP, port: 9864}
+        - {protocol: TCP, port: 9866}
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: kafka}}
+      ports:
+        - {protocol: TCP, port: 29092}
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: module4d-mongo}}
+      ports:
+        - {protocol: TCP, port: 27017}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pipeline-to-hdfs
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hdfs-namenode}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {it4931.instacart.edu/role: pipeline}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-namenode}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-namenode}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pipeline-to-datanode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hdfs-datanode}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {it4931.instacart.edu/role: pipeline}}
+      ports:
+        - {protocol: TCP, port: 9864}
+        - {protocol: TCP, port: 9866}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-datanode-to-namenode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hdfs-namenode}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-datanode}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-datanode-egress-to-namenode
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: hdfs-datanode}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: hdfs-namenode}}
+      ports:
+        - {protocol: TCP, port: 8020}
+        - {protocol: TCP, port: 9870}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-controller-self
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: kafka}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: kafka}}
+      ports:
+        - {protocol: TCP, port: 9093}
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: kafka}}
+      ports:
+        - {protocol: TCP, port: 9093}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pipeline-to-kafka
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: kafka}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {it4931.instacart.edu/role: pipeline}}
+      ports:
+        - {protocol: TCP, port: 29092}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pipeline-to-mongo
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: module4d-mongo}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {it4931.instacart.edu/role: pipeline}}
+      ports:
+        - {protocol: TCP, port: 27017}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acceptance-api-egress
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels:
+      it4931.instacart.edu/role: pipeline
+      it4931.instacart.edu/step: acceptance
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: module4d-api}}
+      ports:
+        - {protocol: TCP, port: 8000}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-acceptance-to-api
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: module4d-api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {it4931.instacart.edu/step: acceptance}}
+      ports:
+        - {protocol: TCP, port: 8000}

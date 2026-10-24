@@ -13,17 +13,16 @@ Subcommands:
 import argparse
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
 import json
 import os
 from pathlib import Path
 import platform
-import subprocess
-import uuid
 
-from .config import Config, parse_bool
-from .spark import session
-from .validate import validate_kafka, validate_mongo
+from ..common.runtime import redact_uri, safe_error_text
+from ..common.runtime import new_run_id, validate_run_id
+from ..common.runtime import code_digest, git_revision
+from .config import Config, parse_bool, session
+from .kafka_utils import validate_kafka, validate_mongo
 
 
 def save(path, value):
@@ -31,20 +30,12 @@ def save(path, value):
 
 
 def revision():
-    try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        status = subprocess.check_output(["git", "status", "--porcelain"], text=True)
-        return {"commit": sha, "dirty": bool(status)}
-    except (OSError, subprocess.CalledProcessError):
-        return {"commit": os.environ.get("MODULE3_COMMIT", "unavailable"), "dirty": None}
+    return git_revision("MODULE3_COMMIT")
 
 
-def code_digest():
-    digest = hashlib.sha256()
-    for path in sorted(Path("src").rglob("*.py")):
-        digest.update(path.as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+def _redact_mongodb_uri(uri: str) -> str:
+    """Keep the Mongo host and database visible without recording credentials."""
+    return redact_uri(uri)
 
 
 def main(argv=None):
@@ -66,6 +57,7 @@ def main(argv=None):
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--output", type=Path, default=Path("results/module3"))
+    parser.add_argument("--run-id", help="Stable caller-supplied evidence identity for an isolated orchestration run")
 
     # Kafka
     parser.add_argument("--bootstrap-servers", default=os.environ.get("KAFKA_BOOTSTRAP_SERVERS", Config.bootstrap_servers))
@@ -158,6 +150,12 @@ def main(argv=None):
         help="Stable checkpoint identity to reuse across separate run processes (default: run_id).",
     )
     parser.add_argument(
+        "--checkpoint-root",
+        type=Path,
+        default=None,
+        help="Optional isolated checkpoint volume root; defaults beneath the run output directory.",
+    )
+    parser.add_argument(
         "--feed",
         type=Path,
         default=Path("data/synthesized/module3_dev"),
@@ -204,7 +202,11 @@ def main(argv=None):
         trend_source_scope=args.trend_source_scope,
     )
 
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    run_id = args.run_id or new_run_id()
+    try:
+        validate_run_id(run_id)
+    except ValueError as exc:
+        parser.error(str(exc))
     output = args.output / run_id
     output.mkdir(parents=True, exist_ok=False)
     report = {
@@ -213,7 +215,10 @@ def main(argv=None):
         "environment": {
             **revision(),
             "source_code_sha256": code_digest(),
-            "config": asdict(config),
+            "config": {
+                **asdict(config),
+                "mongodb_uri": _redact_mongodb_uri(config.mongodb_uri),
+            },
             "python": platform.python_version(),
             "platform": platform.platform(),
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -260,6 +265,7 @@ def main(argv=None):
                 run_id,
                 duration_seconds=duration,
                 checkpoint_id=args.checkpoint_id,
+                checkpoint_root=args.checkpoint_root,
             )
             report["status"] = "passed"
             spark.stop()
@@ -319,7 +325,7 @@ def main(argv=None):
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
         return 0
     except Exception as exc:
-        report.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+        report.update(status="failed", error=safe_error_text(exc))
         save(output / "summary.json", report)
         raise
     finally:

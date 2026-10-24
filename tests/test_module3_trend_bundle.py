@@ -1,6 +1,9 @@
 """Contract tests for atomic bundles of finalized Module 3 windows."""
 
+
 from __future__ import annotations
+
+from tests.helpers import FakeBulkResult, FakeUpdateOne
 
 from datetime import datetime, timedelta, timezone
 
@@ -19,15 +22,14 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from src.module3.config import Config
-from src.module3.spark import session
+from src.module3.config import Config, session
 from src.module3.trend_bundle import (
     BUNDLE_COLLECTION_NAME,
     DEFAULT_SOURCE_SCOPE,
     TrendBundleConflictError,
     TrendBundlePublicationError,
     TrendBundleValidationError,
-    _build_document,
+    build_document,
     _config_payload,
     _sha256,
     write_trend_bundles,
@@ -48,18 +50,8 @@ WINDOW_SCHEMA = StructType(
 _DEFAULT_WINDOW_END = object()
 
 
-class FakeUpdateOne:
-    def __init__(self, filter_document, update_document, upsert):
-        self.filter = filter_document
-        self.update = update_document
-        self.upsert = upsert
 
 
-class FakeBulkResult:
-    def __init__(self, upserted=0, matched=0):
-        self.upserted_count = upserted
-        self.matched_count = matched
-        self.modified_count = 0
 
 
 class FakeCollection:
@@ -272,7 +264,7 @@ def direct_document(
     writer_config = config()
     if end is _DEFAULT_WINDOW_END:
         end = start + timedelta(hours=2)
-    return _build_document(
+    return build_document(
         {
             "window_start": start,
             "window_end": end,
@@ -386,7 +378,7 @@ def test_document_identity_and_digest_survive_bson_round_trip(microsecond):
     decoded = BSON.encode(document).decode()
     decoded_start = decoded["window_start"].replace(tzinfo=timezone.utc)
     decoded_end = decoded["window_end"].replace(tzinfo=timezone.utc)
-    rebuilt = _build_document(
+    rebuilt = build_document(
         {
             "window_start": decoded_start,
             "window_end": decoded_end,
@@ -943,7 +935,7 @@ def test_duplicate_key_with_matching_competing_document_is_an_identical_retry(
 
     stored = next(iter(collection.documents.values()))
     writer_config = config()
-    expected = _build_document(
+    expected = build_document(
         {
             "window_start": rows[0][0],
             "window_end": rows[0][1],

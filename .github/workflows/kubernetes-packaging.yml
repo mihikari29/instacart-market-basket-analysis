@@ -1,0 +1,34 @@
+name: Kubernetes packaging imports
+# Future operator invocation only: builds images, starts no data services.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  imports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [k8s-runner, ui, pipeline]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build selected runtime package
+        run: >-
+          docker build --target ${{ matrix.target }}
+          --build-arg MODULE4_COMMIT=${{ github.sha }}
+          -t it4931-package:${{ matrix.target }} .
+      - name: Verify packaged imports without services or source mounts
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            k8s-runner) imports='from src.module4.dashboard.api import create_app; import scripts.k8s.api_readiness; create_app().openapi()' ;;
+            ui) imports='import src.module4.dashboard.ui.api_client; import src.module4.dashboard.ui.pages.overview; import src.module4.dashboard.ui.pages.recommendations' ;;
+            pipeline) imports='import scripts.k8s.pipeline_task; import scripts.k8s.acceptance_task; import src.module1.clean; import src.module2.executor_benchmark; import src.module3.stream; import src.module4.cli' ;;
+          esac
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            --entrypoint python3 "it4931-package:$TARGET" -B -c "$imports"

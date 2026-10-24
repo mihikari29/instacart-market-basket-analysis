@@ -22,9 +22,9 @@ read-only FastAPI path, and browser flow. Observed evidence and limits are in
 D0 route proposals below are historical design context; the
 implemented D1A/D1B routes documented in [`module4d-api.md`](api-contract.md)
 take precedence. The D1A/D1B dependencies are pinned in
-[`deploy/module4/requirements/api.txt`](../../../deploy/module4/requirements/api.txt), and UI
+[`deploy/dashboard/requirements/api.txt`](../../../deploy/dashboard/requirements/api.txt), and UI
 dependencies are pinned separately in
-[`deploy/module4/requirements/ui.txt`](../../../deploy/module4/requirements/ui.txt).
+[`deploy/dashboard/requirements/ui.txt`](../../../deploy/dashboard/requirements/ui.txt).
 
 The design follows [Proposal §30](../../Proposal.md),
 correcting its collection summaries where current code differs. In particular,

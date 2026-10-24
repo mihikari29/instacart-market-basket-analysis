@@ -3,41 +3,27 @@
 import argparse
 from dataclasses import asdict
 from datetime import datetime, timezone
-import hashlib
-import json
 import os
 from pathlib import Path
 import platform
-import subprocess
-import uuid
+import re
 
-from .config import Config
-from .spark import session
+from ..common.runtime import safe_error_text
+from ..common.runtime import new_run_id, save_json
+from ..common.runtime import code_digest, git_revision
+from .config import Config, session
 from .data import read_tables, validate, require
-from .analytics import analyze, publish_mongo
+from .analytics import analyze, publish_mongo, tag_user_features
 from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache
 from .eventlog import parse_event_logs, attach_metrics
 
 
 def save(path, value):
-    path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
+    save_json(path, value)
 
 
 def revision():
-    try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        status = subprocess.check_output(["git", "status", "--porcelain"], text=True)
-        return {"commit": sha, "dirty": bool(status)}
-    except (OSError, subprocess.CalledProcessError):
-        return {"commit": os.environ.get("MODULE2_COMMIT", "unavailable"), "dirty": None}
-
-
-def code_digest():
-    digest = hashlib.sha256()
-    for path in sorted(Path("src").rglob("*.py")):
-        digest.update(path.as_posix().encode())
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+    return git_revision("MODULE2_COMMIT")
 
 
 def main(argv=None):
@@ -52,6 +38,7 @@ def main(argv=None):
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--output", type=Path, default=Path("results/module2"))
+    parser.add_argument("--run-id", help="Stable caller-supplied publication identity for a run-scoped retry")
     parser.add_argument("--min-support", type=int, default=100)
     parser.add_argument(
         "--source-events", type=Path, help="Also verify current local source against staging receipt"
@@ -62,7 +49,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     require(args.min_support >= 1, "min-support must be positive")
     config = Config(args.root, args.master, args.shuffle_partitions, args.repetitions, args.warmups)
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    run_id = args.run_id or new_run_id()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
+        parser.error("--run-id must be a 1-80 character path-safe identifier")
     output = args.output / run_id
     output.mkdir(parents=True, exist_ok=False)
     report = {
@@ -104,7 +93,10 @@ def main(argv=None):
         if args.command in ("all", "stats"):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
             save(output / "analytics.json", summary)
-            outputs["user_features"].write.mode("overwrite").parquet(config.features())
+            feature_timestamp = report["environment"]["timestamp_utc"]
+            tag_user_features(outputs["user_features"], run_id, feature_timestamp).write.mode(
+                "overwrite"
+            ).parquet(config.features())
             for name in (
                 "batch_product_metrics",
                 "department_metrics",
@@ -120,6 +112,8 @@ def main(argv=None):
                 "summary": "analytics.json",
                 "mongo_published": not args.skip_serving,
                 "user_features": config.features(),
+                "user_features_scope": "prior_only",
+                "user_features_run_id": run_id,
             }
         for command, key, function, argument in (
             ("benchmark-joins", "join_benchmark", benchmark_joins, tables),
@@ -137,7 +131,7 @@ def main(argv=None):
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
         return 0
     except Exception as exc:
-        report.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+        report.update(status="failed", error=safe_error_text(exc))
         save(output / "summary.json", report)
         raise
     finally:

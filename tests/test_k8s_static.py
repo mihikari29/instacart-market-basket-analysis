@@ -12,6 +12,9 @@ import yaml
 from scripts.k8s import api_readiness, render as k8s_render
 from scripts.k8s.api_readiness import IndexRequirement
 from scripts.k8s.render import MANAGED_MARKER, _validate_output_path, render_overlay
+from tests.helpers import admitted, context_paths
+from scripts.k8s.pipeline import TREND_SOURCE_NAMESPACE
+from tests.test_k8s_ownership import complete_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,14 +29,14 @@ RENDER_LABELS = {
 }
 
 
-def _render_with_test_roots(run_id: str, output: Path, fixture_root: Path) -> Path:
+def _render_with_test_roots(run_id: str, output: Path, fixture_root: Path, **render_options) -> Path:
     worktree = fixture_root / "synthetic-protected-worktree"
     git_metadata = fixture_root / "synthetic-git-metadata"
     worktree.mkdir(exist_ok=True)
     git_metadata.mkdir(exist_ok=True)
     protected_roots = {ROOT.resolve(), BASE.resolve(), worktree.resolve(), git_metadata.resolve()}
     with patch("scripts.k8s.render._protected_roots", return_value=protected_roots):
-        return render_overlay(run_id, output)
+        return render_overlay(run_id, output, **render_options)
 
 
 def _rendered_objects(run_dir: Path) -> list[dict]:
@@ -88,6 +91,26 @@ def _valid_index_metadata() -> dict[str, list[dict]]:
                 "key": {"serving_version": 1, "user_id": 1, "product_id": 1},
                 "unique": True,
             },
+        ],
+        "user_recommendations": [
+            {
+                "name": "uq_model_user_rank",
+                "key": {"model_version": 1, "user_id": 1, "als_rank": 1},
+                "unique": True,
+            },
+            {
+                "name": "uq_model_user_product",
+                "key": {"model_version": 1, "user_id": 1, "product_id": 1},
+                "unique": True,
+            },
+            {"name": "idx_model_user", "key": {"model_version": 1, "user_id": 1}},
+        ],
+        "product_graph_metrics": [
+            {
+                "name": "uq_graph_product",
+                "key": {"graph_version": 1, "product_id": 1},
+                "unique": True,
+            }
         ],
     }
 
@@ -311,7 +334,7 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertNotIn("kind: Job", contents)
         self.assertNotIn("kind: CronJob", contents)
         self.assertRegex(contents, r"(?m)^\s*kind: (?:StatefulSet|Deployment)$")
-        self.assertEqual(contents.count("namespace: __K8S_RENDER_REQUIRED__"), 20)
+        self.assertEqual(contents.count("namespace: __K8S_RENDER_REQUIRED__"), 21)
         self.assertFalse((BASE / "kustomization.yaml").exists())
 
     def test_mongo_requires_nonempty_admin_credentials_and_explicit_auth(self) -> None:
@@ -333,6 +356,28 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertEqual(env_refs["MONGO_INITDB_ROOT_PASSWORD"], {"name": "module4d-mongo-admin", "key": "password"})
         mongo = next(item for item in pod_spec["containers"] if item["name"] == "mongodb")
         self.assertIn("--auth", mongo["args"])
+
+    def test_mongo_bootstrap_scopes_users_and_declares_read_contract_indexes(self) -> None:
+        document = yaml.safe_load((BASE / "mongo-bootstrap.yaml").read_text(encoding="utf-8"))
+        script = document["data"]["20-users-and-indexes.js"]
+        self.assertIn('roles: [{role: "read", db: databaseName}]', script)
+        self.assertIn('roles: [{role: "readWrite", db: databaseName}]', script)
+        self.assertNotIn('role: "root"', script)
+        for name in (
+            "idx_batch_product_purchase_count_desc_product_id_asc",
+            "idx_batch_product_reorder_rate_desc_product_id_asc",
+            "idx_source_namespace_window_end_desc",
+            "uq_serving_user_rank",
+            "uq_serving_user_product",
+            "uq_model_user_rank",
+            "uq_model_user_product",
+            "idx_model_user",
+            "uq_graph_product",
+        ):
+            self.assertIn(name, script)
+        readiness_source = (ROOT / "scripts/k8s/api_readiness.py").read_text(encoding="utf-8")
+        self.assertNotIn("create_index", readiness_source)
+        self.assertNotIn("create_user", readiness_source)
 
     def test_authenticated_readiness_checks_identity_and_index_options(self) -> None:
         expected = {
@@ -358,6 +403,20 @@ class StaticFoundationTests(unittest.TestCase):
                 ),
                 "uq_serving_user_product": IndexRequirement(
                     (("serving_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+                ),
+            },
+            "user_recommendations": {
+                "uq_model_user_rank": IndexRequirement(
+                    (("model_version", 1), ("user_id", 1), ("als_rank", 1)), unique=True
+                ),
+                "uq_model_user_product": IndexRequirement(
+                    (("model_version", 1), ("user_id", 1), ("product_id", 1)), unique=True
+                ),
+                "idx_model_user": IndexRequirement((("model_version", 1), ("user_id", 1))),
+            },
+            "product_graph_metrics": {
+                "uq_graph_product": IndexRequirement(
+                    (("graph_version", 1), ("product_id", 1)), unique=True
                 ),
             },
         }
@@ -540,30 +599,48 @@ class StaticFoundationTests(unittest.TestCase):
             with self.subTest(value=invalid):
                 self.assertNotEqual(run(invalid).returncode, 0)
 
-    def test_docker_context_excludes_only_the_two_host_kubernetes_tests(self) -> None:
+    def test_docker_context_excludes_all_host_kubernetes_tests(self) -> None:
         ignore_lines = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
         allow_index = ignore_lines.index("!tests/**/*.py")
-        ownership_index = ignore_lines.index("tests/test_k8s_ownership.py")
-        static_index = ignore_lines.index("tests/test_k8s_static.py")
-        self.assertLess(allow_index, ownership_index)
-        self.assertLess(allow_index, static_index)
+        excluded_index = ignore_lines.index("tests/test_k8s_*.py")
+        self.assertLess(allow_index, excluded_index)
+        self.assertTrue(list((ROOT / "tests").glob("test_k8s_*.py")))
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn("COPY tests/", dockerfile)
         self.assertIn("FROM spark AS k8s-runner", dockerfile)
         self.assertIn('CMD ["python3", "-c", "print(', dockerfile)
-        for source_path in (
+        admitted_paths = context_paths(ROOT / ".dockerignore", [
             "scripts/module4.py",
-            "scripts/module4_runtime_smoke.py",
-            "scripts/module4_flow_smoke.py",
-            "scripts/module4_cross_module_smoke.py",
+            "scripts/module4_smoke.py",
             "compose.yaml",
-        ):
+        ])
+        for source_path, is_admitted in admitted_paths.items():
             with self.subTest(source_path=source_path):
+                self.assertTrue(is_admitted, f"{source_path} must enter the build context")
                 self.assertIn(f"COPY {source_path} ", dockerfile)
-                self.assertIn(f"!{source_path}", ignore_lines)
+        for excluded in sorted(path.name for path in (ROOT / "tests").glob("test_k8s_*.py")):
+            self.assertFalse(
+                admitted(ROOT / ".dockerignore", f"tests/{excluded}"),
+                f"{excluded} must stay out of the build context",
+            )
         self.assertIn("**/.env", ignore_lines)
         self.assertIn("**/secrets/**", ignore_lines)
         self.assertNotIn("COPY data/", dockerfile)
+
+    def test_pipeline_task_build_context_contains_all_runtime_imports(self) -> None:
+        required = {
+            "scripts/k8s/__init__.py", "scripts/k8s/pipeline.py",
+            "scripts/k8s/pipeline_task.py", "scripts/k8s/acceptance_task.py",
+            "scripts/k8s/data_receipts.py", "scripts/k8s/fixture_data.py",
+            "scripts/k8s/runtime.py", "scripts/k8s/ownership.py",
+        }
+        admitted = context_paths(ROOT / ".dockerignore", sorted(required))
+        for source_path, is_admitted in admitted.items():
+            with self.subTest(source_path=source_path):
+                self.assertTrue(is_admitted, f"{source_path} must enter the build context")
+                self.assertTrue((ROOT / source_path).is_file())
+        dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("COPY scripts/ /workspace/scripts/", dockerfile)
 
     def test_ui_readiness_timeout_exceeds_internal_request_timeout(self) -> None:
         documents = [item for item in yaml.safe_load_all((BASE / "serving.yaml").read_text(encoding="utf-8")) if item]
@@ -601,10 +678,58 @@ class StaticFoundationTests(unittest.TestCase):
         self.assertIn("Calico component image digests", "\n".join(lock["unresolved"]))
         self.assertEqual(
             lock["cluster"]["cni_compatibility_source"],
-            "https://docs.tigera.io/calico/latest/getting-started/kubernetes/requirements",
+            "https://docs.tigera.io/calico/3.32/getting-started/kubernetes/requirements",
         )
         docs = (ROOT / "docs/kubernetes.md").read_text(encoding="utf-8")
         self.assertIn(lock["cluster"]["cni_compatibility_source"], docs)
+
+    def test_deployment_renderer_refuses_the_incomplete_lock(self) -> None:
+        lock = yaml.safe_load((ROOT / "deploy/k8s/versions.lock.yaml").read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "rendered"
+            with self.assertRaisesRegex(ValueError, "complete version lock"):
+                render_overlay("0123456789ab", output, version_lock=lock)
+            self.assertFalse(output.exists())
+
+    def test_complete_lock_render_accepts_workloads_without_init_containers(self) -> None:
+        lock = complete_lock()
+        for role, image in lock["images"].items():
+            image.setdefault("source", f"offline render test fixture for {role}")
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture_root = Path(temporary)
+            output = fixture_root / "rendered"
+            with patch(
+                "scripts.k8s.render.subprocess.check_output",
+                side_effect=FileNotFoundError("git unavailable in application test container"),
+            ) as git_command:
+                run = _render_with_test_roots(
+                    "0123456789ab",
+                    output,
+                    fixture_root,
+                    version_lock=lock,
+                    trend_source_namespace=TREND_SOURCE_NAMESPACE,
+                )
+            git_command.assert_not_called()
+            self.assertTrue(run.is_dir())
+            api = json.loads((run / "api-config-patch.json").read_text(encoding="utf-8"))
+            ui = json.loads((run / "ui-config-patch.json").read_text(encoding="utf-8"))
+            expected_sources = f"{TREND_SOURCE_NAMESPACE},{TREND_SOURCE_NAMESPACE}-b4-0123456789ab"
+            self.assertEqual(api["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
+            self.assertEqual(ui["data"]["MODULE4D_TREND_SOURCE_NAMESPACES"], expected_sources)
+
+    def test_browser_assertions_match_recommendation_ui_and_keep_five_chart_gate(self) -> None:
+        browser = (ROOT / "scripts/dashboard/browser_e2e.py").read_text(encoding="utf-8")
+        recommendations = (
+            ROOT / "src/module4/dashboard/ui/pages/recommendations.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('st.title("ALS and Hybrid Recommendations")', recommendations)
+        self.assertIn('"Load / refresh ALS and Hybrid"', recommendations)
+        self.assertIn('"ALS and Hybrid Recommendations"', browser)
+        self.assertIn('name="Load / refresh ALS and Hybrid"', browser)
+        for column in ("ALS rank", "ALS score", "Trend score", "Final rank", "Final score"):
+            self.assertIn(column, recommendations)
+            self.assertIn(f'"{column}"', browser)
+        self.assertIn('page, 5, "evaluation page"', browser)
 
 
 if __name__ == "__main__":

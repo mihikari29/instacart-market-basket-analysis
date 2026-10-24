@@ -45,7 +45,7 @@ def ensure_graph_indexes(collection) -> None:
     )
 
 
-def _snapshot_validation(collection, version_field, version, expected_count, run_id):
+def snapshot_validation(collection, version_field, version, expected_count, run_id):
     query = {version_field: version, "run_id": run_id}
     count = int(collection.count_documents(query))
     logical_keys = (
@@ -114,12 +114,12 @@ def _write_snapshot(db, collection_name, documents, ensure_indexes, version_fiel
                 f"snapshot writer inserted {inserted} documents; expected {expected_count}"
             )
         ensure_indexes(temp)
-        before = _snapshot_validation(temp, version_field, version, expected_count, run_id)
+        before = snapshot_validation(temp, version_field, version, expected_count, run_id)
         if not before["valid"]:
             raise RuntimeError(f"temporary snapshot validation failed: {before}")
         temp.rename(collection_name, dropTarget=True)
         active = db[collection_name]
-        after = _snapshot_validation(active, version_field, version, expected_count, run_id)
+        after = snapshot_validation(active, version_field, version, expected_count, run_id)
         if not after["valid"]:
             raise RuntimeError(f"promoted snapshot validation failed: {after}")
         return {

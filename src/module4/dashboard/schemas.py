@@ -26,6 +26,13 @@ class HealthResponse(StrictResponse):
     status: Literal["ok"]
 
 
+class StreamingMetricsResponse(StrictResponse):
+    available: StrictBool
+    source_namespace: StrictStr
+    metrics: dict[str, Any] | None
+    observed_at: datetime
+
+
 class RankingConfigResponse(StrictResponse):
     algorithm_version: StrictStr
     lambda_requested: FiniteFloat | None
@@ -75,6 +82,32 @@ class RecommendationResponse(StrictResponse):
     ranking_config: RankingConfigResponse
     generated_at: datetime | None
     recommendations: list[RecommendationItem] = Field(max_length=20)
+    observed_at: datetime
+
+
+class ALSRecommendationItem(StrictResponse):
+    product_id: StrictInt = Field(gt=0)
+    product_name: StrictStr | None
+    als_rank: StrictInt = Field(ge=1, le=20)
+    als_score: FiniteFloat
+
+
+class ALSRecommendationSource(StrictResponse):
+    run_id: StrictStr
+    model_version: StrictStr
+    graph_version: StrictStr
+
+
+class ALSRecommendationResponse(StrictResponse):
+    user_id: StrictInt = Field(gt=0)
+    model_version: StrictStr
+    status: Literal["available", "empty"]
+    reason: StrictStr | None
+    recommendation_count: StrictInt = Field(ge=0, le=20)
+    requested_limit: StrictInt = Field(ge=1, le=20)
+    has_more: StrictBool
+    source: ALSRecommendationSource
+    recommendations: list[ALSRecommendationItem] = Field(max_length=20)
     observed_at: datetime
 
 

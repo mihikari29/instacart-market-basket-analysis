@@ -22,6 +22,13 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Bounded retention. Without these the broker keeps every replayed
+      # event for the default seven days, which is several gigabytes per day
+      # at full feed scale and is not needed to resume a checkpointed stream.
+      KAFKA_LOG_RETENTION_HOURS: "24"
+      KAFKA_LOG_RETENTION_BYTES: "2147483648"
+      KAFKA_LOG_SEGMENT_MS: "3600000"
+      KAFKA_LOG_CLEANUP_POLICY: "delete"
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
       interval: 5s

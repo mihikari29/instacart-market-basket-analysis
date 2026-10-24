@@ -66,9 +66,9 @@ scores.
 The reproducible operator entry point is:
 
 ```bash
-bash scripts/module4/module4d_demo.sh up
+bash scripts/dashboard/demo.sh up
 # Open http://127.0.0.1:18501; the command prints the run ID.
-bash scripts/module4/module4d_demo.sh down <printed-12-hex-run-id>
+bash scripts/dashboard/demo.sh down <printed-12-hex-run-id>
 ```
 
 The script generates a mode-0600 environment file outside the repository. A

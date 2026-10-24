@@ -1,9 +1,10 @@
 """Single-user orchestration for the verified Module 4C serving path."""
 
 from __future__ import annotations
+from ...common.runtime import aware_utc_millisecond
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from src.module3.trend_bundle import BUNDLE_COLLECTION_NAME
@@ -72,19 +73,6 @@ class HybridServingResult:
     idempotent: bool
 
 
-def _normalize_aware_millisecond(value: Any, field: str) -> datetime:
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-        raise HybridServingRequestError(f"{field} must be a timezone-aware datetime")
-    try:
-        normalized = value.astimezone(timezone.utc)
-    except (OverflowError, ValueError) as exc:
-        raise HybridServingRequestError(f"{field} must be a valid UTC instant") from exc
-    if normalized.microsecond % 1000:
-        raise HybridServingRequestError(
-            f"{field} must be aligned to BSON millisecond precision"
-        )
-    return normalized
-
 
 def _validate_request(
     config: Module4Config,
@@ -109,7 +97,7 @@ def _validate_request(
         raise HybridServingRequestError("source_namespace must be a stable non-empty string")
     if not isinstance(ranking_config, HybridRankingConfig):
         raise HybridServingRequestError("ranking_config must be a HybridRankingConfig")
-    event_time = _normalize_aware_millisecond(as_of_event_time, "as_of_event_time")
+    event_time = aware_utc_millisecond(as_of_event_time, "as_of_event_time", error=HybridServingRequestError)
     if max_event_age is not None and (
         not isinstance(max_event_age, timedelta) or max_event_age < timedelta(0)
     ):
@@ -117,7 +105,7 @@ def _validate_request(
     processing_time = (
         None
         if processing_time_utc is None
-        else _normalize_aware_millisecond(processing_time_utc, "processing_time_utc")
+        else aware_utc_millisecond(processing_time_utc, "processing_time_utc", error=HybridServingRequestError)
     )
     return event_time, processing_time
 

@@ -9,7 +9,7 @@ The retired standalone evaluation plan, release review, and C8B run procedure
 are preserved as [evaluation-plan.md](evaluation-plan.md),
 [release-review.md](release-review.md), and
 [c8b-streaming-demo.md](c8b-streaming-demo.md).
-The former `docs/module4c-evaluation-plan.md` path remains as a short
+The former `docs/module4c-evaluation-plan.md` path was a short
 compatibility page because the C8A report generator includes that path in new
 reports; the complete historical plan is preserved in this archive.
 

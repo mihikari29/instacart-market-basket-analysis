@@ -102,6 +102,31 @@ spec:
           imagePullPolicy: IfNotPresent
           args: [mongod, --auth, --bind_ip_all, --wiredTigerCacheSizeGB, "0.25"]
           env:
+            - name: MODULE4D_MONGO_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: module4d-api-config
+                  key: MODULE4D_MONGO_DATABASE
+            - name: MODULE4D_MONGO_READ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-accounts
+                  key: read-username
+            - name: MODULE4D_MONGO_READ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-accounts
+                  key: read-password
+            - name: MODULE4D_MONGO_PUBLISHER_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-accounts
+                  key: publisher-username
+            - name: MODULE4D_MONGO_PUBLISHER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: module4d-mongo-accounts
+                  key: publisher-password
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -151,8 +176,8 @@ spec:
                   --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin
                   --eval 'db.adminCommand("ping").ok' 2>/dev/null | grep -qx 1
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            timeoutSeconds: 15
+            failureThreshold: 10
           readinessProbe:
             exec:
               command:
@@ -166,6 +191,9 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
           volumeMounts:
+            - name: bootstrap
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
             - name: data
               mountPath: /data/db
             - name: configdb
@@ -173,6 +201,10 @@ spec:
             - name: tmp
               mountPath: /tmp
       volumes:
+        - name: bootstrap
+          configMap:
+            name: module4d-mongo-bootstrap
+            defaultMode: 0444
         - name: configdb
           emptyDir:
             sizeLimit: 64Mi

@@ -1,0 +1,26 @@
+# IT4931 Kubernetes Demonstration and Operational Configuration
+pipeline_steps:
+  input: 7200
+  module1: 1800
+  module2: 7200
+  module4: 7200
+  replay_fixture: 1800
+  replay_full: 65400
+  hybrid: 900
+
+acceptance:
+  checkpoint_recovery_duration: 35
+  default_command_timeout: 60
+
+infrastructure:
+  image_tag_timeout: 120
+  image_pull_timeout: 900
+  image_load_timeout: 900
+  rollout_timeout: 900
+  pvc_bound_timeout: 900
+  pod_ready_timeout: 300
+
+capacity_reserve:
+  cpu_cores: 6
+  memory_gib: 6
+  free_disk_gib: 40

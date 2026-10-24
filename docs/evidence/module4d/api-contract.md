@@ -44,7 +44,7 @@ routes `GET /api/v1/batch/products`, `GET /api/v1/batch/departments`,
 The health route is process liveness and does not ping MongoDB. The application
 OpenAPI schema describes all D1A and D1B routes.
 For the consolidated package paths and Docker commands, see the
-[Module 4 package migration guide](../../module4-package-migration.md).
+[Module 4 package migration guide](../../module4-plan.md).
 
 Recommendation reads return `404` when no per-user pointer is published,
 `503` when the pointer is not ready or MongoDB is unavailable, `409` when the
@@ -230,7 +230,7 @@ repository-wide Ruff, runtime import/OpenAPI smoke, and the isolated MongoDB
 integration suites with:
 
 ```bash
-python3 scripts/module4/module4d_api_validation.py --mode all
+python3 scripts/dashboard/api_validation.py --mode all
 ```
 
 The script builds the pinned Spark/PyMongo API runtime with the exact evidence

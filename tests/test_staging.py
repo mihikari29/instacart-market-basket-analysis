@@ -174,7 +174,10 @@ def test_refresh_replaces_stale_dates_and_preserves_other_tables(tmp_path):
 
     client = LocalHdfs()
 
-    def upload(path, local, *_):
+    uploaded_rewrite_options = []
+
+    def upload(path, local, webhdfs_url, user, *, rewrite_datanode_to_localhost=True):
+        uploaded_rewrite_options.append(rewrite_datanode_to_localhost)
         shutil.copyfile(local, client.location(path))
 
     feed = tmp_path / "feed"
@@ -189,6 +192,8 @@ def test_refresh_replaces_stale_dates_and_preserves_other_tables(tmp_path):
     ).to_table()
     assert result.num_rows == 4
     assert set(result["synthetic_date"].to_pylist()) == {"2025-02-03"}
+    assert uploaded_rewrite_options
+    assert all(option is True for option in uploaded_rewrite_options)
     assert preserved.read_text() == "untouched"
 
 

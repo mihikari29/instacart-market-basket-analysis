@@ -6,8 +6,27 @@ documentable. See docs/generate.md -> "SyntheticConfig & scenarios".
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING
 
-import numpy as np
+if TYPE_CHECKING:
+    import numpy as np
+
+INT32_MAX = 2**31 - 1
+PARQUET_COMPRESSION = "zstd"
+
+
+def validate_cart_position_range(minimum: int, maximum: int) -> tuple[int, int]:
+    """Reject cart-position bounds that cannot be represented as positive int32."""
+    if (
+        type(minimum) is not int
+        or type(maximum) is not int
+        or minimum < 1
+        or maximum < minimum
+        or maximum > INT32_MAX
+    ):
+        raise ValueError("add_to_cart_order values must be positive int32 integers")
+    return minimum, maximum
+
 
 SCATTER_WINDOW_WEEKS = (1, 4, 13, 26, 52)
 TIME_MODES = ("uniform", "hash")
@@ -36,6 +55,8 @@ class DeltaSampler:
 
     def sample(self, rng: "np.random.Generator", size: int) -> "np.ndarray":
         """Draw gaps using the caller's random generator and configured bounds."""
+        import numpy as np
+
         if self.kind == "uniform":
             return rng.uniform(self.lo_s, self.hi_s, size=size)
         gap = -self.mean_s * np.log1p(-rng.random(size))

@@ -13,7 +13,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.module4.config import Config  # noqa: E402
-from src.module4.sink_mongo import _snapshot_validation, publication_lock  # noqa: E402
+from src.module4.evaluation import validate_prior_only_hybrid_evaluation  # noqa: E402
+from src.module4.sink_mongo import snapshot_validation, publication_lock  # noqa: E402
 
 
 def require(condition, message):
@@ -30,6 +31,22 @@ def validate_report(report):
     require(report.get("source_stability_check") == "passed", "source stability was not checked")
     require(bool(report.get("input_source_receipt")), "verified full source receipt is missing")
     require(report["graph"]["validation"].get("backend") == "graphframes", "real GraphFrames is required")
+    try:
+        hybrid_evaluation = report["als"]["hybrid_evaluation"]
+        validate_prior_only_hybrid_evaluation(
+            hybrid_evaluation, report["validation"]["source_receipt"]
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"prior-only Hybrid acceptance gate failed: {exc}") from exc
+    require(hybrid_evaluation["run_id"] == report["run_id"], "Hybrid evaluation run ID differs")
+    require(
+        hybrid_evaluation["model_version"] == report["environment"]["model_version"],
+        "Hybrid evaluation model version differs",
+    )
+    require(
+        hybrid_evaluation["source_code_sha256"] == report["environment"]["source_code_sha256"],
+        "Hybrid evaluation source code identity differs",
+    )
 
 
 def snapshot_digest(documents):
@@ -99,7 +116,7 @@ def main(argv=None):
         ):
             require(pointer.get(version_field) == version, "active pointer has a different version")
             collection = db[name]
-            validation = _snapshot_validation(collection, version_field, version, expected_count, run_id)
+            validation = snapshot_validation(collection, version_field, version, expected_count, run_id)
             require(validation["valid"], f"invalid snapshot {name}: {validation}")
             require(collection.count_documents({}) == expected_count, f"mixed/stale snapshot: {name}")
             with collection.find({}).sort("_id", 1).batch_size(5000) as cursor:

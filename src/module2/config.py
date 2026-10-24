@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
+import re
 
 TABLES = {
     "orders": "orders",
@@ -23,12 +25,21 @@ class Config:
     shuffle_partitions: int = 8
     repetitions: int = 3
     warmups: int = 1
+    executor_memory: str = "1g"
+    executor_cores: int = 2
+    total_cores: int = 2
 
     def __post_init__(self) -> None:
         if self.shuffle_partitions < 1 or self.repetitions < 3 or self.warmups < 1:
             raise ValueError("Require positive partitions, >=3 measured runs and >=1 warm-up")
         if not self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
             raise ValueError("An explicit dataset root is required")
+        if not isinstance(self.executor_memory, str) or not re.fullmatch(r"[1-9][0-9]*[mg]", self.executor_memory):
+            raise ValueError("executor_memory must be a positive Spark m/g quantity")
+        if any(type(value) is not int or value < 1 for value in (self.executor_cores, self.total_cores)):
+            raise ValueError("executor and total cores must be positive integers")
+        if self.executor_cores > self.total_cores or self.total_cores % self.executor_cores:
+            raise ValueError("total cores must be divisible by executor cores")
 
     def table(self, name: str) -> str:
         """Resolve a curated table by its logical key in TABLES."""
@@ -46,3 +57,17 @@ class Config:
             master=os.environ.get("SPARK_MASTER", cls.master),
             **overrides,
         )
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 2 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module2",
+        total_cores=config.total_cores,
+        executor_memory=config.executor_memory,
+        executor_cores=config.executor_cores,
+    )

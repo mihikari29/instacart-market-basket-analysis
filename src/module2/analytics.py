@@ -49,6 +49,19 @@ def metrics(tables: dict[str, DataFrame]) -> tuple[DataFrame, DataFrame, DataFra
     return enriched, product, department, users
 
 
+def tag_user_features(frame: DataFrame, run_id: str, generated_at_utc: str) -> DataFrame:
+    """Attach explicit prior-only lineage without adding features to Module 4A inputs."""
+    if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > 80:
+        raise ValueError("user feature run_id must be a non-empty string of at most 80 characters")
+    if not isinstance(generated_at_utc, str) or not generated_at_utc.endswith("+00:00"):
+        raise ValueError("user feature timestamp must be an explicit UTC ISO-8601 string")
+    return (
+        frame.withColumn("module2_run_id", F.lit(run_id))
+        .withColumn("feature_scope", F.lit("prior_only"))
+        .withColumn("generated_at_utc", F.lit(generated_at_utc))
+    )
+
+
 def department_hour_pivot_unpivot(enriched: DataFrame) -> tuple[DataFrame, DataFrame]:
     """Produce a wide teaching/report view and its normalized analytical form."""
     hour_columns = [str(hour) for hour in range(24)]
@@ -195,6 +208,12 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
                     batch.clear()
             if batch:
                 collection.insert_many(batch)
-            collection.create_index("purchase_count")
-            collection.create_index("reorder_rate")
+            collection.create_index(
+                [("purchase_count", -1), ("product_id", 1)],
+                name="idx_batch_product_purchase_count_desc_product_id_asc",
+            )
+            collection.create_index(
+                [("reorder_rate", -1), ("product_id", 1)],
+                name="idx_batch_product_reorder_rate_desc_product_id_asc",
+            )
             collection.rename(name, dropTarget=True)
