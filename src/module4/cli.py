@@ -77,6 +77,12 @@ _MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
 _SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
+def _log(msg: str) -> None:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{now} UTC] {msg}", flush=True)
+
+
+
 def revision() -> dict:
     try:
         git = ["git", "-c", f"safe.directory={REPO_ROOT}"]
@@ -670,6 +676,7 @@ def run_als(
     from pyspark.sql import functions as F
 
     started = time.perf_counter()
+    _log("[MODULE 4][PHASE 1/7] Building prior interactions & holdout split...")
     interactions = build_prior_interactions(prior).persist(StorageLevel.MEMORY_AND_DISK)
     train_truth = build_train_truth(tables).cache()
     all_prior_users = prior.select("user_id").distinct().cache()
@@ -678,6 +685,7 @@ def run_als(
         official_train_orders = tables["orders"].where("eval_set = 'train'").select("order_id")
         split = make_internal_holdout(prior, official_train_orders)
         save_json(output / "split_summary.json", split["summary"])
+        _log(f"[MODULE 4][PHASE 2/7] Tuning ALS hyperparameters ({pilot_users} pilot users, max {max_trials} trials)...")
         tuning = tune_als(
             split,
             config,
@@ -689,6 +697,7 @@ def run_als(
             raise RuntimeError(f"ALS tuning did not select a validated model: {tuning.get('reason')}")
         spark.sparkContext.setJobGroup("module4.als.final", "Module 4 final prior-only ALS model", True)
         selected = ALSParams(**tuning["selected_params"])
+        _log(f"[MODULE 4][PHASE 3/7] Selected ALS params: rank={selected.rank}, max_iter={selected.max_iter}, alpha={selected.alpha}")
         model_path = config.model_path(model_version)
         marker_path = model_path + ".module4.json"
         expected_model_metadata = {
@@ -715,8 +724,11 @@ def run_als(
                 raise ValueError("existing model version has different source/config/code metadata")
             model = load_model(model_path)
             reused = True
+            _log(f"[MODULE 4][PHASE 4/7] Reused existing verified model from HDFS: {model_path}")
         else:
+            _log("[MODULE 4][PHASE 3/7] Fitting final ALS model...")
             model = fit_model(interactions, selected, config.seed, config.als_blocks)
+            _log("[MODULE 4][PHASE 4/7] Verifying save/reload reproducibility on HDFS...")
             verification_user_ids = [
                 r.user_id
                 for r in interactions.select("user_id").distinct().orderBy("user_id").limit(5).collect()
@@ -727,9 +739,11 @@ def run_als(
                 before_save = verification.orderBy("user_id", "als_rank").collect()
             finally:
                 verification.unpersist(blocking=False)
+            _log(f"[MODULE 4][PHASE 4/7] Saving model to {model_path}...")
             save_model(model, model_path)
             _write_hdfs_json(spark, marker_path, expected_model_metadata)
             _unpersist_model(model)
+            _log("[MODULE 4][PHASE 4/7] Reloading model from HDFS and verifying Top-K matches...")
             model = load_model(model_path)
             verification = recommend_top_k(model, verification_users, config.recommendation_k)
             try:
@@ -742,6 +756,8 @@ def run_als(
                 for left, right in zip(before_save, after_load)
             ):
                 raise ValueError("saved/reloaded ALS recommendation verification failed")
+            _log("[MODULE 4][PHASE 4/7] Save/reload verification passed with exact Top-K tolerance <= 1e-6.")
+
         model_report = model_summary(model, selected, config.seed, interactions, config.als_blocks)
         expected_user_count = expected_model_metadata["interaction_users"]
         expected_item_count = expected_model_metadata["interaction_products"]

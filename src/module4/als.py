@@ -184,7 +184,7 @@ def recommend_top_k(model, users, k: int = 20):
 
     def fetch(user_frame, count):
         return (
-            model.recommendForUserSubset(user_frame, count)
+            model.recommendForUserSubset(F.broadcast(user_frame), count)
             .select("user_id", F.explode("recommendations").alias("recommendation"))
             .select(
                 "user_id",
@@ -193,6 +193,7 @@ def recommend_top_k(model, users, k: int = 20):
                 F.col("recommendation.rating").cast("double").alias("als_score"),
             )
         )
+
 
     cached = []
 
@@ -268,7 +269,10 @@ def recommend_with_fallback(model, users, interactions, k: int = 20):
     users only.  This helper is used solely for the all-test-user evaluation
     cohort and makes that fallback explicit in the report.
     """
+    from pyspark.sql import functions as F
+
     warm = recommend_top_k(model, users, k)
+
     requested = users.select("user_id").distinct()
     missing = requested.join(F.broadcast(warm.select("user_id").distinct()), "user_id", "left_anti")
     if not [r.user_id for r in missing.take(1)]:
