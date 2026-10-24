@@ -136,18 +136,17 @@ def validate(spark, config, tables):
     facts = tables["prior"].select(*fact_cols).unionByName(tables["train"].select(*fact_cols))
     limit_users = receipt.get("feed_manifest", {}).get("config", {}).get("limit_users")
     if limit_users:
-        users = (
-            orders.where(F.col("eval_set") != "test")
+        user_ids = [
+            r.user_id
+            for r in orders.where(F.col("eval_set") != "test")
             .select("user_id")
             .distinct()
             .orderBy("user_id")
             .limit(limit_users)
-        )
-        facts = (
-            facts.join(orders.select("order_id", "user_id"), "order_id")
-            .join(users, "user_id")
-            .select(*fact_cols)
-        )
+            .collect()
+        ]
+        valid_orders = orders.where(F.col("user_id").isin(user_ids)).select("order_id")
+        facts = facts.join(F.broadcast(valid_orders), "order_id").select(*fact_cols)
     # Exact multiset equality catches missing+duplicated rows even when counts happen to agree.
     no_rows(facts.exceptAll(events.select(*fact_cols)), "Interactions missing source facts")
     no_rows(events.select(*fact_cols).exceptAll(facts), "Interactions contain unexpected facts")
