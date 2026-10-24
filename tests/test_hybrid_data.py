@@ -354,6 +354,15 @@ def test_rejects_oversized_and_truncated_als_results(harness):
         capture(harness)
 
 
+def test_accepts_als_recommendations_bounded_by_small_catalog(harness):
+    _, collections, _ = harness
+    collections["product_graph_metrics"].rows = graph_rows(range(101, 105))
+    collections["user_recommendations"].forced_rows = als_rows(4)
+    captured = capture(harness)
+    assert len(captured.als_recommendations) == 4
+    assert [row.als_rank for row in captured.als_recommendations] == [1, 2, 3, 4]
+
+
 def test_valid_new_user_with_no_als_rows_is_a_cold_user(harness):
     _, collections, _ = harness
     # The exact user filter yields no rows for a valid user outside the factor-backed cohort.
