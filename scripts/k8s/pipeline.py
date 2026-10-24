@@ -469,7 +469,7 @@ def plan_pipeline(
             raise PipelineError("full mode requires a verified SHA-256 receipt for the six input CSV files")
         if not isinstance(host_capacity, Mapping):
             raise PipelineError("full mode requires measured host capacity")
-        for field, minimum in FULL_DATA_RESERVE.items():
+        for field, minimum in get_capacity_reserve().items():
             value = host_capacity.get(field)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value < minimum:
                 raise PipelineError(f"full mode requires at least {minimum} {field.replace('_', ' ')}")

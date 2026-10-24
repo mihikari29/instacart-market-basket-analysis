@@ -164,7 +164,17 @@ def get_infrastructure_timeout(name: str) -> int:
 def get_capacity_reserve() -> dict[str, int]:
     """Return required host capacity reserve (CPU cores, RAM GiB, disk GiB)."""
     config = load_timeouts_config()
-    return config.get("capacity_reserve", DEFAULT_CONFIG["capacity_reserve"])
+    reserve = dict(config.get("capacity_reserve", DEFAULT_CONFIG["capacity_reserve"]))
+    env_mem = os.environ.get("IT4931_CAPACITY_RESERVE_MEMORY_GIB")
+    if env_mem and env_mem.isdigit():
+        reserve["memory_gib"] = int(env_mem)
+    env_cpu = os.environ.get("IT4931_CAPACITY_RESERVE_CPU_CORES")
+    if env_cpu and env_cpu.isdigit():
+        reserve["cpu_cores"] = int(env_cpu)
+    env_disk = os.environ.get("IT4931_CAPACITY_RESERVE_FREE_DISK_GIB")
+    if env_disk and env_disk.isdigit():
+        reserve["free_disk_gib"] = int(env_disk)
+    return reserve
 
 
 def get_synthesis_config() -> dict[str, Any]:
