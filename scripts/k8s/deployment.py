@@ -133,7 +133,8 @@ def deploy_serving(
         _check_storage_class_contract(storage_class, lock)
         loaded_images = load_and_verify_application_images(executor, identity, lock, execute=True)
     except (RuntimePreflightError, ImageOperationError, DeploymentError, ValueError) as exc:
-        raise DeploymentError("strict B2 pre-deployment identity checks failed") from exc
+        raise DeploymentError(f"strict B2 pre-deployment identity checks failed: {exc}") from exc
+
 
     namespace_file = run_path / "namespace.json"
     _run(

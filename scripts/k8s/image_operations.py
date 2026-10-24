@@ -149,7 +149,8 @@ def load_and_verify_application_images(
                 "minikube", "-p", identity.profile, "ssh", "--",
                 "sudo", "ctr", "-n", "k8s.io", "images", "tag", source_ref, t_ref,
             ]
-            executor.run(tag_cmd, timeout=30)
+            executor.run(tag_cmd, timeout=120)
+
     try:
         inventory = checked(executor, containerd_image_inventory_command(identity), timeout=timeout).stdout
         return verify_loaded_image_inventory(inventory, expected)

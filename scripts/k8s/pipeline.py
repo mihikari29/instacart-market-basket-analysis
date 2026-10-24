@@ -400,7 +400,8 @@ def load_pipeline_images(
             "minikube", "-p", identity.profile, "ssh", "--",
             "sudo", "ctr", "-n", "k8s.io", "images", "tag", source_ref, t_ref,
         ]
-        executor.run(tag_cmd, timeout=30)
+        executor.run(tag_cmd, timeout=120)
+
     from .image_provenance import verify_loaded_image_inventory
 
     try:
