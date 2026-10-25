@@ -11,6 +11,7 @@
 !deploy/dashboard/requirements/ui-dev.txt
 !deploy/dashboard/requirements/browser.txt
 !src/**/*.py
+!src/module4/dashboard/assets/*.json
 !tests/**/*.py
 tests/test_k8s_*.py
 # Every script is Python source and is admitted as a tree. Docker matches a
