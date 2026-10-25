@@ -52,15 +52,23 @@ class HybridRankingConfig:
 
     @classmethod
     def from_pipeline_config(cls, path: Any = None) -> "HybridRankingConfig":
-        from scripts.k8s.config import load_timeouts_config
-        cfg = load_timeouts_config(path)
-        hybrid_cfg = cfg.get("models", {}).get("hybrid", {})
-        return cls(
-            alpha=float(hybrid_cfg.get("alpha", 0.5)),
-            beta=float(hybrid_cfg.get("beta", 0.2)),
-            gamma=float(hybrid_cfg.get("gamma", 0.3)),
-            output_top_k=int(hybrid_cfg.get("output_top_k", 20)),
-        )
+        try:
+            from pathlib import Path
+            import yaml
+
+            cfg_path = Path(path) if path else Path("config/pipeline.yaml")
+            if cfg_path.is_file():
+                loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                hybrid_cfg = loaded.get("models", {}).get("hybrid", {})
+                return cls(
+                    alpha=float(hybrid_cfg.get("alpha", 0.5)),
+                    beta=float(hybrid_cfg.get("beta", 0.0)),
+                    gamma=float(hybrid_cfg.get("gamma", 0.5)),
+                    output_top_k=int(hybrid_cfg.get("output_top_k", 20)),
+                )
+        except Exception:
+            pass
+        return cls()
 
 
 @dataclass(frozen=True, slots=True)

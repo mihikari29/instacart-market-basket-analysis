@@ -160,16 +160,21 @@ def _trial_grid(max_trials: int = 12) -> list[ALSParams]:
         raise ValueError("max_trials must be between 1 and 12")
     custom_params = None
     try:
-        from scripts.k8s.config import get_models_config
-        als_cfg = get_models_config().get("als", {})
-        if als_cfg:
-            custom_params = ALSParams(
-                rank=int(als_cfg.get("rank", 32)),
-                max_iter=int(als_cfg.get("max_iter", 10)),
-                reg_param=float(als_cfg.get("reg_param", 0.1)),
-                alpha=float(als_cfg.get("alpha", 10.0)),
-                strength_col=str(als_cfg.get("strength_col", "strength_raw")),
-            )
+        from pathlib import Path
+        import yaml
+
+        pipeline_cfg = Path("config/pipeline.yaml")
+        if pipeline_cfg.is_file():
+            loaded = yaml.safe_load(pipeline_cfg.read_text(encoding="utf-8")) or {}
+            als_cfg = loaded.get("models", {}).get("als", {})
+            if als_cfg:
+                custom_params = ALSParams(
+                    rank=int(als_cfg.get("rank", 32)),
+                    max_iter=int(als_cfg.get("max_iter", 10)),
+                    reg_param=float(als_cfg.get("reg_param", 0.1)),
+                    alpha=float(als_cfg.get("alpha", 10.0)),
+                    strength_col=str(als_cfg.get("strength_col", "strength_raw")),
+                )
     except Exception:
         pass
 
