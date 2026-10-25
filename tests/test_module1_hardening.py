@@ -300,6 +300,107 @@ def test_raw_preflight_keeps_first_order_null_and_accepts_reordered_columns(tmp_
     assert tables["order_products__prior"].loc[0, "reordered"] == 0
 
 
+@pytest.mark.parametrize("gap", ["0", "2", "2.5", "30"])
+def test_raw_gap_accepts_blank_first_orders_and_bounded_numeric_gaps(tmp_path, gap):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    source = data_dir / "raw" / "orders.csv"
+    orders = pd.read_csv(source, dtype="string", keep_default_na=False)
+    orders.loc[1, "days_since_prior_order"] = gap
+    orders.to_csv(source, index=False)
+
+    loaded = raw_clean.load_raw(data_dir)["orders"]
+
+    assert loaded["days_since_prior_order"].isna().tolist() == [True, False, True]
+    assert loaded.loc[1, "days_since_prior_order"] == float(gap)
+    assert str(loaded["days_since_prior_order"].dtype) == "float32"
+
+
+@pytest.mark.parametrize("row", [0, 1])
+@pytest.mark.parametrize("missing", [pd.NA, float("nan")], ids=["pd.NA", "NaN"])
+def test_raw_gap_rejects_missing_scalars_with_a_diagnostic(tmp_path, row, missing):
+    raw_dir = tmp_path / "data" / "raw"
+    _write_raw_fixture(raw_dir)
+    tables = {
+        name: pd.read_csv(raw_dir / f"{name}.csv", dtype="string", keep_default_na=False)
+        for name in raw_clean.RAW_COLUMNS
+    }
+    tables["orders"].loc[row, "days_since_prior_order"] = missing
+
+    with pytest.raises(raw_clean.RawInputValidationError) as failure:
+        raw_clean._validate_raw_tables(tables)
+
+    assert failure.value.diagnostics == (
+        f"orders.csv row {row + 2}: days_since_prior_order must be blank or a finite number in [0, 30]",
+    )
+
+
+@pytest.mark.parametrize(
+    "gap",
+    ["", "bad", " ", "NA", "NaN", "inf", "-inf", "Infinity", "1e309", "-0.01", "30.01", "9" * 400],
+    ids=["blank", "malformed", "whitespace", "NA", "NaN", "inf", "-inf", "Infinity",
+         "exponent", "negative", "above-cap", "overflow"],
+)
+def test_raw_gap_invalid_input_keeps_diagnostics_and_existing_publication(tmp_path, monkeypatch, capsys, gap):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    source = raw_dir / "orders.csv"
+    orders = pd.read_csv(source, dtype="string", keep_default_na=False)
+    orders.loc[1, "days_since_prior_order"] = gap
+    orders.to_csv(source, index=False)
+    raw_before = {path.name: path.read_bytes() for path in raw_dir.iterdir()}
+    output = tmp_path / "clean"
+    _mark_owned_output(output)
+    previous = {path.name: path.read_bytes() for path in output.iterdir()}
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+
+    assert raw_clean.main() == 2
+
+    diagnostic = (
+        "a blank days_since_prior_order is valid only for order_number 1"
+        if gap == "" else "days_since_prior_order must be blank or a finite number in [0, 30]"
+    )
+    assert capsys.readouterr().err == f"raw input preflight failed: orders.csv row 3: {diagnostic}\n"
+    assert {path.name: path.read_bytes() for path in raw_dir.iterdir()} == raw_before
+    assert {path.name: path.read_bytes() for path in output.iterdir()} == previous
+
+
+def test_raw_gap_six_file_cleaning_publishes_expected_values_and_schema(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    raw_before = {path.name: path.read_bytes() for path in raw_dir.iterdir()}
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output), "--validate"]
+    )
+
+    assert raw_clean.main() == 0
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert "first-order NaN gaps -> 0            : 2" in captured.out
+    assert {path.name for path in output.iterdir()} == raw_clean._CLEAN_OUTPUT_FILES | {
+        raw_clean._CLEAN_OUTPUT_MANIFEST
+    }
+    expected_rows = {"orders": 3, "order_products__prior": 1, "order_products__train": 1,
+                     "products": 1, "aisles": 1, "departments": 1}
+    for table, count in expected_rows.items():
+        parquet = pq.read_table(output / f"{table}.parquet")
+        assert parquet.num_rows == count
+        for column, dtype in raw_clean.RAW_DATA_TYPES[table].items():
+            if column == "reordered":
+                assert parquet.schema.field(column).type == pa.bool_()
+            elif dtype.startswith(("int", "float")):
+                assert parquet.schema.field(column).type == pa.from_numpy_dtype(dtype)
+    orders = pd.read_parquet(output / "orders.parquet")
+    assert orders["days_since_prior_order"].tolist() == [0.0, 2.0, 0.0]
+    assert orders["dspo_raw"].isna().tolist() == [True, False, True]
+    assert not orders["cap_recovered"].any()
+    assert {path.name: path.read_bytes() for path in raw_dir.iterdir()} == raw_before
+
+
 def _clean_output_frames(value: bytes = b"new"):
     return {name: _ParquetFixture(value) for name in raw_clean._CLEAN_OUTPUT_FILES}
 
