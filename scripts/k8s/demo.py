@@ -175,7 +175,7 @@ def prepare_run_lock(
     evidence are retained on failure; no cleanup or resume is attempted.
     """
     capacity = dict(host_capacity)
-    validate_host_capacity(capacity, phase="b3", require_backing_disk=True)
+    validate_host_capacity(capacity, phase="b3")
     template = load_version_lock(template_path)
     validate_static_lock(template)
     if template.get("status") != "incomplete":
@@ -363,7 +363,7 @@ def _validate_mode_inputs(
     if input_directory is None:
         raise DemoError("full mode requires --input-dir with the six source CSV files")
     try:
-        validate_host_capacity(dict(capacity), phase="b3", require_backing_disk=True)
+        validate_host_capacity(dict(capacity), phase="b3")
         receipt = inspect_input_directory(input_directory)
     except (RuntimePreflightError, InputReceiptError) as exc:
         raise DemoError(f"full-data preflight stopped: {exc}") from exc
@@ -448,7 +448,7 @@ def preflight_report(
     reserve_ok = True
     reserve_error = None
     try:
-        validate_host_capacity(dict(capacity), phase="b3", require_backing_disk=True)
+        validate_host_capacity(dict(capacity), phase="b3")
     except RuntimePreflightError as exc:
         reserve_ok = False
         reserve_error = str(exc)
@@ -531,7 +531,7 @@ def run_demo(
         host_capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
         host_capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
     try:
-        validate_host_capacity(host_capacity, phase="b3", require_backing_disk=True)
+        validate_host_capacity(host_capacity, phase="b3")
     except RuntimePreflightError as exc:
         raise DemoError(f"runtime capacity preflight stopped: {exc}") from exc
     source = _validate_mode_inputs(mode, input_directory=input_directory, capacity=host_capacity)

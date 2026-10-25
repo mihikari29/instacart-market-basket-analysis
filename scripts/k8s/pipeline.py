@@ -1033,7 +1033,7 @@ def execute_pipeline(
     from .runtime import RuntimePreflightError, validate_host_capacity
 
     try:
-        validate_host_capacity(dict(host_capacity or {}), phase="b3", require_backing_disk=True)
+        validate_host_capacity(dict(host_capacity or {}), phase="b3")
     except RuntimePreflightError as exc:
         raise PipelineError("B3 deployment requires fresh measured 6 CPU / 12 GiB RAM / 40 GiB disk capacity") from exc
     directory = Path(pipeline_directory).resolve(strict=True)

@@ -196,7 +196,7 @@ def measure_host_capacity(*, disk_path: Path | str = "/") -> dict[str, Any]:
 
 
 def validate_host_capacity(
-    capacity: dict[str, Any], *, phase: str = "b2", require_backing_disk: bool = True
+    capacity: dict[str, Any], *, phase: str = "b2"
 ) -> None:
     """Fail closed against configured B2/B3 reserves and unknown backing space."""
     if phase not in {"b2", "b3"}:
@@ -223,7 +223,7 @@ def validate_host_capacity(
             raise RuntimePreflightError(f"host {field} is unknown; runtime preflight cannot pass")
         if value < minimum:
             raise RuntimePreflightError(f"host {field} is below the documented {phase.upper()} reserve")
-    if require_backing_disk and capacity.get("wsl_guest") is True:
+    if capacity.get("wsl_guest") is True:
         backing = capacity.get("windows_backing_disk_gib")
         if (
             not isinstance(backing, (int, float))
