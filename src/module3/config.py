@@ -7,7 +7,12 @@ reproducible from the run summary alone.
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import re
+
+# Re-exported so `from .config import parse_bool` keeps working for callers
+# that treat the Module 3 configuration module as the owner of the flag.
+from ..common.runtime import parse_bool
 
 DEFAULT_TOPIC = "instacart-purchase-events"
 DEFAULT_MONGO_TOP_K = 20
@@ -27,20 +32,6 @@ def _validate_stable_label(value: str | None, field: str, maximum: int) -> None:
             f"{field} must use 1-{maximum} letters, digits, '.', '_', ':', '/', or '-'; "
             "it must start with a letter or digit"
         )
-
-
-def parse_bool(value: str | bool) -> bool:
-    """Parse an explicit environment/CLI boolean without truthy-string traps."""
-    if isinstance(value, bool):
-        return value
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    raise ValueError(
-        "Boolean value must be one of: true, false, 1, 0, yes, no, on, off"
-    )
 
 
 @dataclass(frozen=True)
@@ -158,3 +149,18 @@ class Config:
         }
         values.update(overrides)
         return cls(**values)
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 3 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module3",
+        total_cores=2,
+        executor_memory="1g",
+        executor_cores=2,
+        extra_config={"spark.sql.streaming.metricsEnabled": "true"},
+    )

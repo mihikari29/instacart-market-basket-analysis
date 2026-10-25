@@ -67,6 +67,7 @@ def write_mongo(batch_df: DataFrame, batch_id: int, config: Config, batch_size: 
     row_count = 0
     windows: dict = {}
     replaced_documents = 0
+    ingestion_timestamps = {"count": 0, "sum": 0, "min": None, "max": None}
     cached = batch_df.persist()
     try:
         window_ends = [row.window_end for row in cached.select("window_end").distinct().collect()]
@@ -97,6 +98,22 @@ def write_mongo(batch_df: DataFrame, batch_id: int, config: Config, batch_size: 
             for row in cached.toLocalIterator():
                 row_count += 1
                 doc = row.asDict()
+                ingestion_timestamp = doc.pop("_latest_ingestion_time_epoch_ms", None)
+                if ingestion_timestamp is not None:
+                    if type(ingestion_timestamp) is not int or ingestion_timestamp <= 0:
+                        raise ValueError("Sink row has invalid latest ingestion timestamp")
+                    ingestion_timestamps["count"] += 1
+                    ingestion_timestamps["sum"] += ingestion_timestamp
+                    ingestion_timestamps["min"] = (
+                        ingestion_timestamp
+                        if ingestion_timestamps["min"] is None
+                        else min(ingestion_timestamps["min"], ingestion_timestamp)
+                    )
+                    ingestion_timestamps["max"] = (
+                        ingestion_timestamp
+                        if ingestion_timestamps["max"] is None
+                        else max(ingestion_timestamps["max"], ingestion_timestamp)
+                    )
                 if not 1 <= int(doc["trend_rank"]) <= config.mongo_top_k_per_window:
                     raise ValueError(
                         f"Sink row rank {doc['trend_rank']} exceeds Top-K "
@@ -125,5 +142,6 @@ def write_mongo(batch_df: DataFrame, batch_id: int, config: Config, batch_size: 
         "top_k_per_window": config.mongo_top_k_per_window,
         "replaced_documents": replaced_documents,
         "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+        "ingestion_timestamp_stats": ingestion_timestamps,
         **totals,
     }

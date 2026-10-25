@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import math
 import os
+from pathlib import Path
 
 
 TABLES = {
@@ -51,8 +52,8 @@ class Config:
             raise ValueError("graph_max_iter must be positive")
         if not math.isfinite(self.graph_reset_probability):
             raise ValueError("graph_reset_probability must be finite")
-        if self.graph_backend not in {"graphframes", "dataframe"}:
-            raise ValueError("graph_backend must be graphframes or dataframe")
+        if self.graph_backend != "graphframes":
+            raise ValueError("graph_backend must be graphframes")
         if self.graph_top_products is not None and self.graph_top_products < 2:
             raise ValueError("graph_top_products must be at least two")
         if min(self.executor_cores, self.total_cores, self.als_blocks) < 1:
@@ -118,12 +119,22 @@ class Config:
             "als_blocks": env_int("MODULE4_ALS_BLOCKS", cls.als_blocks),
             "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
             "mongo_database": os.environ.get("MODULE4_MONGO_DATABASE", cls.mongo_database),
-            "mongo_recommendation_collection": os.environ.get(
-                "MODULE4_RECOMMENDATION_COLLECTION", cls.mongo_recommendation_collection
-            ),
-            "mongo_graph_collection": os.environ.get(
-                "MODULE4_GRAPH_COLLECTION", cls.mongo_graph_collection
-            ),
+            "mongo_recommendation_collection": cls.mongo_recommendation_collection,
+            "mongo_graph_collection": cls.mongo_graph_collection,
         }
         values.update(overrides)
         return cls(**values)
+
+
+def session(config: Config, event_dir: Path | None = None):
+    """Create the Module 4 Spark session."""
+    from ..common.spark import build_session
+
+    return build_session(
+        config,
+        event_dir,
+        app_name="instacart-module4",
+        total_cores=config.total_cores,
+        executor_memory=config.executor_memory,
+        executor_cores=config.executor_cores,
+    )

@@ -4,8 +4,10 @@ FROM apache/spark:3.5.5-java17-python3@sha256:96dc2bada923824300e1ece56438925893
 USER root
 COPY requirements.txt requirements-dev.txt /tmp/dependencies/
 RUN pip install --no-cache-dir -r /tmp/dependencies/requirements-dev.txt
-COPY deploy/module4/requirements/api.txt /tmp/module4-api-requirements.txt
+COPY deploy/dashboard/requirements/api.txt /tmp/module4-api-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python3 /tmp/write-python-environment.py
 
 # Spark does not bundle the Structured Streaming Kafka source. Keep the
 # connector and its compile-time dependencies in the image, pinned and
@@ -32,7 +34,7 @@ FROM spark AS api
 
 USER root
 WORKDIR /workspace
-COPY deploy/module4/requirements/api.txt /tmp/module4-api-requirements.txt
+COPY deploy/dashboard/requirements/api.txt /tmp/module4-api-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt \
     && python3 -m pip check \
     && python3 -c "import pymongo; assert pymongo.version == '4.11.3', pymongo.version"
@@ -40,17 +42,12 @@ RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt \
 COPY pyproject.toml /workspace/pyproject.toml
 COPY src/ /workspace/src/
 COPY tests/ /workspace/tests/
-COPY scripts/module4/__init__.py /workspace/scripts/module4/__init__.py
-COPY scripts/module4/module4d_api_validation.py /workspace/scripts/module4/module4d_api_validation.py
-COPY scripts/module4/module4d_demo_fixture.py /workspace/scripts/module4/module4d_demo_fixture.py
-COPY scripts/module4/module4d_demo_validate.py /workspace/scripts/module4/module4d_demo_validate.py
-COPY scripts/module4/module4c_responsiveness.py /workspace/scripts/module4/module4c_responsiveness.py
-COPY scripts/module4/module4c_streaming_demo.py /workspace/scripts/module4/module4c_streaming_demo.py
-COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
-COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
-COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
-COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
+COPY scripts/dashboard/__init__.py /workspace/scripts/dashboard/__init__.py
+COPY scripts/dashboard/api_validation.py /workspace/scripts/dashboard/api_validation.py
+COPY scripts/dashboard/demo_fixture.py /workspace/scripts/dashboard/demo_fixture.py
+COPY scripts/dashboard/demo_validate.py /workspace/scripts/dashboard/demo_validate.py
+COPY scripts/experiments/module4c_responsiveness.py /workspace/scripts/experiments/module4c_responsiveness.py
+COPY scripts/experiments/module4c_streaming_demo.py /workspace/scripts/experiments/module4c_streaming_demo.py
 ENV PYTHONPATH=/workspace
 
 # The image is exercised with explicit test commands by the validation script.
@@ -59,6 +56,9 @@ CMD ["python3", "-m", "pytest", "-q"]
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS ui
 
 ARG MODULE4D_UI_DEV=0
+ARG MODULE4_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \
+      org.opencontainers.image.revision=${MODULE4_COMMIT}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
@@ -66,7 +66,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 WORKDIR /app
-COPY deploy/module4/requirements/ui.txt deploy/module4/requirements/ui-dev.txt ./
+COPY deploy/dashboard/requirements/ui.txt deploy/dashboard/requirements/ui-dev.txt ./
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       -r ui.txt \
     && if [ "$MODULE4D_UI_DEV" = "1" ]; then \
@@ -74,11 +74,14 @@ RUN python -m pip install --no-cache-dir --disable-pip-version-check \
     fi \
     && python -m pip check \
     && useradd --uid 10001 --create-home --shell /usr/sbin/nologin dashboard
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python /tmp/write-python-environment.py
 
 COPY src/__init__.py ./src/__init__.py
 COPY src/module4/__init__.py ./src/module4/__init__.py
 COPY src/module4/dashboard/__init__.py ./src/module4/dashboard/__init__.py
 COPY src/module4/dashboard/ui ./src/module4/dashboard/ui
+COPY src/module3/__init__.py src/module3/metrics.py ./src/module3/
 
 USER 10001:10001
 EXPOSE 8501
@@ -87,10 +90,10 @@ CMD ["python", "-m", "streamlit", "run", "src/module4/dashboard/ui/app.py", "--s
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble@sha256:72bd171a9ffc2b4b59532aaa6210e21014d07093120dc25528870c0b840da1f0 AS browser
 
 WORKDIR /opt/module4d-browser
-COPY deploy/module4/requirements/browser.txt ./browser-requirements.txt
+COPY deploy/dashboard/requirements/browser.txt ./browser-requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check -r browser-requirements.txt \
     && python -m pip check
-COPY scripts/module4/module4d_browser_e2e.py ./module4d_browser_e2e.py
+COPY scripts/dashboard/browser_e2e.py ./module4d_browser_e2e.py
 USER pwuser
 ENTRYPOINT ["python", "module4d_browser_e2e.py"]
 
@@ -122,30 +125,59 @@ ENV PYTHONPATH=/workspace \
     MODULE4_COMMIT=${MODULE4_COMMIT}
 
 COPY src/__init__.py /workspace/src/__init__.py
+COPY src/common/ /workspace/src/common/
 COPY src/module3/__init__.py /workspace/src/module3/__init__.py
 COPY src/module3/config.py /workspace/src/module3/config.py
 COPY src/module3/trend_bundle.py /workspace/src/module3/trend_bundle.py
+COPY src/module3/metrics.py /workspace/src/module3/metrics.py
 COPY src/module4/ /workspace/src/module4/
 
 # These files are part of the established Module 4 provenance digest. Keep
 # their paths and bytes intact even though the API does not execute the CLIs.
 COPY scripts/module4.py /workspace/scripts/module4.py
-COPY scripts/module4_runtime_smoke.py /workspace/scripts/module4_runtime_smoke.py
-COPY scripts/module4_flow_smoke.py /workspace/scripts/module4_flow_smoke.py
-COPY scripts/module4_cross_module_smoke.py /workspace/scripts/module4_cross_module_smoke.py
+COPY scripts/module4_smoke.py /workspace/scripts/module4_smoke.py
 COPY Dockerfile /workspace/Dockerfile
 COPY compose.yaml /workspace/compose.yaml
 COPY requirements.txt /workspace/requirements.txt
 COPY requirements-dev.txt /workspace/requirements-dev.txt
 
-# Module 4D's registered historical evidence route reads exactly these files.
-COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
-COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
-COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
-COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
 COPY scripts/k8s/api_readiness.py /workspace/scripts/k8s/api_readiness.py
 
 USER 10001:10001
 EXPOSE 8000
 CMD ["python3", "-c", "print('Kubernetes runner image; specify an explicit workload command')"]
+
+# B3 Spark pipeline image. It contains the existing module CLIs and the small
+# synthetic six-file fixture. Kubernetes runs Spark in local[2] inside a
+# dedicated Job; it does not create distributed Spark executors.
+FROM spark AS pipeline
+
+ARG MODULE4_COMMIT
+RUN set -eu; \
+    case "$MODULE4_COMMIT" in \
+      ''|*[!0-9a-f]*) echo 'MODULE4_COMMIT must be a full lowercase Git SHA' >&2; exit 1 ;; \
+    esac; \
+    if [ "${#MODULE4_COMMIT}" -ne 40 ]; then \
+      echo 'MODULE4_COMMIT must be exactly 40 characters' >&2; exit 1; \
+    fi; \
+    groupadd --gid 10001 k8spipeline; \
+    useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin k8spipeline
+LABEL org.opencontainers.image.source="https://github.com/mihikari29/instacart-market-basket-analysis" \
+      org.opencontainers.image.revision=${MODULE4_COMMIT}
+WORKDIR /workspace
+COPY src/ /workspace/src/
+COPY scripts/ /workspace/scripts/
+COPY pyproject.toml /workspace/pyproject.toml
+COPY Dockerfile /workspace/Dockerfile
+COPY compose.yaml /workspace/compose.yaml
+COPY requirements.txt requirements-dev.txt /workspace/
+COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
+RUN python3 /tmp/write-python-environment.py
+ENV PYTHONPATH=/workspace \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    HOME=/tmp \
+    SPARK_LOCAL_DIRS=/tmp/spark \
+    MODULE4_COMMIT=${MODULE4_COMMIT}
+USER 10001:10001
+CMD ["python3", "-c", "print('Kubernetes pipeline image; specify an explicit bounded task')"]

@@ -64,28 +64,33 @@ def build_window_counts(events_df: DataFrame, config: Config) -> DataFrame:
     windowed = deduplicated.withColumn(
         "_window", F.window("event_time", config.window_long, config.slide)
     )
-    return (
-        windowed.groupBy("_window", "product_id")
-        .agg(
-            F.sum(
-                F.when(
-                    F.col("event_time")
-                    >= F.col("_window.end") - F.expr(f"INTERVAL {config.window_short}"),
-                    F.lit(1),
-                ).otherwise(F.lit(0))
-            )
-            .cast("long")
-            .alias("purchase_count_30m"),
-            F.count(F.lit(1)).cast("long").alias("purchase_count_120m"),
+    aggregations = [
+        F.sum(
+            F.when(
+                F.col("event_time")
+                >= F.col("_window.end") - F.expr(f"INTERVAL {config.window_short}"),
+                F.lit(1),
+            ).otherwise(F.lit(0))
         )
-        .select(
-            F.col("_window.start").alias("window_start"),
-            F.col("_window.end").alias("window_end"),
-            "product_id",
-            "purchase_count_30m",
-            "purchase_count_120m",
+        .cast("long")
+        .alias("purchase_count_30m"),
+        F.count(F.lit(1)).cast("long").alias("purchase_count_120m"),
+    ]
+    has_ingestion_timestamp = "ingestion_time_epoch_ms" in windowed.columns
+    if has_ingestion_timestamp:
+        aggregations.append(
+            F.max("ingestion_time_epoch_ms").cast("long").alias("_latest_ingestion_time_epoch_ms")
         )
-    )
+    selected = [
+        F.col("_window.start").alias("window_start"),
+        F.col("_window.end").alias("window_end"),
+        "product_id",
+        "purchase_count_30m",
+        "purchase_count_120m",
+    ]
+    if has_ingestion_timestamp:
+        selected.append("_latest_ingestion_time_epoch_ms")
+    return windowed.groupBy("_window", "product_id").agg(*aggregations).select(*selected)
 
 
 def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
@@ -106,7 +111,7 @@ def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
     rank_window = Window.partitionBy("window_end").orderBy(F.desc("trend_score"), "product_id")
     ranked = trend.withColumn("trend_rank", F.row_number().over(rank_window))
 
-    return ranked.select(
+    output_columns = [
         "window_start",
         "window_end",
         "product_id",
@@ -114,7 +119,10 @@ def rank_trending_batch(counts_df: DataFrame, config: Config) -> DataFrame:
         "purchase_count_120m",
         "trend_score",
         "trend_rank",
-    )
+    ]
+    if "_latest_ingestion_time_epoch_ms" in ranked.columns:
+        output_columns.append("_latest_ingestion_time_epoch_ms")
+    return ranked.select(*output_columns)
 
 
 def select_top_k(ranked_df: DataFrame, config: Config) -> DataFrame:

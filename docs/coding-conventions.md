@@ -82,7 +82,7 @@ Use existing behavior-focused tests for style-only changes.
 Preserve seeds, entity-keyed randomness, timestamp calculations, schemas,
 evaluation splits, scoring arithmetic, ranking ties, version identities and
 publication ordering. Keep Module 1–4 ownership and Lambda Architecture intact.
-Never rewrite `docs/evidence/`, historical measurements, datasets or generated
+Never rewrite historical measurements, datasets or generated
 results to accommodate a style change. Defer any refactor whose equivalence
 requires substantial new behavioral or integration reasoning.
 

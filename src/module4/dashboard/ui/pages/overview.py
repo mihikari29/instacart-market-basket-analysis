@@ -124,6 +124,42 @@ def render_overview(st: Any, client: Any) -> None:
         st.caption(f"Static registry response observed at {display_time(evidence['observed_at'])}. Archived reports are historical evidence; C8B is not live Kafka ingestion.")
         show_cached(st, evidence_cached)
 
+    render_streaming_metrics(st, client, namespace)
+
+
+def render_streaming_metrics(st: Any, client: Any, namespace: str) -> None:
+    st.subheader("Streaming throughput and latency")
+    if not namespace:
+        st.info("Configure a trend source namespace to read streaming metrics.")
+        return
+    refresh = st.button("Refresh streaming metrics", key="streaming_metrics_refresh")
+    payload, error, cached = fetch(st.session_state, client, "get_streaming_metrics", namespace, refresh=refresh)
+    if error:
+        render_error(st, error, label="Streaming metrics")
+        return
+    if not payload or not payload["available"]:
+        st.info("No completed streaming batch metrics have been published for this namespace.")
+        return
+    metrics = payload["metrics"]
+    columns = st.columns(2)
+    for column, key, label in zip(columns, ("input_rows_per_second", "processed_rows_per_second"),
+                                  ("Input rows / second", "Processed rows / second"), strict=True):
+        value = metrics[key]
+        column.metric(label, "Unavailable" if value is None else f"{value:,.2f}")
+    st.caption(f"Namespace: {namespace} · Run: {metrics['run_id']} · Query: {metrics['query_id']} · Batch: {metrics['batch_id']} · Input rows: {metrics['num_input_rows']}")
+    st.caption(f"Captured: {display_time(metrics['captured_at'])} · API observation: {display_time(payload['observed_at'])}. Last published batch; refresh to check for a newer observation.")
+    latency = metrics["ingestion_to_output_latency"]
+    if latency["status"] == "measured":
+        st.write("Producer ingestion to finalized output (milliseconds)")
+        st.dataframe([{"Samples": latency["sample_count"], **latency["latency_ms"]}], hide_index=True)
+        st.caption(latency["sample_boundary"] + ". " + latency["timestamp_provenance"])
+        if latency["clock_skew_detected"]:
+            st.warning("Clock skew detected: the producer timestamp exceeds the output host timestamp.")
+        st.caption(" · ".join(latency["limitations"]))
+    else:
+        st.info("Latency is unavailable: this batch emitted no finalized rows with valid ingestion timestamps.")
+    show_cached(st, cached)
+
 
 def _overview_namespace() -> str:
     values = configured_trend_namespaces()

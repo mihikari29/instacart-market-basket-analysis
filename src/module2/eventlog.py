@@ -46,7 +46,26 @@ def parse_event_logs(directory):
                             stages.get(stage["Stage ID"], -1), stage["Stage Attempt ID"]
                         )
                 elif kind == "SparkListenerTaskEnd":
-                    tasks[(event["Stage ID"], event["Stage Attempt ID"])].append(event)
+                    # Only the counters are retained. The full event payload is
+                    # several kilobytes and a full run produces tens of
+                    # thousands of them, so keeping the events would cost
+                    # hundreds of megabytes of driver memory for data the
+                    # report never reads again.
+                    metrics = event.get("Task Metrics", {})
+                    inp = metrics.get("Input Metrics", {})
+                    read = metrics.get("Shuffle Read Metrics", {})
+                    write = metrics.get("Shuffle Write Metrics", {})
+                    tasks[(event["Stage ID"], event["Stage Attempt ID"])].append(
+                        (
+                            event.get("Task End Reason", {}).get("Reason") == "Success",
+                            event["Task Info"]["Index"],
+                            inp.get("Bytes Read", 0),
+                            inp.get("Records Read", 0),
+                            read.get("Remote Bytes Read", 0) + read.get("Local Bytes Read", 0),
+                            write.get("Shuffle Bytes Written", 0),
+                            metrics.get("Executor Run Time", 0),
+                        )
+                    )
     if not completed:
         raise ValueError("No completed Spark application in event log")
     for job, group in jobs.items():
@@ -74,27 +93,21 @@ def parse_event_logs(directory):
                 raise ValueError(f"Group {group}: no successful attempt for submitted stage {stage}")
         seen = set()
         for stage, attempt in sorted(executed):
-            for event in tasks[(stage, attempt)]:
-                success = event.get("Task End Reason", {}).get("Reason") == "Success"
+            for task in tasks[(stage, attempt)]:
+                success, task_index, bytes_read, records_read, shuffle_read, shuffle_write, run_time = task
                 if not success:
                     result["failed_task_attempts"] += 1
-                index = (stage, event["Task Info"]["Index"])
+                index = (stage, task_index)
                 if not success or attempt != stages[stage] or index in seen:
                     result["discarded_task_attempts"] += 1
                     continue
                 seen.add(index)
-                metrics = event.get("Task Metrics", {})
-                inp = metrics.get("Input Metrics", {})
-                read = metrics.get("Shuffle Read Metrics", {})
-                write = metrics.get("Shuffle Write Metrics", {})
                 result["tasks"] += 1
-                result["input_bytes"] += inp.get("Bytes Read", 0)
-                result["input_records"] += inp.get("Records Read", 0)
-                result["shuffle_read_bytes"] += read.get("Remote Bytes Read", 0) + read.get(
-                    "Local Bytes Read", 0
-                )
-                result["shuffle_write_bytes"] += write.get("Shuffle Bytes Written", 0)
-                result["executor_run_time_ms"] += metrics.get("Executor Run Time", 0)
+                result["input_bytes"] += bytes_read
+                result["input_records"] += records_read
+                result["shuffle_read_bytes"] += shuffle_read
+                result["shuffle_write_bytes"] += shuffle_write
+                result["executor_run_time_ms"] += run_time
         output[group] = result
     return output
 

@@ -1,4 +1,67 @@
-# Kế hoạch kỹ thuật và nghiệm thu Module 4A–4D
+# Engineering Plan and Acceptance Specification for Modules 4A–4D
+
+## Overview and Scope
+
+> This document is the unified technical and acceptance specification for Modules 4A through 4D.
+> All sections are presented in English. Historical dated evidence and run logs remain archived in their respective directories.
+
+**What Module 4 is.** Module 4 turns the prior-history data staged by Module 1
+into recommendations and then serves them. It has four parts:
+
+| Part | Package | Responsibility |
+|---|---|---|
+| 4A | `src/module4/als.py` | Fit implicit-feedback ALS from prior user-product counts, evaluate it against held-out official train baskets, publish versioned recommendations. |
+| 4B | `src/module4/graph.py` | Build the prior-basket product co-purchase graph over the full catalog, derive neighbour and weighted-degree metrics, run GraphFrames PageRank. |
+| 4C | `src/module4/hybrid/` | Combine ready 4A and 4B snapshots with a verified immutable finalized-trend bundle at an explicit event-time cutoff, rank deterministically, publish a versioned per-user snapshot. |
+| 4D | `src/module4/dashboard/` | Serve bounded, indexed, read-only API views and render them in a four-page Streamlit dashboard. The dashboard never connects to MongoDB directly. |
+
+**Data discipline.** 4A and 4B fit from *prior* interactions only. The
+official train baskets are held out as evaluation truth and never select
+fitting parameters. 4C publishes behind an explicit readiness pointer and
+records the source generation it used. 4D reads only published, versioned
+generations and distinguishes unavailable from empty and from malformed.
+
+**Acceptance status.** On 10 October 2026 the historical full-data A/B
+acceptance passed 21/21 gates, with a first run and a same-version replay
+that reproduced the logical snapshot digests. That record is dated evidence
+for its own source revision, not a fresh verification of the current commit.
+ALS did **not** outperform the personal-frequency baseline on Recall@10
+(0.121472 against 0.319232): the acceptance demonstrates correctness and
+reproducibility, not a recommendation-quality improvement. The search tested
+one bounded baseline configuration, not a global optimum.
+
+**What the acceptance does not establish.** Leakage-safe Hybrid quality,
+per-user ALS serving, dashboard production readiness and production
+scalability are all open. See [current progress](progress.md).
+
+**Section map.**
+
+| Section | Vietnamese heading | English heading |
+|---|---|---|
+| 1 | Phạm vi | Scope |
+| 2 | Mục tiêu nghiệm thu | Acceptance objectives |
+| 3 | Hợp đồng dữ liệu | Data contracts |
+| 4 | Cấu trúc mô hình đề xuất | Proposed model structure |
+| 5 | Module 4A — ALS Recommendation | Module 4A — ALS recommendation |
+| 6 | Module 4B — Product Co-purchase Graph | Module 4B — product co-purchase graph |
+| 7 | Chiến lược kiểm thử | Test strategy |
+| 8 | Ma trận đánh giá/nghiệm thu | Evaluation and acceptance matrix |
+| 9 | Evidence bắt buộc | Required evidence |
+| 10 | Kế hoạch thực hiện | Implementation plan |
+| 11 | Thứ tự ưu tiên khi thiếu thời gian | Prioritisation when time is short |
+| 12 | Kết quả kiểm tra hiện tại | Current check results |
+| 13 | Backlog thực hiện | Implementation backlog |
+| 14 | Chi tiết công việc theo thành phần | Work breakdown by component |
+| 15 | Ma trận test bắt buộc | Required test matrix |
+| 16 | Quy trình chạy nghiệm thu | Acceptance execution procedure |
+| 17 | Checklist nghiệm thu Module 4A–4B | Module 4A–4B acceptance checklist |
+| 18 | Quy tắc cập nhật tài liệu bàn giao | Handover document update rules |
+| 19 | — | Module 4C — Hybrid recommendation and serving (English) |
+| 20 | — | Module 4D — Read API and dashboard specification (English) |
+
+The English contracts for 4C and 4D are also summarised in the
+[implementation ledger](implementation-ledger.md) and the
+[repository layout](../README.md#repository-layout).
 
 Mốc nghiệm thu Module 4A–4B lịch sử: **10/10/2026** (Asia/Bangkok). Bản hợp nhất Module 4A–4D cập nhật **15/10/2026**.
 
@@ -6,14 +69,14 @@ Ngày 10/10, historical full-data A/B acceptance passed **21/21 gates**. The rec
 
 ALS did not outperform personal frequency. The search tested one bounded baseline configuration, not a global optimum. This acceptance does not establish Hybrid quality, dashboard production readiness, or production scalability. See the [dated acceptance record](evidence/module4/acceptance-20261010/README.md), the [historical implementation archive](evidence/module4/ab-implementation-history.md), and [current progress and limitations](progress.md). Operational instructions are maintained in [docker.md](docker.md); the evidence index is [here](evidence/README.md).
 
-## Mục lục
+## Table of Contents
 
 - [1. Phạm vi](#1-phạm-vi)
 - [2. Mục tiêu nghiệm thu](#2-mục-tiêu-nghiệm-thu)
 - [3. Hợp đồng dữ liệu](#3-hợp-đồng-dữ-liệu)
 - [4. Cấu trúc mã đề xuất](#4-cấu-trúc-mã-đề-xuất)
-- [5. Module 4A — ALS Recommendation](#5-module-4a--als-recommendation)
-- [6. Module 4B — Product Co-purchase Graph](#6-module-4b--product-co-purchase-graph)
+- [5. Module 4A — ALS Recommendation](#module4a-als-recommendation)
+- [6. Module 4B — Product Co-purchase Graph](#module4b-product-co-purchase-graph)
 - [7. Chiến lược kiểm thử](#7-chiến-lược-kiểm-thử)
 - [8. Ma trận đánh giá/nghiệm thu](#8-ma-trận-đánh-giánghiệm-thu)
 - [9. Evidence bắt buộc](#9-evidence-bắt-buộc)
@@ -29,7 +92,7 @@ ALS did not outperform personal frequency. The search tested one bounded baselin
 - [19. Module 4C — Hybrid recommendation and serving](#module4c-spec)
 - [20. Module 4D — Read API and dashboard specification](#module4d-spec)
 
-## 1. Phạm vi
+## 1. Scope
 
 Phần A/B của tài liệu giữ nguyên phạm vi và tiêu chí ban đầu:
 
@@ -50,7 +113,7 @@ cho:
 Đây là technical plan của Module 4A–4D, không thay đổi yêu cầu, scope đã duyệt
 hay các acceptance record trong [Proposal.md](Proposal.md) và evidence.
 
-## 2. Mục tiêu nghiệm thu
+## 2. Acceptance Objectives
 
 Module 4A–4B được xem là hoàn thành khi:
 
@@ -68,7 +131,7 @@ Module 4A–4B được xem là hoàn thành khi:
 
 Checklist chi tiết bắt buộc ở mục 17; bảng này chỉ tóm tắt mục tiêu.
 
-## 3. Hợp đồng dữ liệu
+## 3. Data Contracts
 
 ### 3.1. Input
 
@@ -119,7 +182,7 @@ computed_at
 run_id
 ```
 
-## 4. Cấu trúc mã đề xuất
+## 4. Proposed Code Structure
 
 ```text
 src/module4/
@@ -140,11 +203,13 @@ tests/test_module4.py               # hiện có: Spark fixture
 tests/test_module4_spark.py         # đề xuất: mở rộng runtime/standalone tests
 tests/test_module4_mongo.py         # đề xuất: live publish/replay/failure
 tests/test_module4_flow.py          # đề xuất: staged Module 1–2–4 flow
-docs/evidence/module4/<run_id>/
+results/module4/<run_id>/
 ```
 
 Docker image phải pin GraphFrames Python package và JAR tương thích Spark
 3.5/Scala 2.12. Worker không nên tải dependency từ Maven trong lúc demo.
+
+<a id="module4a-als-recommendation"></a>
 
 ## 5. Module 4A — ALS Recommendation
 
@@ -299,6 +364,8 @@ index(model_version, user_id)
 Publish vào collection tạm rồi rename. Chạy lại cùng input/config/version phải
 không tạo document hoặc rank trùng.
 
+<a id="module4b-product-co-purchase-graph"></a>
+
 ## 6. Module 4B — Product Co-purchase Graph
 
 ### 6.1. Tạo vertices và edges
@@ -395,7 +462,7 @@ index(graph_version, weighted_degree)
 Publish bằng collection tạm rồi rename. Report phải lưu Top-20 theo PageRank,
 weighted degree và neighbor count, kèm product name để kiểm tra thủ công.
 
-## 7. Chiến lược kiểm thử
+## 7. Test Strategy
 
 ### 7.1. Unit/fixture tests
 
@@ -443,7 +510,7 @@ validate
 -> pair readiness + evidence finalization
 ```
 
-## 8. Ma trận đánh giá/nghiệm thu
+## 8. Evaluation and Acceptance Matrix
 
 | Nhóm | Điều kiện đạt | Evidence |
 |---|---|---|
@@ -461,10 +528,10 @@ validate
 | Reproducibility | Fixture cho kết quả xác định; source/config digest được lưu | tests, `manifest.json` |
 | Performance | Runtime, resources, shuffle, graph/model size được ghi | `performance.json` |
 
-## 9. Evidence bắt buộc
+## 9. Required Evidence
 
 ```text
-docs/evidence/module4/<run_id>/
+results/module4/<run_id>/
 ├── manifest.json
 ├── environment.txt
 ├── test-results.txt
@@ -487,7 +554,7 @@ version và graph version. Với dữ liệu HDFS do Module 1 stage, `_sources.j
 receipt bắt buộc. Fixture tự tạo phải có manifest fixture và nhãn scope riêng.
 Không trộn summary, plans hoặc metrics của các run khác nhau.
 
-## 10. Kế hoạch thực hiện
+## 10. Implementation Plan
 
 | Giai đoạn | Công việc | Thời lượng | Exit gate |
 |---|---|---:|---|
@@ -506,7 +573,7 @@ thời gian fit/graph/publish, dung lượng HDFS và khả năng chạy đồng
 việc, một người phụ trách ALS/evaluation và một người phụ trách graph; cả hai
 dùng chung data validation, versioning và evidence format.
 
-## 11. Thứ tự ưu tiên khi thiếu thời gian
+## 11. Prioritisation When Time is Short
 
 1. Đóng lỗi P0 runner/config/schema ALS và runtime smoke.
 2. Data contract, receipts và chống leakage.
@@ -519,7 +586,7 @@ dùng chung data validation, versioning và evidence format.
 Không nên bỏ internal validation để chạy nhiều hyperparameter hơn. Không nên thêm
 Connected Components trước khi các graph invariants và PageRank cơ bản đã đạt.
 
-## 12. Kết quả kiểm tra hiện tại
+## 12. Current Check Results
 
 Các tiểu mục dưới đây tóm tắt checkpoint lịch sử; chi tiết gốc, run IDs và trạng thái tại thời điểm ghi được lưu trong [archive Module 4A/4B](evidence/module4/ab-implementation-history.md).
 
@@ -547,11 +614,11 @@ Hướng dẫn resume W01–W12 phản ánh môi trường và trạng thái d�
 
 Historical Module 4A/4B full-data acceptance passed **21/21 gates** on 10 October 2026. full-ab-20261010-fixed-first and full-ab-20261010-fixed-replay passed with the same model and graph versions; evidence preserves their source revisions. This predates later refactoring and does not establish a fresh post-refactor full-data run. The dated results are in [acceptance-20261010](evidence/module4/acceptance-20261010/README.md) and the [archived section 12.6](evidence/module4/ab-implementation-history.md#history-12-6); the prior [09 October acceptance record](evidence/module4/acceptance-20261009/README.md) remains available for its earlier attempt and CI evidence. Current implementation status remains in [progress.md](progress.md).
 
-## 13. Backlog thực hiện và thứ tự phụ thuộc
+## 13. Implementation Backlog and Dependency Order
 
 W01–W13 was a historical implementation plan, not a current open-work register. Its original descriptions, dependencies, gates, and optional P2 work are preserved in the [archived backlog](evidence/module4/ab-implementation-history.md#history-13). Current status belongs to [progress.md](progress.md); optional Connected Components and optimization work are not A/B acceptance requirements.
 
-## 14. Chi tiết công việc theo thành phần
+## 14. Work Breakdown by Component
 
 The following subsections define the current Module 4A/4B engineering and evidence contracts. Historical R/W identifiers and dated implementation notes remain in the [archive](evidence/module4/ab-implementation-history.md); an archive-only note does not replace a requirement stated here.
 
@@ -635,7 +702,7 @@ The following subsections define the current Module 4A/4B engineering and eviden
 - Report implemented, fixture-validated, integration-validated, and full-data-accepted status separately. Update README/progress/plan/Proposal claims consistently from evidence; preserve dated Module 1–3 records as historical.
 - Keep A/B completion separate from Module 4C/4D. Update the Proposal only when an approved contract field/scope changes; acceptance does not imply Hybrid quality, dashboard readiness, or production capacity.
 
-## 15. Ma trận test bắt buộc để đóng backlog
+## 15. Required Test Matrix to Close Backlog
 
 Các case dưới đây cần triển khai/chạy; tên test là mô tả mục tiêu, không phải
 khẳng định các test này đã tồn tại.
@@ -663,7 +730,7 @@ subgroup, short lists, equal-score boundary, negative data/receipt/backend
 cases, exact holdout baskets, reload execution plan và cache release. Kết quả
 suite mới ngày 10/10 được lưu trong evidence, không cộng các suite lịch sử.
 
-## 16. Quy trình chạy nghiệm thu sau khi sửa code
+## 16. Acceptance Execution Procedure After Code Changes
 
 Use this section to define validation scope and evidence for a new run. Current prerequisites, command ownership, and operational sequences are maintained in the [Docker runbook](docker.md#module-4a4b-operation-and-full-data-acceptance). The exact commands from the historical 10 October acceptance remain in [run-acceptance.sh](evidence/module4/acceptance-20261010/run-acceptance.sh) for provenance and reproduction review; those machine-specific commands are not universal current procedures.
 
@@ -688,7 +755,7 @@ The default accepted graph scope is the full catalog with all prior baskets. If 
 
 Evaluate each applicable condition in §17 and link its run ID, source identity, manifest, test/command logs, and artifacts. Preserve partial, failed, and interrupted records; report scope, skips, failures, limitations, and measured performance honestly. A static or documentation check is not a new runtime or full-data result.
 
-## 17. Checklist đóng Module 4A–4B
+## 17. Module 4A–4B Acceptance Checklist
 
 The following are the acceptance conditions for a new validation run; this list does not itself record new execution results.
 
@@ -717,7 +784,7 @@ The following are the acceptance conditions for a new validation run; this list 
 
 The historical 10 October result remains **21/21** in the concise summary and the [archived checked record](evidence/module4/ab-implementation-history.md#history-17); its run details remain in [acceptance-20261010](evidence/module4/acceptance-20261010/README.md). Connected Components, quality above the personal-frequency baseline, and Module 4C/4D are not part of the mandatory A/B acceptance criteria.
 
-## 18. Quy tắc cập nhật tiến độ và bàn giao
+## 18. Handover and Progress Update Rules
 
 - Mỗi Wxx cập nhật ngày thực hiện, files thay đổi, test commands/results,
   artifact/run ID, remaining issues và người thực hiện nếu làm nhóm.
@@ -732,7 +799,7 @@ The historical 10 October result remains **21/21** in the concise summary and th
   của A/B; ghi riêng backlog C/D. Nếu sau này dùng trend trong official evaluation,
   thêm cutoff/prior-train leakage gate trước khi công bố metric.
 
-## Tài liệu kỹ thuật đối chiếu
+## Technical Reference Documents
 
 - [Spark 3.5.5 ALS API](https://spark.apache.org/docs/3.5.5/api/java/org/apache/spark/ml/recommendation/ALS.html)
 - [Spark 3.5.5 ALS recommendation implementation](https://github.com/apache/spark/blob/v3.5.5/mllib/src/main/scala/org/apache/spark/ml/recommendation/ALS.scala)
@@ -858,16 +925,24 @@ checkpoint restart and does not establish production throughput or
 recommendation quality. See the immutable [C8 receipts](evidence/module4c/README.md)
 and archived [C8B procedure and observations](evidence/module4c/c8b-streaming-demo.md).
 
-A future quality evaluation must first establish leakage-safe chronology and a
-cutoff from source order sequence and timestamp reconstruction. The ordinary
-Module 1 event feed combines prior and train events without retaining
-`eval_set`; it cannot by itself establish prior-only trend provenance. Freeze
-the cutoff-specific model, graph, catalog, trend windows, cohort, and candidate
-eligibility; ensure no official-train truth contributes to any of them. Compare
-ALS-only, Trend-only, preregistered Hybrid lambda values, PersonalFrequency,
-and GlobalPopularity at K=5/10/20 using the existing `evaluation.py` metric
-definitions. Report warm and all-nonempty-truth cohorts plus cold-start
-coverage. If a valid cutoff cannot be proven, report evaluation as infeasible.
+The reproducible offline Hybrid evaluation now uses the official Instacart
+`eval_set` boundary: ALS fit and tuning use only `order_products_prior`, the
+trend candidate proxy is a fixed Top-20 global product-frequency ranking from
+prior-only interactions, and `order_products_train` is read only as held-out
+truth. It records both curated source hashes, compares the preregistered lambda
+sweep `(0.0, 0.5, 0.7, 0.9, 1.0)` with ALS, Trend-only, PersonalFrequency, and
+GlobalPopularity at K=5/10/20, and reports all official-train users plus the
+warm-user/all-truth-items cohort. The full-data verifier checks the split
+provenance and required cohort/method metrics. The fixed frequency proxy is not
+equivalent to Module 3's temporal trend windows and does not support a claim
+that Hybrid or ALS is superior.
+
+A future evaluation of actual Module 3 trend windows still needs a valid
+chronology and cutoff from source order sequence and timestamp reconstruction.
+The ordinary Module 1 event feed combines prior and train events without
+retaining `eval_set`, so it cannot establish prior-only trend provenance. If a
+valid cutoff cannot be proven for that temporal stream, report that evaluation
+as infeasible rather than using the mixed feed.
 
 <a id="module4d-spec"></a>
 
@@ -889,7 +964,7 @@ fallback:
 MODULE4D_MONGODB_URI=<MongoDB URI for a database-scoped read-only account>
 MODULE4D_MONGO_DATABASE=<explicit database name>
 MODULE4D_TREND_SOURCE_NAMESPACES=<comma-separated exact namespace allowlist>
-MODULE4D_APP_ROOT=<application/repository root containing docs/evidence; optional default>
+MODULE4D_APP_ROOT=<application/repository root; optional default>
 ```
 
 The UI process receives only:
@@ -905,9 +980,10 @@ arbitrary external hosts, paths, queries, and fragments.
 
 The API reads only the fixed collections
 `module4_snapshot_readiness`, `final_recommendations`,
-`realtime_trending_windows`, `batch_product_metrics`, and
-`department_metrics`. The account needs read and index-metadata inspection
-privileges only. It cannot publish, write, create indexes, rename, or drop.
+`realtime_trending_windows`, `batch_product_metrics`, `department_metrics`,
+`user_recommendations`, `product_graph_metrics`, and `streaming_metrics`. The
+account needs read and index-metadata inspection privileges only. It cannot
+publish, write, create indexes, rename, or drop.
 The Streamlit UI accepts only `MODULE4D_API_BASE_URL` and the matching exact
 trend namespace allowlist. For local use the API and UI ports bind to
 `127.0.0.1`; credentials remain on the API side.
@@ -929,6 +1005,8 @@ the archive.
 |---|---|---|
 | `GET /health` | API process liveness only; does not ping MongoDB. | Process-level health response only; never implies source availability. |
 | `GET /api/v1/recommendations/{user_id}` | Positive integer ID; per-user Hybrid pointer, exact serving-version rows, rank order, at most 20 rows. Returns persisted raw/normalized/final scores, mode/reason, and source identities. | `404` no published snapshot; `503` not ready or service unavailable; `409` pointer changed during read; `502` invalid stored snapshot. |
+| `GET /api/v1/als/recommendations/{user_id}` | Active paired A/B model only; optional exact model version; limit 1–20; indexed stored ALS ranks/scores with matching graph names when available. | Unknown model `404`; unready `503`; changed pointer `409`; malformed rows `502`. |
+| `GET /api/v1/streaming/metrics` | Exact allowlisted namespace; one latest `streaming_metrics` document through `_id_`, validated within 16 KiB. Real same-batch Spark rates and defined finalized-output latency, run/query/batch and capture time. | No document returns `available=false`; malformed `502`; query failure `503`; invalid namespace `422`. |
 | `GET /api/v1/trends` | Exact allowlisted namespace plus explicit UTC cutoff/optional max event age; returns one newest eligible finalized bundle through the C5 verifier, including window, scope, publication/expiry, digest, and ranked items. | Missing, expired, and stale states remain distinct; malformed or corrupt newest bundle fails closed; missing required index is `503 trend_index_unavailable`. |
 | `GET /api/v1/batch/products` | `order=purchase_count` or `reorder_rate`; default limit 20, hard limit 50; metric descending and product ID ascending. Product names are not in this Mongo source. | Invalid inputs `422`; unavailable required ranking index `503 batch_index_unavailable`; malformed source `502`. |
 | `GET /api/v1/batch/departments` | Reads at most 22 records to validate the fixed 1–21 department domain; returns at most 21 rows ordered by purchase count descending then ID ascending. | More than 21 or malformed documents fail with `502`; collection-specific run/time is preserved. |
@@ -979,23 +1057,25 @@ final_recommendations:
 ```
 
 The default Mongo `_id_` indexes and the accepted A/B indexes must also remain
-available. Module 2 replaces the product collection and its indexes on
-publication, so administrators recreate the two D1B product indexes afterward.
-The API itself never provisions or repairs indexes.
+available. Module 2 creates both required D1B product-ranking indexes on the
+replacement collection before promoting it. Administrators provision initial
+indexes for empty or externally managed collections; they do not need to
+recreate the indexes after each Module 2 publication. The API itself never
+provisions or repairs indexes.
 
 ### 20.3. Dashboard views and interaction rules
 
 The four Streamlit views are:
 
 1. **Overview:** API liveness, independent source availability, each source's
-   own run/version/window and timestamp, and fixed evidence registry state.
+   own run/version/window and timestamp, fixed evidence registry state, and refreshable same-batch streaming rates/latency with clock-skew disclosure.
 2. **Realtime & Batch Analytics:** one selected finalized trend window,
    prior-only product/department metrics, and archived all-order day/hour
    counts. Product/department names are not inferred from IDs.
 3. **Hybrid Recommendations:** the verified per-user persisted ranking,
    component and final scores, inclusion flags, mode/reason, and source
-   provenance. The implemented endpoint does not provide an ALS side-by-side
-   comparison.
+   provenance. A separate versioned ALS read is aligned by product ID for
+   side-by-side comparison; unavailable scores remain blank.
 4. **Evaluation & Performance:** archived ALS/baseline evaluation, Module 2
    benchmark observations, and C8A/C8B receipts, each labeled by run, scope,
    environment, and method.

@@ -33,7 +33,7 @@ needs a separately justified leakage-safe chronology and source provenance.
 
 The Kafka topic defaults to `instacart-purchase-events`; the producer key is
 `user_id`. Its JSON fields are defined in
-[`src/module3/schemas.py`](../src/module3/schemas.py): `event_id`, order/user/
+[`src/module3/parse.py`](../src/module3/parse.py): `event_id`, order/user/
 product identifiers, cart position, reorder flag, aisle/department identifiers,
 order weekday/hour, `event_time_epoch_ms`, `event_time_iso`, and
 `ingestion_time_epoch_ms`.
@@ -55,8 +55,9 @@ train events.
 labels invalid rows, and exposes input/valid/invalid counts as `record_quality`
 progress metrics. It rejects a missing or blank `event_id`; missing or
 nonpositive `order_id`, `user_id`, `product_id`, or `add_to_cart_order`; weekday
-outside 0–6; hour outside 0–23; invalid/nonpositive epoch time; and an invalid
-ISO timestamp. Invalid rows are excluded before stateful aggregation.
+outside 0–6; hour outside 0–23; invalid/nonpositive event or ingestion epoch;
+and an invalid ISO timestamp. Invalid rows are excluded before stateful
+aggregation.
 
 Kafka `failOnDataLoss` defaults to `true` in
 [`config.py`](../src/module3/config.py). If a requested offset is unavailable,
@@ -123,15 +124,17 @@ different questions.
 
 ## Checkpoints, retries, and failure boundaries
 
-[`stream.py`](../src/module3/stream.py) stores a checkpoint under the
-configured output base's `checkpoint/<checkpoint-id>` directory. The default ID
-is the run ID; `--checkpoint-id` allows a later process to reuse one
-deliberately. Recovery requires that the same checkpoint directory remains
-available, along with the same Kafka cluster/topic and compatible query
-configuration. Keep the checkpoint with its corresponding stream state. Use a
-new identity for a genuinely new query; do not delete a checkpoint to repair a
-query without first deciding that resetting offsets and aggregation state is
-intended.
+[`stream.py`](../src/module3/stream.py) stores the current state contract under
+the configured output base's
+`checkpoint/<checkpoint-id>/ingestion-latency-v1` directory. The default ID is
+the run ID; `--checkpoint-id` allows a later process to reuse that versioned
+checkpoint deliberately. The version marker prevents restoring an older
+unversioned state schema after adding the ingestion timestamp aggregate; such a
+checkpoint fails closed and remains untouched. Recovery requires the same
+versioned directory, Kafka cluster/topic, and compatible query configuration.
+Keep the checkpoint with its corresponding stream state. Use a new identity
+for a genuinely new query; do not delete a checkpoint to repair a query without
+first deciding that resetting offsets and aggregation state is intended.
 
 The legacy Mongo replacement is retry-convergent but can be observed empty or
 partial between delete and upsert. Each microbatch runs the legacy writer first;
@@ -163,18 +166,48 @@ bounds, and hash, and fails on a corrupt newest result rather than falling back
 to an older one. Module 4A/4B readiness is also required for Hybrid serving.
 Module 4D's API has its own exact namespace allowlist.
 
-No current Module 3 metric establishes Kafka-to-serving or ingestion-to-output
-latency. The progress log records Spark input/processed rates,
-trigger/addBatch duration, and sink timing; those are separate measurements.
-C8B's acknowledgement-to-bundle-visible interval is a bounded synthetic
-boundary measurement, not a general latency result.
+Each successful `sink_batches.jsonl` row also records
+`ingestion_to_output_latency`: minimum, mean, and maximum milliseconds from the
+producer's wall-clock `ingestion_time_epoch_ms` to output completion after the
+enabled Mongo publishers finish. A sample is the latest contributing event
+timestamp for one finalized product/window row, reduced with constant memory.
+The producer timestamp is taken immediately before Kafka send, not at broker
+append or acknowledgement. The producer and output host clocks are not
+independently synchronized; a future timestamp is reported as possible clock
+skew and can yield a negative measurement. This is distinct from Kafka
+acknowledgement latency, Spark input/processed rates, trigger/addBatch duration,
+and Mongo sink duration. It also includes the configured event-time watermark
+wait for finalized windows. C8B's acknowledgement-to-bundle-visible interval
+remains a separate bounded synthetic boundary measurement.
+
+When immutable bundle publication is enabled, the completed-progress logger
+pairs the latest Spark progress record with the same batch's sink receipt and
+upserts one versioned `streaming_metrics` document per namespace. It retains
+at most 16 sink receipts in memory and exposes input/processed rows per second,
+input count, run/query/batch IDs, capture time and the latency summary. Missing
+or non-finite Spark rates are explicitly unavailable. A batch without finalized
+rows has no latency sample. Publication errors fail the run instead of reporting
+successful telemetry. The local JSONL logs remain the detailed run record.
+
+`GET /api/v1/streaming/metrics?source_namespace=...` uses the API namespace
+allowlist and one bounded `_id` lookup; it performs no writes or index creation.
+The dashboard Overview displays the last published batch with explicit refresh,
+capture time, latency boundary and clock-skew status. Existence of a snapshot
+does not establish that the stream is currently running. Stored snapshots are
+validated within 16 KiB; no arbitrary logs or result directories are exposed.
+
+The isolated Kubernetes finite replay waits for producer success and terminal
+Kafka offsets consumed by completed Spark batches. Its receipt reconciles every
+generated event with delivery and consumption. The full feed is not capped to
+fit a short timer. Final event-time tail windows remain checkpointed when the
+finite source ends; offset drainage does not imply all windows are finalized.
 
 ## Source, tests, and evidence
 
 - Parsing and offset contract: [`src/module3/parse.py`](../src/module3/parse.py), [`src/module3/config.py`](../src/module3/config.py), [`tests/test_module3.py`](../tests/test_module3.py), [`tests/test_module3_config.py`](../tests/test_module3_config.py).
 - Window and legacy output: [`src/module3/trending.py`](../src/module3/trending.py), [`src/module3/sink_mongo.py`](../src/module3/sink_mongo.py), and `tests/test_module3.py`.
 - Immutable bundle contract: [`src/module3/trend_bundle.py`](../src/module3/trend_bundle.py), [`tests/test_module3_trend_bundle.py`](../tests/test_module3_trend_bundle.py), and [`tests/test_module3_trend_bundle_mongo.py`](../tests/test_module3_trend_bundle_mongo.py).
-- Module 3 to Module 4C integration: [`src/module4/hybrid/trend_reader.py`](../src/module4/hybrid/trend_reader.py), [`tests/test_module4c_trend_reader.py`](../tests/test_module4c_trend_reader.py), and [`tests/test_module3_bundle_integration.py`](../tests/test_module3_bundle_integration.py).
+- Module 3 to Module 4C integration: [`src/module4/hybrid/trend_reader.py`](../src/module4/hybrid/trend_reader.py), [`tests/test_hybrid_trend_reader.py`](../tests/test_hybrid_trend_reader.py), and [`tests/test_module3_bundle_integration.py`](../tests/test_module3_bundle_integration.py).
 - Static, bounded operating instructions: [Docker guide](docker.md).
 - Dated Module 3 validation and measurements: [Module 3 evidence](evidence/module3/README.md).
 - Bounded C8A/C8B observations: [Module 4C evidence index](evidence/module4c/README.md).

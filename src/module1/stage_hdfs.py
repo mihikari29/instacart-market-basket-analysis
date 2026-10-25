@@ -64,6 +64,8 @@ def webhdfs_upload(
     local_path: Path,
     webhdfs_url: str = DEFAULT_WEBHDFS_URL,
     user: str = DEFAULT_HDFS_USER,
+    *,
+    rewrite_datanode_to_localhost: bool = True,
 ) -> None:
     """Execute two-hop WebHDFS PUT with Docker container redirect rewrite."""
     url = f"{webhdfs_url}/webhdfs/v1{hdfs_path}?op=CREATE&overwrite=true&user.name={user}"
@@ -72,35 +74,51 @@ def webhdfs_upload(
         raise RuntimeError(f"CREATE {hdfs_path}: HTTP {initial_response.status_code} {initial_response.text[:200]}")
 
     redirect_location = initial_response.headers["Location"]
-    redirect_location = re.sub(r"//(datanode|namenode)(:[0-9]+)?", r"//localhost\2", redirect_location)
+    if rewrite_datanode_to_localhost:
+        redirect_location = re.sub(r"//(datanode|namenode)(:[0-9]+)?", r"//localhost\2", redirect_location)
     with open(local_path, "rb") as stream:
         upload_response = requests.put(redirect_location, data=stream, timeout=3600)
     if upload_response.status_code >= 300:
         raise RuntimeError(f"PUT {hdfs_path}: HTTP {upload_response.status_code} {upload_response.text[:200]}")
 
 
-def upload_file(client: InsecureClient, hdfs_path: str, local_path: Path, webhdfs_url: str, user: str) -> None:
+def upload_file(
+    client: InsecureClient, hdfs_path: str, local_path: Path, webhdfs_url: str, user: str,
+    *, rewrite_datanode_to_localhost: bool = True,
+) -> None:
     ensure_dirs(client, posixpath.dirname(hdfs_path))
-    webhdfs_upload(hdfs_path, local_path, webhdfs_url, user)
+    webhdfs_upload(
+        hdfs_path, local_path, webhdfs_url, user,
+        rewrite_datanode_to_localhost=rewrite_datanode_to_localhost,
+    )
     print(f"  [up  ] {local_path.name} -> {hdfs_path}", flush=True)
 
 
-def stage_raw(client: InsecureClient, webhdfs_url: str, user: str) -> None:
+def stage_raw(
+    client: InsecureClient, webhdfs_url: str, user: str, *, raw_dir: Path = RAW_DATA_DIR, hdfs_root: str = HDFS_ROOT,
+    rewrite_datanode_to_localhost: bool = True,
+) -> None:
     print("[raw  ] uploading 6 original CSVs", flush=True)
     for table, filename in RAW_TABLES:
-        upload_file(client, f"{HDFS_ROOT}/raw/{table}/{filename}", RAW_DATA_DIR / filename, webhdfs_url, user)
+        upload_file(client, f"{hdfs_root}/raw/{table}/{filename}", raw_dir / filename, webhdfs_url, user,
+                    rewrite_datanode_to_localhost=rewrite_datanode_to_localhost)
 
 
-def stage_curated(client: InsecureClient, webhdfs_url: str, user: str) -> None:
+def stage_curated(
+    client: InsecureClient, webhdfs_url: str, user: str, *, clean_dir: Path = CLEAN_DATA_DIR, hdfs_root: str = HDFS_ROOT,
+    rewrite_datanode_to_localhost: bool = True,
+) -> None:
     print("[curated] uploading cleaned parquet tables", flush=True)
     for table, filename in CURATED_TABLES:
-        upload_file(client, f"{HDFS_ROOT}/curated/{table}/{filename}", CLEAN_DATA_DIR / filename, webhdfs_url, user)
+        upload_file(client, f"{hdfs_root}/curated/{table}/{filename}", clean_dir / filename, webhdfs_url, user,
+                    rewrite_datanode_to_localhost=rewrite_datanode_to_localhost)
     for table, filename in DIMENSION_TABLES:
-        upload_file(client, f"{HDFS_ROOT}/curated/dimensions/{table}/{filename}", CLEAN_DATA_DIR / filename, webhdfs_url, user)
+        upload_file(client, f"{hdfs_root}/curated/dimensions/{table}/{filename}", clean_dir / filename, webhdfs_url, user,
+                    rewrite_datanode_to_localhost=rewrite_datanode_to_localhost)
 
     sources = {}
     for table, filename in CURATED_TABLES + DIMENSION_TABLES:
-        file_path = CLEAN_DATA_DIR / filename
+        file_path = clean_dir / filename
         sources[table] = {
             "rows": pq.ParquetFile(file_path).metadata.num_rows,
             "sha256": file_sha256(file_path),
@@ -108,11 +126,15 @@ def stage_curated(client: InsecureClient, webhdfs_url: str, user: str) -> None:
     with tempfile.TemporaryDirectory(prefix="hdfs_sources_") as temporary_dir:
         manifest_path = Path(temporary_dir) / "_sources.json"
         manifest_path.write_text(json.dumps(sources, indent=2), encoding="utf-8")
-        upload_file(client, f"{HDFS_ROOT}/curated/_sources.json", manifest_path, webhdfs_url, user)
+        upload_file(client, f"{hdfs_root}/curated/_sources.json", manifest_path, webhdfs_url, user,
+                    rewrite_datanode_to_localhost=rewrite_datanode_to_localhost)
 
 
-def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str, user: str) -> None:
-    target_path = f"{HDFS_ROOT}/curated/interactions"
+def stage_interactions(
+    client: InsecureClient, feed_dir: Path, webhdfs_url: str, user: str, *, hdfs_root: str = HDFS_ROOT,
+    rewrite_datanode_to_localhost: bool = True,
+) -> None:
+    target_path = f"{hdfs_root}/curated/interactions"
     transaction_id = uuid.uuid4().hex
     staging_path = f"{target_path}.__staging_{transaction_id}"
     backup_path = f"{target_path}.__backup_{transaction_id}"
@@ -123,7 +145,8 @@ def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str,
         print(f"[interactions] validated {receipt['local_rows']:,} rows in {receipt['files']} files")
         for file_path in sorted(temp_dir.rglob("*.parquet")) + [temp_dir / "_handoff.json"]:
             relative_posix = file_path.relative_to(temp_dir).as_posix()
-            upload_file(client, f"{staging_path}/{relative_posix}", file_path, webhdfs_url, user)
+            upload_file(client, f"{staging_path}/{relative_posix}", file_path, webhdfs_url, user,
+                        rewrite_datanode_to_localhost=rewrite_datanode_to_localhost)
 
         if client.status(target_path, strict=False) is not None:
             client.rename(target_path, backup_path)
@@ -167,11 +190,11 @@ def stage_interactions(client: InsecureClient, feed_dir: Path, webhdfs_url: str,
         shutil.rmtree(temp_dir)
 
 
-def stage_places(client: InsecureClient) -> None:
+def stage_places(client: InsecureClient, *, hdfs_root: str = HDFS_ROOT) -> None:
     for path in (
-        f"{HDFS_ROOT}/features/user_features",
-        f"{HDFS_ROOT}/features/als_interactions",
-        f"{HDFS_ROOT}/models/als",
+        f"{hdfs_root}/features/user_features",
+        f"{hdfs_root}/features/als_interactions",
+        f"{hdfs_root}/models/als",
     ):
         ensure_dirs(client, path)
     print("[place] features/{user_features,als_interactions}, models/als created", flush=True)
@@ -187,30 +210,42 @@ def print_tree(client: InsecureClient, path: str, depth: int = 0) -> None:
         print_tree(client, full_path, depth + 1)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     default_feed_dir = REPO_DATA_DIR / "synthesized" / "scatter_3m"
     parser.add_argument("--feed", default=str(default_feed_dir))
     parser.add_argument("--webhdfs", default=DEFAULT_WEBHDFS_URL)
     parser.add_argument("--user", default=DEFAULT_HDFS_USER)
+    parser.add_argument("--hdfs-root", default=HDFS_ROOT)
+    parser.add_argument("--raw-dir", type=Path, default=RAW_DATA_DIR)
+    parser.add_argument("--clean-dir", type=Path, default=CLEAN_DATA_DIR)
+    parser.add_argument(
+        "--rewrite-datanode-to-localhost", action=argparse.BooleanOptionalAction, default=True,
+        help="Pass --no-rewrite-datanode-to-localhost when running in Kubernetes.",
+    )
     parser.add_argument("--interactions-only", action="store_true")
     parser.add_argument("--tree-only", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not args.hdfs_root.startswith("/") or args.hdfs_root == "/":
+        parser.error("--hdfs-root must be an isolated non-root absolute HDFS path")
 
     client = InsecureClient(args.webhdfs, user=args.user)
     print(f"[hdfs ] {args.webhdfs} as {args.user}", flush=True)
 
     if args.tree_only:
-        print_tree(client, HDFS_ROOT)
+        print_tree(client, args.hdfs_root)
         return 0
     if not args.interactions_only:
-        stage_raw(client, args.webhdfs, args.user)
-        stage_curated(client, args.webhdfs, args.user)
-        stage_places(client)
-    stage_interactions(client, Path(args.feed), args.webhdfs, args.user)
+        stage_raw(client, args.webhdfs, args.user, raw_dir=args.raw_dir, hdfs_root=args.hdfs_root,
+                  rewrite_datanode_to_localhost=args.rewrite_datanode_to_localhost)
+        stage_curated(client, args.webhdfs, args.user, clean_dir=args.clean_dir, hdfs_root=args.hdfs_root,
+                      rewrite_datanode_to_localhost=args.rewrite_datanode_to_localhost)
+        stage_places(client, hdfs_root=args.hdfs_root)
+    stage_interactions(client, Path(args.feed), args.webhdfs, args.user, hdfs_root=args.hdfs_root,
+                       rewrite_datanode_to_localhost=args.rewrite_datanode_to_localhost)
 
     print("[done ] layout:", flush=True)
-    print_tree(client, HDFS_ROOT)
+    print_tree(client, args.hdfs_root)
     return 0
 
 

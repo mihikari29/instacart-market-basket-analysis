@@ -67,9 +67,3 @@ def render_source_status(st: Any, title: str, *, state: str, details: str | None
 def show_cached(st: Any, cached: bool) -> None:
     if cached:
         st.caption("Showing this session's last successful response. Use Refresh to read the API again.")
-
-
-def row_count_text(count: Any, noun: str) -> str:
-    if type(count) is not int:
-        return "Count unavailable"
-    return f"{count:,} {noun}{'' if count == 1 else 's'}"

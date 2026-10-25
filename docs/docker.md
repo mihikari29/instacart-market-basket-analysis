@@ -3,7 +3,7 @@
 The root `Dockerfile` is the canonical build definition. Explicit targets share
 reviewed dependency declarations and produce separate runtime images. MongoDB,
 Kafka, and HDFS remain external services configured by Compose.
-See the [repository layout guide](repository-layout.md) for the configuration
+See the [repository layout guide](../README.md#repository-layout) for the configuration
 and script directory map.
 
 | Target | Base | Runtime and copied repository resources |
@@ -12,6 +12,8 @@ and script directory map.
 | `api` | Internal `spark` stage | FastAPI/C5/C6 and fixture validation; Python sources/tests, selected scripts, five curated reports |
 | `ui` | Python 3.14 slim | Streamlit 1.65.0; only UI Python code and its two manifests; UID/GID 10001 |
 | `browser` | Playwright Python 1.63.0 noble | Separate Chromium E2E runtime; browser manifest and accepted E2E script; `pwuser` |
+| `k8s-runner` | Internal `spark` stage | Bounded Module 4 API/runtime sources, registered evidence files, and Kubernetes API-readiness probe; UID/GID 10001 |
+| `pipeline` | Internal `spark` stage | Module 1–4 pipeline sources, Kubernetes tasks, evidence fixtures and runtime inventory; UID/GID 10001 |
 
 The external base digests are unchanged:
 
@@ -106,12 +108,11 @@ downloads the recorded public mirror, checks the expected row counts, writes
 those files, and creates `data/raw/source-receipt.json`; it refuses to overwrite
 existing source CSVs. Keep and inspect any existing files before fetching.
 
-Clean first, then generate one feed at a time. The cleaning command writes or
-overwrites Parquet files under `data/clean/`. Its `--validate` option prints
-audit statistics after writing; it does not fail closed on every missing file
-or raw-domain problem. Check that all six inputs exist and review the output
-before staging. The cleaner's missing-input and pre-coercion validation gap is
-recorded in [current progress](progress.md#module-1--ingestion--storage).
+Clean first, then generate one feed at a time. The cleaner requires all six
+inputs, validates raw domains/keys/relationships and contiguous cart positions,
+and rejects inconsistent weekday reconstruction before publishing. It replaces
+only a recognized owned output directory after staging all outputs. Its
+`--validate` option prints statistics; mandatory validation runs without it.
 Generation reuses its selected output directory and replaces the feed file and
 manifest there; retain any existing feed before selecting the same path.
 
@@ -133,6 +134,13 @@ selected output directory. The manifest records the seed/configuration, span,
 daily counts, and monotonicity result. Generation is deterministic for the
 same source and seed regardless of `--batch-users`. `--list-scenarios` prints
 the supported presets:
+
+The feed, the cleaned tables and the staged interactions are written with
+Zstandard Parquet. On the full 33.8M event feed that is about 40% smaller
+than Snappy at the same write cost, and Spark reads it natively. A feed
+written before this change has a different byte layout, so the staging
+receipt hash and the `--source-events` comparison are only meaningful
+against a feed written by the same codec.
 
 | Preset | Per-item gap model | Order clock |
 |---|---|---|
@@ -311,9 +319,9 @@ checkpoint, and volume ownership:
 ```bash
 test -s data/synthesized/scatter_3m/events.parquet
 test -s data/synthesized/scatter_3m/manifest.json
-python3 scripts/module3_smoke.py --feed data/synthesized/scatter_3m \
+python3 scripts/module3_smoke.py live --feed data/synthesized/scatter_3m \
   --events 50000 --duration-seconds 120
-python3 scripts/module3_recovery.py --duration-seconds 25
+python3 scripts/module3_smoke.py recovery --duration-seconds 25
 ```
 
 The smoke command depends on the selected generated feed already existing; the
@@ -380,8 +388,14 @@ full-data workload. The `full_data` scope requires
 
 ```bash
 docker compose --profile tools run --rm --use-aliases --no-deps --entrypoint python3 module4 \
-  scripts/module4_flow_smoke.py
+  scripts/module4_smoke.py flow
 ```
+
+The same script carries the other two bounded checks:
+`scripts/module4_smoke.py runtime` proves the image can run a standalone
+worker, GraphFrames, an HDFS round trip and a MongoDB ping, and
+`scripts/module4_smoke.py cross-module` runs the Module 2 batch step in front
+of the Module 4 step.
 
 For a new Linux full-data rehearsal, first verify the source receipt and
 `data/clean/` tables. Use an explicitly named Compose project so its persistent
@@ -408,7 +422,6 @@ first run and replay:
 ```bash
 # Use a fresh suffix and keep these exports for the entire procedure.
 run_suffix="$(date -u +%Y%m%dT%H%M%SZ)"
-export COMPOSE_FILE=compose.yaml:.github/module4-full.override.yml
 export COMPOSE_PROJECT_NAME="instacart-module4-full-$run_suffix"
 
 # In a fresh checkout, create the Python environment used by the host-side
@@ -476,14 +489,14 @@ volumes as routine cleanup.
 
 ## Start and stop the synthetic dashboard
 
-The isolated `deploy/module4/compose.demo.yaml` selects `api` and `ui`. Its
+The isolated `deploy/dashboard/compose.demo.yaml` selects `api` and `ui`. Its
 build context is `../..`, resolved from the Compose file directory to the
 repository root. It does not mount main pipeline volumes or the repository:
 
 ```bash
-bash scripts/module4/module4d_demo.sh up
+python3 scripts/dashboard/demo.py up
 # Open http://127.0.0.1:18501 and retain the printed run ID.
-bash scripts/module4/module4d_demo.sh down <12-hex-run-id>
+python3 scripts/dashboard/demo.py down <12-hex-run-id>
 ```
 
 Startup builds images, creates a unique MongoDB database, publishes valid
@@ -516,20 +529,23 @@ export MODULE4D_MONGODB_URI='mongodb://<read-user>:<password>@<host>:27017/<data
 export MODULE4D_MONGO_DATABASE='<database>'
 export MODULE4D_TREND_SOURCE_NAMESPACES='<exact-namespace-allowlist>'
 python3 -m pip install -r requirements-dev.txt \
-  -r deploy/module4/requirements/api.txt
+  -r deploy/dashboard/requirements/api.txt
 python3 -m uvicorn src.module4.dashboard.api:app \
   --host 127.0.0.1 --port 8000
 ```
 
 This is a host development-environment recipe using existing manifests; it
-adds no dependency manifest. The API import graph includes PyMongo and imports
-the Module 3 Spark-backed trend reader, so the API-only manifest is not enough
-for this host command. Importing PySpark does not start a Spark session.
+adds no dependency manifest. The API uses PyMongo. Pure trend-bundle validation
+does not eagerly import PySpark: the `DataFrame` type is imported only for type
+checking, and the Spark writer imports PySpark when that writer is called. This
+host API procedure does not create a Spark session. The API image still inherits
+the `spark` stage for the accepted C5 imports and fixture validation described
+above.
 
 The API process may also set `MODULE4D_APP_ROOT` to the application or
-repository root containing `docs/evidence/`; the default is the packaged source
+repository root containing `src/module4/dashboard/assets/`; the default is the packaged source
 root and is normally `/workspace` in the API image. Do not set it to the
-`docs/evidence/` directory itself. `/health` is process liveness only and does
+`src/module4/dashboard/assets/` directory itself. `/health` is process liveness only and does
 not establish that MongoDB or any source collection is available. Never put
 the MongoDB URI in the UI process, browser configuration, request URL, or
 source control.
@@ -538,7 +554,7 @@ For an existing-data dashboard, install the separately pinned UI runtime and
 point it only at the loopback API:
 
 ```bash
-python3 -m pip install -r deploy/module4/requirements/ui.txt
+python3 -m pip install -r deploy/dashboard/requirements/ui.txt
 export MODULE4D_API_BASE_URL=http://127.0.0.1:8000
 export MODULE4D_TREND_SOURCE_NAMESPACES='<same-exact-namespace-allowlist>'
 streamlit run src/module4/dashboard/ui/app.py \
@@ -573,8 +589,10 @@ Keep the accepted `final_recommendations` indexes
 `uq_serving_user_rank` (unique `(serving_version, user_id, rank)`) and
 `uq_serving_user_product` (unique `(serving_version, user_id, product_id)`).
 The API also requires the ordinary MongoDB `_id_` indexes and permission to
-inspect index metadata. Module 2 replaces `batch_product_metrics` and its
-indexes during publication; recreate both D1B product indexes afterward.
+inspect index metadata. Module 2 provisions both D1B product ranking indexes
+on the replacement collection before promotion; the administrator provisions
+initial indexes for empty or externally managed collections. Streaming metrics
+use one exact namespace lookup through the built-in `_id_` index.
 Missing or incompatible indexes fail closed with an explicit API error rather
 than triggering an unbounded collection scan.
 
@@ -772,18 +790,18 @@ a separate manual workflow with its own source-data prerequisites and evidence.
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e PYTHONDONTWRITEBYTECODE=1 -e PYTEST_ADDOPTS="-p no:cacheprovider" \
   instacart-spark:3.5.5 python3 -m pytest -q \
-  --ignore=tests/test_module4d_api_mongo.py \
-  --ignore=tests/test_module4d_batch_api_mongo.py \
-  --ignore=tests/test_module4d_ui_app.py \
-  --ignore=tests/test_module4d_ui_client.py \
-  --ignore=tests/test_module4d_ui_evaluation.py
-python3 scripts/module4/module4d_api_validation.py --mode all
+  --ignore=tests/test_dashboard_api_mongo.py \
+  --ignore=tests/test_dashboard_batch_api_mongo.py \
+  --ignore=tests/test_dashboard_ui_app.py \
+  --ignore=tests/test_dashboard_ui_client.py \
+  --ignore=tests/test_dashboard_ui_evaluation.py
+python3 scripts/dashboard/api_validation.py --mode all
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e PYTHONPATH=/workspace -e PYTHONDONTWRITEBYTECODE=1 \
   -e PYTEST_ADDOPTS="-p no:cacheprovider" \
   instacart-module4d-ui-dev:local python -m pytest -q \
-  tests/test_module4d_ui_app.py tests/test_module4d_ui_client.py \
-  tests/test_module4d_ui_evaluation.py
+  tests/test_dashboard_ui_app.py tests/test_dashboard_ui_client.py \
+  tests/test_dashboard_ui_evaluation.py
 docker run --rm -v "$PWD:/workspace:ro" -w /workspace \
   -e RUFF_CACHE_DIR=/tmp/ruff instacart-spark:3.5.5 ruff check .
 docker compose config --quiet
@@ -824,8 +842,8 @@ independent of the authenticated dashboard fixture:
     -e I3_MONGODB_TEST_URI=mongodb://i3-mongo:27017 \
     instacart-spark:3.5.5 python3 -m pytest -q \
     tests/test_module3_trend_bundle_mongo.py tests/test_module4_mongo.py \
-    tests/test_module4c_data_mongo.py tests/test_module4c_trend_reader_mongo.py \
-    tests/test_module4c_sink_mongo_mongo.py tests/test_module4c_cli_mongo.py
+    tests/test_hybrid_data_mongo.py tests/test_hybrid_trend_reader_mongo.py \
+    tests/test_hybrid_sink_mongo_mongo.py tests/test_hybrid_cli_mongo.py
 )
 ```
 
@@ -846,53 +864,161 @@ streaming, live Mongo, staged-flow, and publication-replay checks. Separate
 manual full-data workflows have their own validation and UI test ownership.
 Every browser expectation and curated evidence artifact remains unchanged.
 
-## Consolidation validation — 2026-10-14
+## Historical Docker validation — 14 October 2026
 
-Validation started from PR #7's merged main commit
-`d44bb14615f57e78b1611a64954b9f2ead6709ad` on
-`refactor/unified-docker-build`. All four targets and the UI development variant
-built separately with exit code 0. Every target passed `pip check`; the external
-base digests, pinned requirements, and all jar SHA-512 values match the accepted
-Dockerfiles.
+The archived validation notes identify `refactor/unified-docker-build` at
+`d44bb14615f57e78b1611a64954b9f2ead6709ad` as the starting baseline. The
+repository tree at that commit does not contain the root `Dockerfile`, which
+was introduced later; the recorded baseline therefore does not by itself
+identify the exact copied Docker build context. Preserve this provenance limit
+when citing the archived result. It is not a fresh result for the current
+implementation. The four runtime targets and UI development target built
+successfully, passed `pip check`, and matched
+their pinned base, dependency, and jar digests. The context exporter admitted
+127 files (1,568,612 bytes), including five registered evidence files and six
+scripts; protected exclusions were rejected. Staged file names and SHA-256
+values matched their manifests. Spark contained no repository source; API,
+UI, and browser images contained 119, 15, and 2 files respectively. UI omitted
+PyMongo, PySpark, and Playwright; API omitted Streamlit and Playwright. The two
+Compose service topologies were unchanged apart from build definitions.
 
-Docker's context exporter admitted 127 files totaling 1,568,612 bytes, including
-exactly five evidence files and six scripts. Seventeen exclusion markers for
-credentials, datasets, state, caches, and unregistered files were rejected.
-Copied file names and SHA-256 hashes matched each stage's manifest: Spark has
-no repository source under `/workspace`, API has 119 files, UI has 15, and
-browser has two. UI has no PyMongo, PySpark, or Playwright; API has no Streamlit
-or Playwright. Both Compose topologies are unchanged after excluding their
-build-definition fields from the comparison.
+| Recorded check | Result |
+|---|---|
+| Repository Spark suite | 690 passed, 69 service-backed skips, 5 warnings |
+| UI client/AppTest/evaluation suites | 64 passed |
+| API/Hybrid unit suites | 497 passed |
+| Live API Mongo suites | 26 passed |
+| Supplementary Module 3/4/4C Mongo suites | 93 passed |
+| Publisher and read-only route validation | 21 HTTP cases and source/index/evidence assertions passed |
+| Chromium end-to-end run | Four pages, five evaluation charts, selectors, refresh, fallback, error recovery, and no JavaScript exceptions |
+| Ruff, compilation, shell syntax, Compose/workflow YAML, image checks, and diff checks | Passed |
 
-| Check | Result | Exit |
-|---|---|---:|
-| Repository Spark suite, command above | 690 passed, 69 service-backed skips, 5 warnings; 154.56 s | 0 |
-| D2A/D2B UI client/AppTest/evaluation suites | 64 passed; 7.81 s | 0 |
-| API/Hybrid unit suites through the API harness | 497 passed; 3.65 s | 0 |
-| D1A/D1B live API Mongo suites | 26 passed; 39.92 s | 0 |
-| Supplementary Module 3/4/4C Mongo suites | 93 passed; 44.47 s | 0 |
-| Demo accepted publishers and read-only route validator | 21 HTTP cases and all source/index/evidence assertions passed | 0 |
-| Unchanged Chromium E2E runner | Four pages, five evaluation charts, all selectors, refresh, fallback, error recovery; no JavaScript exceptions | 0 |
-| Ruff, compileall, shell syntax, Compose and workflow YAML, Docker build check, diff check | Passed; Docker build check reported no warnings | 0 |
+The recorded runtime versions were Python 3.10.12, Java 17.0.14, Spark 3.5.5,
+GraphFrames Python 0.6, FastAPI 0.143.0, and PyMongo 4.11.3 for Spark/API;
+Python 3.14.8 and Streamlit 1.65.0 for UI; Python 3.12.3, Playwright 1.63.0,
+and Chromium 153.0.8010.12 for browser checks. The isolated demo used run ID
+`83ea6e42419a`, a temporary database, scoped accounts, exact indexes,
+loopback-only ports, and separate networks. These records preserve the measured
+scope and do not establish acceptance of a later source revision.
 
-The 69 broad-suite skips are service-backed cases; isolated Mongo suites run
-separately and streaming workflows exercise Kafka paths. The initial
-supplementary harness used an alias and credentials rejected by the existing
-URI guards (28 passed, 65 setup errors); the documented dedicated-alias run
-passed all 93 without changing tests. One initial browser capture lacked the
-last C8B duration heading; the next run of the unchanged runner passed every
-assertion. Both attempts retain the original expectations.
+## Synthetic event generation
 
-Runtime observations were Python 3.10.12 / Java 17.0.14 / Spark 3.5.5 /
-GraphFrames Python 0.6 / FastAPI 0.143.0 / PyMongo 4.11.3 for Spark/API;
-Python 3.14.8 / Streamlit 1.65.0 for UI; and Python 3.12.3 / Playwright 1.63.0 /
-Chromium 153.0.8010.12 for browser. GraphFrames import and functional graph tests,
-OpenAPI/Uvicorn startup, Streamlit host-loopback health, and Chromium execution
-passed. The demo run `83ea6e42419a` used its own tmpfs database and retained
-the authenticated fixture administrator, database-scoped reader, exact indexes,
-loopback ports, and separate networks.
+The Instacart source records the order sequence, order weekday and hour, and an inter-order interval. It does not include absolute purchase timestamps. Module 1 assigns deterministic synthetic times so product events can be replayed through Kafka and aggregated by event time. The generated calendar is a simulation input; it must not be described as the date on which a customer actually purchased an item.
 
-Cleanup removed the task's demo, validation services, networks, five uniquely
-tagged images, and private temporary files. No task resources remain. Existing
-pipeline containers, volumes, shared images, ignored `results/`, and local data
-were preserved; no global Docker prune was used.
+## Inputs and outputs
+
+The generator reads cleaned `orders`, prior and train interaction tables, and product dimension fields needed for each event. It excludes the official `test` order set. The default output is event Parquet; JSONL is also supported. Parquet includes `order_number` and `synthetic_date` for analysis and partitioning. The producer's Kafka record omits those fields and has its own 13-field contract, including ingestion time assigned during send. See the [Module 3 event provenance contract](module3-contracts.md#kafka-event-contract-and-provenance).
+
+The `event_id` combines order ID and cart position. One row represents one product in one basket, not one whole order. The generated feed normally includes both prior and train purchases, and the Kafka payload does not retain `eval_set`. Therefore a cutoff on generated event time is not a valid way to isolate official-train evaluation data.
+
+## Deterministic time construction
+
+The implementation uses 2024-01-01, a Monday, as the synthetic calendar base. For each user it derives a stable anchor week from the configured seed and user ID. The recorded first order weekday offsets that anchor; subsequent orders accumulate cleaned `days_since_prior_order` values. Recorded order hour is preserved, while minute and second are derived by stable order-keyed values in the default uniform mode. The deterministic mode derives its order minute from order identity and uses zero seconds.
+
+Within each order, events are sorted by `add_to_cart_order`. The first item's gap is zero, and each later item's event time advances by the cumulative configured interval. The default interval sampler is exponential with a 30-second mean clipped to 5–120 seconds. A stable hash namespace and SplitMix64 transform derive each value from the seed, order ID and cart position; generation does not depend on Python's process-randomized hash or row iteration order.
+
+A final per-user pass checks events in `order_number` and cart order. If the next order would not start at least one second after the prior order's final event, it shifts that order forward. This guarantees strictly increasing event time along the user's business sequence. The generator records the resulting span and monotonicity count in its manifest.
+
+Because source intervals at 30 days are capped, Module 1 first reconstructs a minimum weekday-consistent gap in the range 30–36 days. The generator uses that cleaned synthetic gap; it does not recover the original hidden interval.
+
+## `SyntheticConfig` and scenarios
+
+[`SyntheticConfig`](../src/module1/config.py) records the seed, scatter window, time mode, item-gap sampler and optional user limit. Supported scatter windows are 1, 4, 13, 26 and 52 weeks. The default seed is 42 and default scatter is 13 weeks.
+
+| Scenario | Item-gap distribution | Order-time mode | Purpose |
+|---|---|---|---|
+| `default` | Exponential mean 30 s, clipped to [5, 120] s | `uniform` | General replay feed. |
+| `mobile-fast` | Exponential mean 20 s, clipped to [3, 90] s | `uniform` | Faster within-cart activity. |
+| `desktop-browse` | Exponential mean 40 s, clipped to [10, 240] s | `uniform` | Slower within-cart activity. |
+| `uniform` | Uniform [15, 50] s | `uniform` | Fixed bounded interval family. |
+| `deterministic` | Exponential mean 30 s, clipped to [5, 120] s | `hash` | Hash-derived order time for repeatable runs. |
+
+`--limit-users` selects the lowest sorted user IDs for a bounded fixture. `--batch-users` is a processing-memory control (default 20,000), not an event-scope control. For the same source and seed, changing this batch size preserves generated values. These are different controls: a user limit changes the generated population, while batch size changes how that population is processed.
+
+## Feed manifest and reproducibility
+
+The feed manifest records the complete config, batch-size setting, deterministic namespaces/keys, event/user/order counts, event-time span, daily event counts, peak/mean daily rates, and monotonicity violations. Retain the manifest and source receipt with any measurement. Two runs are comparable only when source identity, seed, scenario, scatter window, time mode, user scope, and output format are understood.
+
+The named `scatter_1w`, `scatter_1m` and `scatter_3m` measurements in [project progress](progress.md#23-synthetic-feed-configurations) are historical observations. The separate 3 October 2026 full-data manifest used seed 42, 13-week scatter and 2,000 users per processing batch. Those measurements must not be conflated with the generator's current default batch size.
+
+## HDFS staging and Kafka publication
+
+Generation writes a local event artifact and manifest. HDFS staging uploads the raw CSVs and curated tables, writes `_sources.json` for curated Parquet, and promotes partitioned interactions separately with `_handoff.json`. The six-file input receipt remains separate run evidence. Kafka publication is another step that sends event rows keyed by `user_id`; producer receipt counts and consumed terminal offsets are needed to establish bounded replay completion. Current commands, paths and safety constraints are maintained in the [Docker Module 1 runbook](docker.md#module-1-ingestion-generation-staging-and-kafka-replay). The generation algorithm and scenario parameters are source-owned in [`src/module1/generate.py`](../src/module1/generate.py) and [`src/module1/config.py`](../src/module1/config.py).
+
+## Spark executor layout experiment
+
+`src.module2.executor_benchmark` compares the same source-backed product-count
+aggregation under Spark `local[1]` and `local[2]`. These are local task-thread
+configurations on one host. The harness does not claim Kubernetes pod or native
+Spark executor scaling; the Kubernetes pipeline remains Spark local mode.
+
+Print the command plan without starting Spark or reading HDFS:
+
+```bash
+python3 -m src.module2.executor_benchmark plan \
+  --root hdfs://namenode:8020/instacart \
+  --output results/module2-executor \
+  --run-id review-run
+```
+
+Execute the comparison only in the later authorized runtime session:
+
+```bash
+python3 -m src.module2.executor_benchmark run \
+  --root hdfs://namenode:8020/instacart \
+  --output results/module2-executor \
+  --run-id review-run \
+  --repetitions 3 --warmups 1
+```
+
+Each arm runs in its own Spark process and writes a `summary.json`. The parent
+report requires identical source receipt hashes, interaction row counts, and
+aggregate checksums. Per-arm evidence includes the actual Spark master,
+`spark_conf`, source and code identities, measured input bytes and rows,
+repeated wall times, physical plans, and Spark event-log task metrics including
+shuffle bytes. No benchmark results are recorded in this repository during
+offline implementation.
+
+The comparison does not control host scheduling or operating-system/HDFS
+caches, so timing is descriptive for the recorded environment. It is not a
+distributed executor scaling result.
+
+The Kubernetes B3 Module 2 Job runs this same comparison after its batch
+publication. The run-specific step receipt includes the source identity,
+input rows/bytes, actual `local[1]` and `local[2]` masters, repeated runtime,
+physical plans, and Spark task/shuffle metrics. B4 rejects acceptance if either
+arm is missing or the arms do not reconcile to the same source and output.
+Those values are generated only by a future authorized runtime run; no result
+is included here.
+
+## Existing standalone master: Proposal §15.6
+
+For an actual executor-layout experiment, use an existing Spark standalone
+master with workers that can allocate the requested memory and cores. Every
+worker must have the same Python runtime/code and reach the curated HDFS root;
+the driver must be reachable from workers. The harness creates no cluster.
+Keep the automatic B3 local-mode evidence distinct from this experiment.
+
+```bash
+python3 -m src.module2.executor_benchmark plan \
+  --root hdfs://namenode:8020/instacart \
+  --run-id standalone-review --execution-mode standalone \
+  --master spark://spark-master:7077 \
+  --executor-configs '[{"executor_memory":"1g","executor_cores":1,"total_cores":2},{"executor_memory":"1g","executor_cores":2,"total_cores":2}]'
+```
+
+Review the plan, then change `plan` to `run` during the authorized runtime
+session. This example compares two one-core executors with one two-core
+executor, keeping the total cores fixed. Memory and total cores can also be
+varied explicitly. Use two through eight distinct configurations; each needs
+at least one warmup and three measured repetitions.
+
+The harness verifies the requested standalone master and effective Spark
+configuration and records actual active executor IDs, host/ports, core counts
+and `maxMemory` from the driver REST API after the workload. Driver-only,
+missing or mismatched core allocation fails the arm. `maxMemory` is Spark's
+reported storage memory, not the requested executor heap. The driver UI REST
+endpoint must be available. Source receipt, row count and output checksum must
+match across arms. Results describe these layouts on the recorded cluster;
+no speedup or Kubernetes executor-scaling claim is inferred. No standalone
+experiment has been executed during offline implementation.

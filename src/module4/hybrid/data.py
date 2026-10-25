@@ -1,6 +1,7 @@
 """Bounded MongoDB capture of a verified Module 4A/4B source pair."""
 
 from __future__ import annotations
+from ...common.runtime import positive_int
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ GRAPH_PROJECTION = {
     "_id": 0,
     "product_id": 1,
     "product_name": 1,
+    "pagerank": 1,
     "graph_version": 1,
     "run_id": 1,
 }
@@ -81,11 +83,6 @@ class _SnapshotIdentity:
     graph_version: str
 
 
-def _positive_integer(value: Any, field: str) -> int:
-    if type(value) is not int or value <= 0:
-        raise SourceSnapshotError(f"{field} must be a positive integer")
-    return value
-
 
 def _finite_score(value: Any) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
@@ -109,7 +106,7 @@ def _version(value: Any, field: str) -> str:
     return value
 
 
-def _readiness_identity(document: Any) -> _SnapshotIdentity:
+def readiness_identity(document: Any) -> _SnapshotIdentity:
     if not isinstance(document, Mapping):
         raise ReadinessContractError("active A/B readiness document is missing")
     if document.get("_id") != READINESS_ID:
@@ -140,7 +137,7 @@ def _read_active_identity(database: Any) -> _SnapshotIdentity:
         document = database[READINESS_COLLECTION].find_one({"_id": READINESS_ID})
     except Exception as exc:
         raise SourceQueryError("failed to read the active A/B readiness pointer") from exc
-    return _readiness_identity(document)
+    return readiness_identity(document)
 
 
 def _bounded_documents(
@@ -185,9 +182,20 @@ def _read_als_recommendations(
 
     expected_count = config.recommendation_k
     if rows and len(rows) != expected_count:
-        raise SourceSnapshotError(
-            f"ALS recommendations are truncated: found {len(rows)} rows; expected {expected_count}"
+        catalog_sample = _bounded_documents(
+            database[config.mongo_graph_collection],
+            {"graph_version": identity.graph_version, "run_id": identity.run_id},
+            {"_id": 0, "product_id": 1},
+            [("product_id", 1)],
+            expected_count,
+            "graph/catalog",
         )
+        if catalog_sample and len(rows) == len(catalog_sample):
+            expected_count = len(catalog_sample)
+        else:
+            raise SourceSnapshotError(
+                f"ALS recommendations are truncated: found {len(rows)} rows; expected {expected_count}"
+            )
 
     recommendations = []
     product_ids: set[int] = set()
@@ -197,11 +205,11 @@ def _read_als_recommendations(
             raise SourceSnapshotError("ALS row has a different model_version than the active pointer")
         if row.get("run_id") != identity.run_id:
             raise SourceSnapshotError("ALS row has a different run_id than the active pointer")
-        row_user_id = _positive_integer(row.get("user_id"), "ALS user_id")
+        row_user_id = positive_int(row.get("user_id"), "ALS user_id", error=SourceSnapshotError)
         if row_user_id != user_id:
             raise SourceSnapshotError("ALS row user_id does not match the requested user")
-        product_id = _positive_integer(row.get("product_id"), "ALS product_id")
-        rank = _positive_integer(row.get("als_rank"), "ALS als_rank")
+        product_id = positive_int(row.get("product_id"), "ALS product_id", error=SourceSnapshotError)
+        rank = positive_int(row.get("als_rank"), "ALS als_rank", error=SourceSnapshotError)
         if rank > MAX_SOURCE_RECOMMENDATIONS:
             raise SourceSnapshotError("ALS als_rank exceeds the published Top-20 bound")
         score = _finite_score(row.get("als_score"))
@@ -237,7 +245,7 @@ def _prospective_ids(product_ids: Iterable[int]) -> tuple[int, ...]:
             raise SourceSnapshotError("could not read prospective trend product IDs") from exc
     if len(values) > MAX_PROSPECTIVE_TREND_PRODUCTS:
         raise SourceSnapshotError("prospective trend product IDs exceed the bounded Top-20 input")
-    validated = tuple(_positive_integer(value, "prospective trend product_id") for value in values)
+    validated = tuple(positive_int(value, "prospective trend product_id", error=SourceSnapshotError) for value in values)
     if len(set(validated)) != len(validated):
         raise SourceSnapshotError("prospective trend product IDs contain duplicates")
     return tuple(sorted(validated))
@@ -271,13 +279,14 @@ def _read_graph_catalog(
         raise SourceSnapshotError("graph query returned more rows than the bounded product ID set")
 
     products: dict[int, str] = {}
+    pageranks: dict[int, float] = {}
     requested_set = set(requested_ids)
     for row in rows:
         if row.get("graph_version") != identity.graph_version:
             raise SourceSnapshotError("graph row has a different graph_version than the active pointer")
         if row.get("run_id") != identity.run_id:
             raise SourceSnapshotError("graph row has a different run_id than the active pointer")
-        product_id = _positive_integer(row.get("product_id"), "graph product_id")
+        product_id = positive_int(row.get("product_id"), "graph product_id", error=SourceSnapshotError)
         if product_id not in requested_set:
             raise SourceSnapshotError("graph row product_id was not requested")
         product_name = row.get("product_name")
@@ -286,6 +295,9 @@ def _read_graph_catalog(
         if product_id in products:
             raise SourceSnapshotError(f"graph catalog contains duplicate product_id {product_id}")
         products[product_id] = product_name
+        pr_val = row.get("pagerank")
+        if isinstance(pr_val, (int, float)):
+            pageranks[product_id] = float(pr_val)
 
     missing_als = tuple(sorted(set(als_product_ids).difference(products)))
     if missing_als:
@@ -294,7 +306,10 @@ def _read_graph_catalog(
     missing_prospective = tuple(
         sorted(set(prospective_trend_product_ids).difference(products).difference(als_product_ids))
     )
-    catalog = tuple(ProductMetadata(product_id, products[product_id]) for product_id in sorted(products))
+    catalog = tuple(
+        ProductMetadata(product_id, products[product_id], pageranks.get(product_id))
+        for product_id in sorted(products)
+    )
     return catalog, missing_prospective
 
 
@@ -310,7 +325,7 @@ def capture_verified_user_sources(
     performed while holding the lock. ``config.recommendation_k`` must match
     the accepted publication; the readiness pointer does not store that K.
     """
-    requested_user_id = _positive_integer(user_id, "requested user_id")
+    requested_user_id = positive_int(user_id, "requested user_id", error=SourceSnapshotError)
     if (
         type(config.recommendation_k) is not int
         or config.recommendation_k < 1

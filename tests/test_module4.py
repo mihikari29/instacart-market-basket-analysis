@@ -6,12 +6,11 @@ import pytest
 
 pyspark = pytest.importorskip("pyspark")
 from src.module4.als import ALSParams, fit_model, load_model, recommend_top_k, recommend_with_fallback, save_model
-from src.module4.config import Config
+from src.module4.config import Config, session
 from src.module4.data import build_prior_interactions, validate_inputs
 from src.module4.evaluation import evaluate_at_k, personal_frequency, ranking_metrics
 from src.module4.graph import build_edges, build_metrics, build_vertices, validate_edges, validate_metrics
 from src.module4.split import make_internal_holdout
-from src.module4.spark import session
 
 
 @pytest.fixture(scope="module")

@@ -7,6 +7,7 @@ import ipaddress
 import json
 import math
 import os
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -527,7 +528,19 @@ def _validate_evidence(value: Any, evidence_id: str) -> dict[str, Any]:
 
 def _validate_response(endpoint: str, value: Any) -> dict[str, Any]:
     body = _require_mapping(value, endpoint)
-    if endpoint == "health":
+    if endpoint == "streaming_metrics":
+        from src.module3.metrics import validate_snapshot
+        _require_keys(body, {"available", "source_namespace", "metrics", "observed_at"}, endpoint)
+        _check_bool(body["available"], endpoint)
+        _check_text(body["source_namespace"], endpoint)
+        _validate_timestamp(body["observed_at"], endpoint)
+        if body["available"] != (body["metrics"] is not None):
+            raise ValueError("streaming metrics availability is inconsistent")
+        if body["metrics"] is not None:
+            validate_snapshot(body["metrics"])
+            if body["metrics"]["source_namespace"] != body["source_namespace"]:
+                raise ValueError("streaming metrics namespace is inconsistent")
+    elif endpoint == "health":
         _require_keys(body, {"status"}, endpoint)
         if body["status"] != "ok":
             raise ValueError("health status is invalid")
@@ -613,6 +626,49 @@ def _validate_response(endpoint: str, value: Any) -> dict[str, Any]:
             raise ValueError("recommendation epsilon must be positive")
         _validate_timestamp(body["observed_at"], endpoint)
         _validate_timestamp(body["generated_at"], endpoint, nullable=True)
+    elif endpoint == "als_recommendations":
+        _require_keys(
+            body,
+            {"user_id", "model_version", "status", "reason", "recommendation_count", "requested_limit", "has_more", "source", "recommendations", "observed_at"},
+            endpoint,
+        )
+        _check_int(body["user_id"], endpoint, minimum=1, maximum=MAX_USER_ID)
+        _check_text(body["model_version"], endpoint)
+        if body["status"] not in {"available", "empty"}:
+            raise ValueError("ALS status is invalid")
+        _check_text(body["reason"], endpoint, nullable=True)
+        _check_int(body["recommendation_count"], endpoint, maximum=20)
+        _check_int(body["requested_limit"], endpoint, minimum=1, maximum=20)
+        _check_bool(body["has_more"], endpoint)
+        rows = _require_list(body["recommendations"], endpoint, 20)
+        if body["recommendation_count"] != len(rows) or len(rows) > body["requested_limit"]:
+            raise ValueError("ALS recommendation count does not match rows or requested limit")
+        if (body["status"] == "empty") != (len(rows) == 0):
+            raise ValueError("ALS empty status does not match the recommendation rows")
+        product_ids = set()
+        ranks = []
+        previous_score = None
+        for row in rows:
+            row = _require_mapping(row, endpoint)
+            _require_keys(row, {"product_id", "product_name", "als_rank", "als_score"}, endpoint)
+            _check_int(row["product_id"], endpoint, minimum=1)
+            _check_text(row["product_name"], endpoint, nullable=True)
+            _check_int(row["als_rank"], endpoint, minimum=1, maximum=20)
+            _check_number(row["als_score"], endpoint)
+            if previous_score is not None and row["als_score"] > previous_score:
+                raise ValueError("ALS rows are not ordered by rank and score")
+            previous_score = row["als_score"]
+            product_ids.add(row["product_id"])
+            ranks.append(row["als_rank"])
+        if len(product_ids) != len(rows) or ranks != list(range(1, len(rows) + 1)):
+            raise ValueError("ALS recommendation ranks or products are inconsistent")
+        source = _require_mapping(body["source"], endpoint)
+        _require_keys(source, {"run_id", "model_version", "graph_version"}, endpoint)
+        for key in ("run_id", "model_version", "graph_version"):
+            _check_text(source[key], endpoint)
+        if source["model_version"] != body["model_version"]:
+            raise ValueError("ALS source model version does not match the response")
+        _validate_timestamp(body["observed_at"], endpoint)
     elif endpoint == "trends":
         _require_keys(
             body,
@@ -783,8 +839,10 @@ class ApiClient:
         self.timeout = timeout
         self.max_response_bytes = max_response_bytes
         self.session = session or requests.Session()
-        if hasattr(self.session, "trust_env"):
+        try:
             self.session.trust_env = False
+        except AttributeError:
+            pass
 
     def _read_response(self, response: requests.Response) -> bytes:
         length = response.headers.get("Content-Length")
@@ -897,18 +955,20 @@ class ApiClient:
     @staticmethod
     def _raise_backend_error(status: int, payload: Any) -> None:
         if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-            detail = payload["error"]
-            code = detail.get("code")
-            message = detail.get("message")
-            request_id = detail.get("request_id")
-            if isinstance(code, str) and code and len(code) <= 128 and isinstance(message, str) and message:
-                safe_message = message[:512]
-                safe_request_id = request_id[:128] if isinstance(request_id, str) else None
+            err = payload["error"]
+            code = err.get("code")
+            message = err.get("message")
+            request_id = err.get("request_id")
+            if (
+                isinstance(code, str)
+                and isinstance(message, str)
+                and isinstance(request_id, str)
+            ):
                 raise ApiClientError(
-                    safe_message,
+                    message[:512],
                     status_code=status,
                     code=code,
-                    request_id=safe_request_id,
+                    request_id=request_id[:128],
                 )
         raise ApiClientError(
             "The dashboard API could not complete this request.", status_code=status, code="http_error"
@@ -925,6 +985,43 @@ class ApiClient:
         if payload["user_id"] != validated:
             raise ApiClientError(
                 "The dashboard API returned a response for a different user ID.",
+                status_code=502,
+                code="invalid_response",
+            )
+        return payload
+
+    def get_als_recommendations(
+        self, user_id: int | str, model_version: str | None = None, limit: int = 20
+    ) -> dict[str, Any]:
+        validated = validate_user_id(user_id)
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ApiClientError("ALS recommendation limit must be between 1 and 20.", status_code=422, code="invalid_filter")
+        params: dict[str, Any] = {"limit": limit}
+        if model_version is not None:
+            if (
+                not isinstance(model_version, str)
+                or not model_version
+                or model_version != model_version.strip()
+                or len(model_version) > 80
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", model_version)
+                or ".." in model_version
+            ):
+                raise ApiClientError("ALS model version has an invalid format.", status_code=422, code="invalid_model_version")
+            params["model_version"] = model_version
+        payload = self._get(
+            f"/api/v1/als/recommendations/{validated}",
+            endpoint="als_recommendations",
+            params=params,
+        )
+        if payload["user_id"] != validated:
+            raise ApiClientError(
+                "The dashboard API returned a response for a different user ID.",
+                status_code=502,
+                code="invalid_response",
+            )
+        if model_version is not None and payload["model_version"] != model_version:
+            raise ApiClientError(
+                "The dashboard API returned a different ALS model version.",
                 status_code=502,
                 code="invalid_response",
             )
@@ -957,6 +1054,13 @@ class ApiClient:
                 status_code=502,
                 code="invalid_response",
             )
+        return payload
+
+    def get_streaming_metrics(self, source_namespace: str) -> dict[str, Any]:
+        namespace = validate_trend_namespace(source_namespace)
+        payload = self._get("/api/v1/streaming/metrics", endpoint="streaming_metrics", params={"source_namespace": namespace})
+        if payload["source_namespace"] != namespace:
+            raise ApiClientError("The API returned a different metrics namespace.", status_code=502, code="invalid_response")
         return payload
 
     def get_batch_products(self, order: str = "purchase_count", limit: int = 20) -> dict[str, Any]:

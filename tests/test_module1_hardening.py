@@ -4,11 +4,23 @@ from unittest.mock import patch
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
 
 from src.module1.config import SyntheticConfig
+from src.module1 import clean as raw_clean
 from src.module1.event_reader import SCHEMA_FIELDS, event_sort_key, iter_ordered_events
 from src.module1.generate import expand_events, finalize, prepare_orders
 from src.module1.producer import main as producer_main, publish_rows
+
+
+class _ParquetFixture:
+    def __init__(self, value: bytes = b"staged"):
+        self.value = value
+
+    def to_parquet(self, path, index=False, compression=None):
+        assert index is False
+        assert compression is not None, "Module 1 publication must pin the Parquet codec"
+        Path(path).write_bytes(self.value)
 
 
 def _generation_fixture():
@@ -84,6 +96,332 @@ def _event_rows():
 
 def _write_events(path: Path, rows: list[dict]) -> None:
     pq.write_table(pa.Table.from_pylist(rows).select(SCHEMA_FIELDS), path, row_group_size=2)
+
+
+def _write_raw_fixture(raw_dir: Path, *, reordered: str = "0", bad_train_order: str = "12") -> None:
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    tables = {
+        "orders": (
+            ["order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"],
+            [["11", "1", "prior", "1", "0", "8", ""], ["12", "1", "train", "2", "2", "9", "2"], ["21", "2", "test", "1", "3", "10", ""]],
+        ),
+        "order_products__prior": (
+            ["order_id", "product_id", "add_to_cart_order", "reordered"],
+            [["11", "1", "1", reordered]],
+        ),
+        "order_products__train": (
+            ["order_id", "product_id", "add_to_cart_order", "reordered"],
+            [[bad_train_order, "1", "1", "1"]],
+        ),
+        "products": (["product_id", "product_name", "aisle_id", "department_id"], [["1", "Product one", "10", "2"]]),
+        "aisles": (["aisle_id", "aisle"], [["10", "Aisle one"]]),
+        "departments": (["department_id", "department"], [["2", "Department two"]]),
+    }
+    for table, (headers, rows) in tables.items():
+        pd.DataFrame(rows, columns=headers).to_csv(raw_dir / f"{table}.csv", index=False)
+
+
+def test_raw_preflight_requires_all_six_tables_before_output_creation(tmp_path, monkeypatch, capsys):
+    raw_dir = tmp_path / "data" / "raw"
+    _write_raw_fixture(raw_dir)
+    (raw_dir / "aisles.csv").unlink()
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(tmp_path / "data"), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "aisles.csv: required source file is missing" in capsys.readouterr().err
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("table", ["order_products__prior", "order_products__train"])
+@pytest.mark.parametrize("position", ["2", "3"])
+def test_raw_preflight_rejects_cart_gaps_before_replacing_output(tmp_path, monkeypatch, capsys, table, position):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    source = data_dir / "raw" / f"{table}.csv"
+    frame = pd.read_csv(source, dtype="string", keep_default_na=False)
+    frame.loc[0, "add_to_cart_order"] = position
+    frame.to_csv(source, index=False)
+    output = tmp_path / "clean"
+    _mark_owned_output(output)
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+    assert raw_clean.main() == 2
+    assert "contiguous 1..N" in capsys.readouterr().err
+    assert all((output / name).read_bytes() == b"old" for name in raw_clean._CLEAN_OUTPUT_FILES)
+
+
+def test_weekday_gate_rejects_inconsistent_gap_before_publication(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    source = data_dir / "raw" / "orders.csv"
+    frame = pd.read_csv(source, dtype="string", keep_default_na=False)
+    frame.loc[1, "days_since_prior_order"] = "7"
+    frame.to_csv(source, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+    assert raw_clean.main() == 2
+    assert "weekday progression" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_capped_gap_reconstruction_passes_weekday_gate():
+    frame = pd.DataFrame({
+        "user_id": [1] * 8, "order_number": list(range(1, 9)),
+        "order_dow": [0, 0, 1, 2, 3, 4, 5, 6],
+        "days_since_prior_order": [float("nan")] + [30.] * 7,
+        "eval_set": ["prior"] * 8,
+    })
+    cleaned, stats = raw_clean.clean_orders(frame)
+    assert stats["dow_mismatch_after_recovery"] == 0
+    assert cleaned.days_since_prior_order.iloc[1:].between(30, 36).all()
+
+
+@pytest.mark.parametrize("last_position", [2, 3])
+def test_cart_sequence_checks_internal_gaps(tmp_path, last_position):
+    data_dir = tmp_path / "data"
+    raw = data_dir / "raw"
+    _write_raw_fixture(raw)
+    products = pd.read_csv(raw / "products.csv")
+    products.loc[1] = [2, "Second product", 10, 2]
+    products.to_csv(raw / "products.csv", index=False)
+    prior = pd.read_csv(raw / "order_products__prior.csv")
+    prior.loc[1] = [11, 2, last_position, 0]
+    prior.to_csv(raw / "order_products__prior.csv", index=False)
+    if last_position == 3:
+        with pytest.raises(raw_clean.RawInputValidationError, match="contiguous 1..N"):
+            raw_clean.load_raw(data_dir)
+    else:
+        assert len(raw_clean.load_raw(data_dir)["order_products__prior"]) == 2
+
+
+def test_kubernetes_synthetic_fixture_passes_all_cleaning_gates(tmp_path, monkeypatch):
+    from scripts.k8s.fixture_data import write_fixture
+    data_dir = tmp_path / "data"
+    write_fixture(data_dir / "raw")
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir)])
+    assert raw_clean.main() == 0
+    orders = pd.read_parquet(data_dir / "clean" / "orders.parquet")
+    assert len(orders) == 48
+    assert len(pd.read_parquet(data_dir / "clean" / "order_products__prior.parquet")) == 72
+
+
+def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw", reordered="2")
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    error = capsys.readouterr().err
+    assert "order_products__prior.csv row 2: reordered must be an integer in [0, 1]" in error
+    assert not output.exists()
+
+
+def test_raw_preflight_rejects_order_hour_above_documented_domain(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    orders_path = raw_dir / "orders.csv"
+    orders = pd.read_csv(orders_path, dtype="string", keep_default_na=False)
+    orders.loc[0, "order_hour_of_day"] = "24"
+    orders.to_csv(orders_path, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "orders.csv row 2: order_hour_of_day must be an integer in [0, 23]" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_accepts_zero_padded_order_hour_as_decimal_eight(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    orders_path = raw_dir / "orders.csv"
+    orders = pd.read_csv(orders_path, dtype="string", keep_default_na=False)
+    orders.loc[0, "order_hour_of_day"] = "08"
+    orders.to_csv(orders_path, index=False)
+
+    tables = raw_clean.load_raw(data_dir)
+    coerced = raw_clean._coerce_raw_tables(tables)
+
+    assert coerced["orders"].loc[0, "order_hour_of_day"] == 8
+
+
+def test_raw_preflight_rejects_incompatible_foreign_key_before_writing_outputs(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw", bad_train_order="999")
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "order_products__train.csv row 2: order_id does not exist in orders.csv" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_rejects_keys_that_would_alias_after_integer_coercion(tmp_path, monkeypatch, capsys):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    _write_raw_fixture(raw_dir)
+    prior_path = raw_dir / "order_products__prior.csv"
+    prior = pd.read_csv(prior_path, dtype="string", keep_default_na=False)
+    prior.loc[0, "order_id"] = "011"
+    prior.to_csv(prior_path, index=False)
+    output = tmp_path / "clean"
+    monkeypatch.setattr(
+        "sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)]
+    )
+
+    assert raw_clean.main() == 2
+    assert "order_products__prior.csv row 2: order_id must be an integer" in capsys.readouterr().err
+    assert not output.exists()
+
+
+def test_raw_preflight_keeps_first_order_null_and_accepts_reordered_columns(tmp_path):
+    raw_dir = tmp_path / "data" / "raw"
+    _write_raw_fixture(raw_dir)
+    path = raw_dir / "orders.csv"
+    frame = pd.read_csv(path, dtype="string", keep_default_na=False)
+    frame = frame[list(reversed(frame.columns))]
+    frame.to_csv(path, index=False)
+
+    tables = raw_clean.load_raw(tmp_path / "data")
+
+    assert len(tables) == 6
+    assert pd.isna(tables["orders"].loc[0, "days_since_prior_order"])
+    assert tables["order_products__prior"].loc[0, "reordered"] == 0
+
+
+def _clean_output_frames(value: bytes = b"new"):
+    return {name: _ParquetFixture(value) for name in raw_clean._CLEAN_OUTPUT_FILES}
+
+
+def _mark_owned_output(path: Path, value: bytes = b"old") -> None:
+    path.mkdir()
+    for name in raw_clean._CLEAN_OUTPUT_FILES:
+        (path / name).write_bytes(value)
+    (path / raw_clean._CLEAN_OUTPUT_MANIFEST).write_text(
+        __import__("json").dumps({"schema_version": 1, "files": sorted(raw_clean._CLEAN_OUTPUT_FILES)}),
+        encoding="utf-8",
+    )
+
+
+def test_clean_publication_rejects_raw_input_overlap_without_touching_sources(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+
+    for output in (raw_dir, data_dir):
+        try:
+            raw_clean._validate_publication_paths(data_dir, output)
+        except ValueError as exc:
+            assert "overlap" in str(exc)
+        else:
+            raise AssertionError(f"unsafe output path was accepted: {output}")
+    assert source.read_bytes() == b"raw sentinel"
+
+
+def test_clean_publication_rejects_symlink_aliases(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    alias = tmp_path / "alias"
+    alias.symlink_to(data_dir, target_is_directory=True)
+
+    try:
+        raw_clean._validate_publication_paths(data_dir, alias / "raw" / "clean")
+    except ValueError as exc:
+        assert "symlink" in str(exc)
+    else:
+        raise AssertionError("symlinked output parent was accepted")
+
+
+def test_clean_publication_replaces_only_owned_outputs_and_preserves_raw(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+
+    raw_clean._validate_publication_paths(data_dir, output)
+    raw_clean._write_outputs_atomically(output, _clean_output_frames())
+    raw_clean._write_outputs_atomically(output, _clean_output_frames(b"replacement"))
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert {path.name for path in output.iterdir()} == raw_clean._CLEAN_OUTPUT_FILES | {
+        raw_clean._CLEAN_OUTPUT_MANIFEST
+    }
+    assert all((output / name).read_bytes() == b"replacement" for name in raw_clean._CLEAN_OUTPUT_FILES)
+
+
+def test_clean_publication_rejects_foreign_files_and_keeps_output_and_input(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+    output.mkdir()
+    foreign = output / "keep-me.txt"
+    foreign.write_text("foreign sentinel", encoding="utf-8")
+
+    try:
+        raw_clean._write_outputs_atomically(output, _clean_output_frames())
+    except ValueError as exc:
+        assert "unrecognized" in str(exc)
+    else:
+        raise AssertionError("unrecognized output content was accepted")
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert foreign.read_text(encoding="utf-8") == "foreign sentinel"
+    assert sorted(path.name for path in output.iterdir()) == ["keep-me.txt"]
+
+
+def test_clean_publication_staging_failure_preserves_prior_output(tmp_path):
+    data_dir = tmp_path / "data"
+    raw_dir = data_dir / "raw"
+    raw_dir.mkdir(parents=True)
+    source = raw_dir / "orders.csv"
+    source.write_bytes(b"raw sentinel")
+    output = data_dir / "clean"
+    _mark_owned_output(output)
+    previous = {name: (output / name).read_bytes() for name in raw_clean._CLEAN_OUTPUT_FILES}
+
+    class _FailingFixture(_ParquetFixture):
+        def to_parquet(self, path, index=False, compression=None):
+            raise OSError("synthetic staging failure")
+
+    frames = _clean_output_frames()
+    frames[next(iter(frames))] = _FailingFixture()
+    try:
+        raw_clean._write_outputs_atomically(output, frames)
+    except OSError as exc:
+        assert "synthetic staging failure" in str(exc)
+    else:
+        raise AssertionError("staging failure was not propagated")
+
+    assert source.read_bytes() == b"raw sentinel"
+    assert {name: (output / name).read_bytes() for name in raw_clean._CLEAN_OUTPUT_FILES} == previous
+
+
+def test_clean_order_products_preserves_large_valid_cart_positions():
+    values = pd.DataFrame({"reordered": [0, 1], "add_to_cart_order": [32768, 70000]})
+
+    result = raw_clean.clean_order_products(values)
+
+    assert result["add_to_cart_order"].tolist() == [32768, 70000]
+    assert str(result["add_to_cart_order"].dtype) == "int32"
 
 
 def test_external_merge_orders_limits_and_bounds_chunks(tmp_path):

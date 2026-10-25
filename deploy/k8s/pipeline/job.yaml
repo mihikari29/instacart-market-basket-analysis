@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: it4931-__STEP__-__RUN_ID__
+  namespace: __K8S_RENDER_REQUIRED__
+  labels:
+    app.kubernetes.io/name: pipeline-task
+    app.kubernetes.io/part-of: instacart-k8s-demo
+    it4931.instacart.edu/component: pipeline
+    it4931.instacart.edu/run-id: __RUN_ID__
+    it4931.instacart.edu/step: __STEP__
+spec:
+  backoffLimit: __BACKOFF_LIMIT__
+  activeDeadlineSeconds: __DEADLINE_SECONDS__
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pipeline-task
+        it4931.instacart.edu/component: pipeline
+        it4931.instacart.edu/role: pipeline
+        it4931.instacart.edu/run-id: __RUN_ID__
+        it4931.instacart.edu/step: __STEP__
+    spec:
+      restartPolicy: Never
+      serviceAccountName: module4d-pipeline
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: pipeline
+          image: __PIPELINE_IMAGE__
+          imagePullPolicy: IfNotPresent
+          command: [python3, -m, scripts.k8s.pipeline_task]
+          args: ["__STEP__"]
+          envFrom:
+            - configMapRef: {name: it4931-pipeline-config}
+          env:
+            - {name: MODULE4D_MONGO_DATABASE, value: "__DATABASE__"}
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef: {name: module4d-mongo-publisher, key: mongodb-uri}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef: {fieldPath: metadata.name}
+          resources:
+            requests: {cpu: "2", memory: 4Gi, ephemeral-storage: 512Mi}
+            limits: {cpu: "2", memory: 6Gi, ephemeral-storage: 2Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: pipeline-data, mountPath: /run/pipeline}
+            - {name: pipeline-checkpoints, mountPath: /run/checkpoints}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: pipeline-data
+          persistentVolumeClaim: {claimName: it4931-pipeline-data}
+        - name: pipeline-checkpoints
+          persistentVolumeClaim: {claimName: it4931-pipeline-checkpoints}
+        - name: tmp
+          emptyDir: {sizeLimit: 2Gi}

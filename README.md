@@ -1,227 +1,339 @@
 # IT4931 — Instacart market basket analysis
 
-This project combines Spark batch analytics with event-time streaming over the
-Instacart market-basket dataset. Its Lambda Architecture separates historical
-recommendation inputs from replayable trend events and serves API/dashboard
-views.
+This project studies product purchasing patterns in the public Instacart market-basket dataset and demonstrates how batch analytics and event-time trends can support recommendations. It combines Python, Apache Spark, HDFS, Kafka, MongoDB, FastAPI, Streamlit, Docker, and a guarded local Kubernetes demonstration.
+
+The architecture follows the **Lambda Architecture** pattern. The batch layer computes stable historical aggregates and recommendation inputs from curated data. The speed layer consumes replayable purchase events and derives time-windowed trends. A serving layer combines versioned batch and streaming results and exposes bounded read-only views. Separating these paths makes their data scope, refresh behavior, and failure modes visible. The stream can advance while batch snapshots change on their own schedule; Module 4C reconciles them through explicit versions and readiness checks.
 
 ## Architecture
 
-```text
-Six Instacart CSV files -> Module 1
-  ├─> HDFS curated -> Module 2 -> batch metrics ----------------> Module 4D API
-  ├─> HDFS prior -> Module 4A ALS ─┐
-  ├─> HDFS prior -> Module 4B graph ┴─> Module 4C
-  └─> Kafka -> Module 3
-                 ├─> `realtime_trending` (legacy mutable output)
-                 └─> optional `realtime_trending_windows` ┬─> Module 4C
-                                                          └─> Module 4D trends API
-Module 4C -> versioned Hybrid recommendations -----------------> Module 4D API -> UI
+```mermaid
+flowchart LR
+  csv["Six source CSV files"] --> m1["Module 1"]
+  m1 --> hdfs[("HDFS curated Parquet")]
+  hdfs --> m2["Module 2 batch analytics"]
+  hdfs -->|"prior interactions"| als["Module 4A ALS"]
+  hdfs -->|"prior interactions"| productGraph["Module 4B product graph"]
+  m2 --> batch[("MongoDB batch metrics")]
+  batch --> api["Module 4D FastAPI read API"]
+  m2 --> features[("HDFS prior-only user_features")]
+  features --> featureReader["Bounded Module 4 descriptive reader<br/>(not a Hybrid ranking input)"]
+  als --> alsStore[("MongoDB versioned ALS snapshots")]
+  alsStore --> hybrid["Module 4C Hybrid"]
+  alsStore --> api
+  productGraph --> graphStore[("MongoDB graph snapshots")]
+  graphStore --> hybrid
+  m1 -->|"synthetic events"| kafka[("Kafka")]
+  kafka --> m3["Module 3 event-time processing"]
+  m3 --> legacy[("Mutable realtime_trending<br/>legacy output only")]
+  m3 -. "OPTIONAL immutable publication" .-> bundles[("realtime_trending_windows<br/>complete finalized-window bundles")]
+  bundles --> hybrid
+  bundles -->|"trends route"| api
+  hybrid --> hybridStore[("MongoDB recommendation snapshots")]
+  hybridStore --> api
+  api --> ui["Streamlit dashboard"]
 ```
 
-The mutable `realtime_trending` collection preserves the legacy Module 3
-output contract. Module 4C and the Module 4D trends view consume separately
-published immutable `realtime_trending_windows` bundles; publication is
-opt-in. Modules 4A and 4B use prior-history data. Official train baskets are
-evaluation truth, not ALS training data. Module 4D reads through FastAPI; the
-UI has no direct MongoDB connection.
+The bounded Module 4 user-feature reader is a separate descriptive lookup. It does not feed Hybrid ranking. Module 3's legacy mutable rows are not a Hybrid source; only the explicitly enabled immutable finalized bundles serve the Hybrid and trends API paths shown above.
 
-## Project status
+Module 1 creates replay timestamps because the source has weekday and hour fields, but no absolute purchase timestamps. Those dates and times are simulated values, not observed customer chronology. The ordinary generated feed includes both `prior` and `train` orders; its Kafka contract does not retain `eval_set`, so an event-time cutoff alone cannot make that feed safe for official-train evaluation. Module 4A/4B fit from prior-history data. Official train baskets are held out as evaluation truth. Module 4D reads through FastAPI; the dashboard does not connect directly to MongoDB.
 
-| Area | Status |
+| Module | Responsibility and principal output |
 |---|---|
-| Modules 1–2 | Implemented; historical full-data results are recorded. Module 1 raw-input preflight remains incomplete. |
-| Module 3 | Implemented; bounded streaming and recovery evidence is recorded. End-to-end latency is not measured. |
-| Modules 4A–4B | Historical full-data acceptance passed 21/21 gates on 10 October 2026; post-style full-data workflows have not been rerun. |
-| Module 4C | Implemented and integration-tested; leakage-safe Hybrid quality and production-capacity results are not established. |
-| Module 4D | Read-only API and four-page dashboard are implemented; an independently verified per-user ALS view is missing. |
-| Kubernetes | Required by the Proposal; no deployment assets or evidence are present. |
+| **1 — Ingestion and storage** | Validate and clean six source tables, create deterministic replay events, stage curated Parquet and event feeds. |
+| **2 — Batch layer** | Compute historical product, department, user and time-pattern analytics; publish prior-only descriptive user features. |
+| **3 — Speed layer** | Consume Kafka, validate and deduplicate events within watermark state, aggregate event-time trends, and publish finalized results and telemetry. |
+| **4A — ALS recommendations** | Fit implicit-feedback ALS from prior-history user/product counts, evaluate against held-out data, and publish versioned recommendations. |
+| **4B — Product graph** | Build prior-basket product co-purchase relationships and graph metrics for the full catalog. |
+| **4C — Hybrid serving** | Validate eligible source generations, combine ALS, PageRank, and trend candidates deterministically, evaluate prior-only inputs, and publish a versioned snapshot. |
+| **4D — Read interface** | Serve bounded, read-only API views for recommendations, metrics, trends and registered evidence; render them in Streamlit. |
 
-See [project progress](docs/progress.md) for evidence dates, recorded CI, Proposal
-gaps, and next work. The [Module 3 guide](docs/module3-contracts.md) owns its
-technical contract; the [Module 4 plan](docs/module4-plan.md) owns Module 4
-algorithms and API contracts.
+## Centralized Pipeline Configuration & Execution Control
 
-## Repo layout
+All modules, model hyperparameters, timeouts, resource limits, and execution policies are unified and controlled declaratively via [`config/pipeline.yaml`](config/pipeline.yaml). No hyperparameters or timeouts are hardcoded.
 
-```text
-src/module1/             cleaning, synthetic event generation, HDFS and Kafka
-src/module2/             Spark batch analytics, feature extraction, benchmarks
-src/module3/             Structured Streaming, trends, bundles, checkpointing
-src/module4/             ALS, product graph, Hybrid serving, read API/dashboard
-scripts/                 project runners and scoped validation/demo tools
-deploy/module4/           isolated synthetic dashboard Compose setup
-tests/                   unit, contract, Spark and service-backed tests
-docs/                    Proposal, current guides, runbooks and dated evidence
-.github/workflows/       CI and separately gated full-data workflows
+```yaml
+# config/pipeline.yaml summary
+execution:
+  resume_policy: "step"         # "step" (checkpoint & resume) | "disabled" (force fresh run)
+  skip_completed_steps: true    # Reuses existing verified step receipts without re-running
+  stage_output_check: true
+
+synthesis:
+  user_count: 500
+  product_count: 500
+  reorder_probability: 0.59
+  batch_size: 50000
+
+models:
+  als:
+    rank: 10
+    max_iter: 10
+    reg_param: 0.05
+    alpha: 20.0
+    strength_col: "log_events"
+    max_trials: 1               # 1 uses exact candidate #1 parameters; >1 performs hyperparameter search
+  graph:
+    reset_probability: 0.15
+    max_iter: 20
+    tol: 0.0001
+  hybrid:
+    alpha: 0.50                 # ALS collaborative filtering weight
+    beta: 0.20                  # Graph PageRank importance weight
+    gamma: 0.30                 # Event-time trending score weight
+    recommendation_k: 20
+
+streaming:
+  window_duration_seconds: 7200
+  slide_duration_seconds: 300
+  watermark_delay_seconds: 600
+  top_k_per_window: 20
+  bundle_retention_seconds: 86400
+
+timeouts:
+  step_timeout_seconds: 7200
+  job_timeout_seconds: 3600
+  service_timeout_seconds: 600
+  recovery_timeout_seconds: 35
+
+resources:
+  cpu_cores: 4
+  memory_gib: 8
+  capacity_reserve_memory_gib: 12  # Dynamic host reserve (override with IT4931_CAPACITY_RESERVE_MEMORY_GIB)
 ```
 
-See the [repository layout guide](docs/repository-layout.md) for stable entry
-points. Docker targets, prerequisites, and operating procedures are in the
-[Docker guide](docs/docker.md).
+### Recommendation Model Control & 3-Way Hybrid Scoring
+The recommendation engine combines collaborative filtering, graph centrality, and real-time streaming trends:
+$$\text{final\_score} = \alpha \cdot \text{ALS}_{\text{norm}} + \beta \cdot \text{PageRank}_{\text{norm}} + \gamma \cdot \text{Trend}_{\text{norm}}$$
+- **Module 4A (ALS)**: Configured in `models.als` (`rank`, `max_iter`, `reg_param`, `alpha`). When `max_trials: 1`, it trains directly with these specified hyperparameters without running wasteful search sweeps.
+- **Module 4B (Product Graph)**: Configured in `models.graph` (`reset_probability`, `max_iter`). Calculates PageRank from prior-history co-purchase interactions.
+- **Module 4C (Hybrid Ranker)**: Fully connects ALS recommendations, Graph PageRank metrics, and real-time trend bundles with weights $\alpha, \beta, \gamma$. If $\beta = 0.0$, it falls back cleanly to 2-way $\lambda \cdot \text{ALS} + (1-\lambda) \cdot \text{Trend}$.
 
-## Dataset (originals → cleaned)
+### Checkpointing & Step Resumption
+When `execution.resume_policy: "step"` and `execution.skip_completed_steps: true`, the pipeline checks for verified step completion receipts (`stage-*-receipt.json`). Any step already successfully executed for the current `run_id` is automatically skipped (`[RESUME] step already complete`), eliminating wasteful re-computations and enabling seamless recovery from failures.
 
-The public source has six CSV tables and no absolute purchase timestamps.
-Recorded full-data evidence covers 3,421,083 orders, 32,434,489 prior facts,
-1,384,617 train facts, and 49,688 products; these are historical measurements,
-not a fresh run claim. See the [full-data evidence](docs/evidence/full/README.md).
+### Structured Data Directory Layout
+Data assets are segregated by monotonic role:
+- `data/raw/`: Untouched raw upstream Instacart CSV source tables (`orders.csv`, `order_products__prior.csv`, etc.).
+- `data/samples/medium/`: Curated relationally-complete 500-user sample dataset and its `manifest.json`.
+- `data/clean/`: Parquet tables produced by the deterministic cleaning stage.
+- `data/synthesized/`: Deterministic event-time synthetic feeds generated for streaming replay.
 
-Module 1 creates **Synthetic event time for replay simulation**. Its stream
-contains prior and train orders, so an event-time cutoff alone does not make the
-feed safe for official-train evaluation. See [synthetic feed status](docs/progress.md#23-synthetic-feed-configurations)
-and the [Module 3 provenance contract](docs/module3-contracts.md#kafka-event-contract-and-provenance).
+## Dataset and source relationships
 
-## What to use, and for which module
+The public release contains six CSV tables. Full-data evidence from 3 October 2026 recorded 3,421,083 orders, 32,434,489 prior order-product facts, 1,384,617 train facts, 49,688 catalog products, 206,209 users, 134 aisles and 21 departments. These values describe that dated run and its verified input, not a new measurement from this documentation revision. The full dataset has 33,819,106 events across 456 partitions.
 
-Use curated HDFS/Parquet tables for batch and recommendation inputs, and the
-generated Kafka JSON feed for streaming. The [repository layout guide](docs/repository-layout.md)
-maps these paths to their owning modules.
-
-## Why parquet (and not CSV)
-
-Curated tables use Parquet for typed, columnar Spark reads; source CSV remains
-the Module 1 cleaning input, while Kafka events use JSON.
-
-## Run
-
-For a first look, use the [isolated synthetic dashboard](docs/docker.md#start-and-stop-the-synthetic-dashboard).
-It uses disposable MongoDB storage and loopback-only API/UI ports; it does not
-demonstrate production behavior. The default Compose project uses persistent
-pipeline services and data, so review the [Docker runbook](docs/docker.md)
-before operating it.
-
-## Cleaning (validated)
-
-Historical full-data checks recorded the cleaning and event-generation results.
-The current cleaner still needs fail-fast checks for missing inputs and raw
-`reordered` values before coercion or output writes. This guard gap does not
-invalidate the recorded valid-input results; details are in [progress](docs/progress.md#module-1--ingestion--storage)
-and the [full-data evidence](docs/evidence/full/README.md).
-
-## SyntheticConfig
-
-Entity-keyed deterministic generation is invariant to `--batch-users` for the
-same source and seed. See [Module 1 progress](docs/progress.md#module-1--ingestion--storage)
-and the full-data evidence for the recorded scope.
-
-## Scenario feeds (historical runs)
-
-Historical `scatter_1w`, `scatter_1m`, and `scatter_3m` measurements and their
-scope caveat are recorded in [progress §2.3](docs/progress.md#23-synthetic-feed-configurations).
-
-## Event schema (one row = one product event)
-
-The Kafka payload contains event identity, order/user/product and basket fields,
-order weekday/hour, synthetic event-time fields, and send-time ingestion time.
-See the [Module 3 contract](docs/module3-contracts.md#kafka-event-contract-and-provenance)
-for field names and validation.
-
-## Data relationships (join keys)
+| Input file | Key fields and relationship | Purpose |
+|---|---|---|
+| `orders.csv` | `order_id` identifies an order; `user_id` groups a customer's order sequence. `order_id` is referenced by both order-product tables. | Evaluation-set label, order sequence number, weekday, hour and capped inter-order gap. |
+| `order_products__prior.csv` | Each `(order_id, product_id)` pair is unique; references `orders.order_id` and `products.product_id`. | Historical interactions used for batch analysis, ALS fitting and graph construction. |
+| `order_products__train.csv` | Same interaction keys and foreign keys as prior. | Held-out official train baskets used as recommendation evaluation truth; not ALS fit data. |
+| `products.csv` | `product_id` is the product key; `aisle_id` and `department_id` reference their dimension tables. | Product names and catalog classifications. |
+| `aisles.csv` | `aisle_id` is the dimension key. | Human-readable aisle names. |
+| `departments.csv` | `department_id` is the dimension key. | Human-readable department names. |
 
 ```text
-orders.order_id ──> order_products__prior/train.order_id      (1:N)
-order_products.product_id ──> products.product_id              (N:1)
-products.aisle_id ──> aisles.aisle_id                          (N:1)
-products.department_id ──> departments.department_id            (N:1)
+orders.order_id 1 ── N order_products__prior.order_id
+orders.order_id 1 ── N order_products__train.order_id
+products.product_id 1 ── N order_products__prior.product_id
+products.product_id 1 ── N order_products__train.product_id
+aisles.aisle_id 1 ── N products.aisle_id
+departments.department_id 1 ── N products.department_id
 ```
 
-Generated Kafka events are denormalized; the runtime trend aggregation does not
-join these dimension tables.
+Module 1 requires all six files and checks their headers, integer spellings and domains, evaluation-set values, keys, foreign keys, order-level consistency, unique basket items, and cart positions before coercing types. Each basket's `add_to_cart_order` must be the contiguous sequence `1..N`. This fail-closed order matters: a partially present or malformed table cannot silently produce plausible-looking joins. Cleaning uses compact integer and category types, maps a first-order missing gap to zero, reconstructs weekday-consistent values where the source's 30-day cap hides a longer gap, normalizes whitespace and nonbreaking spaces in product names, and retains catalog products even when they have no prior facts.
 
-<a id="lambda-modules-spec-7--verify-against-assignment"></a>
+The capped gap reconstruction chooses the minimum weekday-consistent gap from 30 through 36 days and fails if the result does not agree with weekday progression. A historical 8 October cleaning record counted 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names. The cleaner stages six Parquet outputs and an ownership manifest before replacing a previously recognized Module 1 publication. It refuses symlinked or overlapping raw/output paths and preserves the prior publication when validation or staging fails. This is a single-writer directory publication procedure, not a general multi-writer transaction.
 
-## Lambda modules
+Curated Parquet gives Spark typed, columnar inputs and supports date partition pruning for the generated event feed. CSV remains the source-cleaning format. Kafka messages are JSON records denormalized with product, aisle and department fields, so trend aggregation does not need to join dimensions.
 
-| Module | Role |
-|---|---|
-| 1 | Clean source data, create replay events, and stage HDFS data |
-| 2 | Compute prior-history batch metrics and user features |
-| 3 | Aggregate Kafka events by event time and publish finalized trends |
-| 4A–4B | Fit prior-only ALS and compute product-graph metrics |
-| 4C | Verify source snapshots and publish versioned Hybrid recommendations |
-| 4D | Serve read-only API and dashboard views |
+## Module 1 — Replay event generation and staging
 
-Implementation detail and requirement coverage belong in [progress](docs/progress.md)
-and the canonical technical guides.
+The source has weekday, hour and order-sequence information but no date. `SyntheticConfig` makes the simulation reproducible: its default seed is `42`, scatter window is 13 weeks, and within-basket item gaps use an exponential distribution with a 30-second mean clipped to 5–120 seconds. Other presets are `mobile-fast` (20 seconds, 3–90), `desktop-browse` (40 seconds, 10–240), `uniform` (15–50 seconds), and `deterministic` (hash-derived timing). Scatter windows are 1, 4, 13, 26 or 52 weeks. See [synthetic event generation](docs/docker.md) for the algorithm and [feed scenarios](docs/progress.md#23-synthetic-feed-configurations) for historical measurements.
 
-## Team Onboarding & Environment Setup
+Generation chooses a stable per-user anchor week, reconstructs order dates from cleaned gaps, and preserves the recorded weekday and hour. Stable hash-derived values keyed by user, order and cart position make results invariant to row order and the `--batch-users` processing-memory setting for the same source and seed. Within an order, item events advance according to the configured gap distribution. A final monotonicity pass shifts a later order forward when needed so that event times increase strictly by cart position and order sequence for each user. The event identifier is `order_id_add_to_cart_order`.
 
-Use the [Docker guide](docs/docker.md) for safe demo, existing-data, Module 3,
-Module 3→4C, index, and cleanup procedures. The `scripts/module2.py` and
-`scripts/module3.py` wrappers start Compose before forwarding arguments; do not
-invoke their `--help` option to inspect usage.
+Parquet output also includes `order_number` and `synthetic_date` for analysis and partitioning. The Kafka event schema contains 13 fields: `event_id`, `order_id`, `user_id`, `product_id`, `add_to_cart_order`, `reordered`, `aisle_id`, `department_id`, `order_dow`, `order_hour_of_day`, `event_time_epoch_ms`, `event_time_iso`, and `ingestion_time_epoch_ms`. It uses `user_id` as the Kafka key. It does not include `eval_set` or `synthetic_date`; therefore the ordinary replay combines prior and train orders and is not a chronology-preserving evaluation feed.
+
+Retain the six-file source receipt with the input/run evidence. HDFS stores the six raw CSVs separately from the curated Parquet tables; the curated upload writes `_sources.json`, and the partitioned interaction feed is promoted with its own `_handoff.json` receipt. Kafka replay is a separate step and has bounded completion checks in the current pipeline. The [Docker guide](docs/docker.md#module-1-ingestion-generation-staging-and-kafka-replay) owns the verified command sequence and paths.
 
 ## Module 2 — Spark batch layer
 
-Module 2 publishes prior-history metrics and writes `user_features` to HDFS.
-The intended Module 4 consumer contract for those features remains unresolved;
-see [progress §3](docs/progress.md#3-module-2--batch-layer) and the
-[full-data record](docs/evidence/full/README.md).
+Module 2 reads the curated HDFS tables, verifies handoff receipts and structural relationships, and computes analytics from `order_products__prior`. Checks cover row counts, nulls, keys, foreign keys, domains, date partitions and exact fact/event multisets. An optional local event-source hash check is narrower than rehashing every staged input; Module 4 has a separate staged-Parquet hash path.
 
-## Module 3 — Speed layer (Spark Structured Streaming)
+The batch outputs include product and department metrics, user-level descriptive features, weekday/hour distributions and pivoted time summaries. `user_features` records `user_id`, order and purchase counts, unique products, reorder rate and average basket size, with run ID, `prior_only` feature scope and UTC generation metadata. Module 4 has a bounded reader for one descriptive feature row. These features are not ALS model inputs. Batch publication uses run-owned temporary MongoDB collections and promotes each collection after validation. Individual collection promotion is atomic at the rename boundary, but a set of multiple collections is not one cross-collection transaction. Readers use run/version metadata to avoid mixing generations.
 
-Module 3 writes mutable legacy trend rows and can optionally publish immutable
-finalized bundles for Module 4C. See the [canonical contract](docs/module3-contracts.md),
-[operating procedures](docs/docker.md#module-3-streaming-and-module-3-to-module-4c-enablement),
-and [historical streaming evidence](docs/evidence/module3/README.md).
+The benchmark tooling includes explicit join strategies, date and partition filters, cached versus uncached aggregation, local thread configurations, and a separate existing-standalone-master executor-layout experiment. The full-data evidence records a Sort-Merge versus Broadcast Hash join comparison, equivalent filtered outputs, and cache materialization separately from reuse. It cautions that the host's caches were warm and the all-date arm had a different scan scope. See [Module 2 benchmark design](docs/docker.md).
 
-## Validation strategy
+## Module 3 — Kafka and Spark Structured Streaming
 
-Historical full-data results, bounded streaming evidence, and CI runs have
-different scopes. A passing CI run does not establish full-data equivalence,
-recommendation accuracy, Kubernetes deployment, or production scalability. Full-
-data Module 2, 3, and 4 workflows have **not** been rerun after the coding-style
-refactor; the overall comparison remains **NOT FULLY VERIFIED**.
+The producer sends one JSON record per product event. Event time comes from the deterministic simulator; ingestion time is assigned when publishing. Kafka delivery, event time and ingestion time are distinct clocks. The consumer validates schema and domains, counts invalid records, deduplicates by `event_id` within watermark-managed state and computes the 30-minute and 120-minute trend windows from one 120-minute sliding stateful aggregation. The configured slide is five minutes and the event-time watermark is ten minutes.
 
-Checks recorded for the 15 October 2026 audit baseline (`main` at
-`75c4f8854d9e23df4311bf2c53f0c8133a4bb5be`) passed: [Fast validation 38742236253](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38742236253)
-and [Module 4A–4B runtime 38742235872](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38742235872).
-[Module 3 validation 38727634271](https://github.com/mihikari29/instacart-market-basket-analysis/actions/runs/38727634271)
-passed on the parent code commit; PR #11 changed documentation only.
+Append mode publishes only finalized windows. For each finalized window, the complete product population is normalized before Top-20 selection; equal scores are ordered by `product_id`. The short and long window scores combine with weights 0.7 and 0.3. The mutable legacy `realtime_trending` output preserves its older replace/update contract. Optional `realtime_trending_windows` bundles are immutable, versioned inputs for Module 4C and the Module 4D trends view. Bundle mode is opt-in and its publication and index requirements are documented in the [Module 3 contract](docs/module3-contracts.md).
 
-## Known limitations
+Watermark deduplication is bounded state, not permanent event-ID uniqueness. The legacy delete-and-upsert sequence is not a read transaction, and each immutable bundle document is individually atomic rather than all windows being one transaction. Checkpoint identity and schema version are explicit; incompatible legacy state fails without mutation, and Kubernetes resume is disabled until run ownership and offset continuity are established.
 
-- Kubernetes demonstration is not implemented.
-- Module 1 raw-input preflight remains incomplete.
-- Module 2 does not independently hash every staged input; its optional local
-  source check and Module 4's staged-Parquet hash validation are separate.
-- Module 2 `user_features` consumption in Module 4 is unresolved.
-- No independently verified per-user ALS dashboard view is available.
-- Defined end-to-end streaming latency, executor comparison, and leakage-safe
-  Hybrid quality evaluation are missing.
-- A historical browser CI assertion observed four charts instead of five; later
-  runs passed, but the original failure cause remains unexplained.
-- Historical writes to default Compose volumes cannot be ruled out where no
-  before-state snapshot exists.
+Finite replay is considered complete only when the producer reports success, receipt counts reconcile, and consumed terminal offsets match across Kafka partitions. A replay may end with an event-time tail that is not yet finalized; the pipeline does not invent future events to force windows closed. Completed-batch telemetry pairs each executed Spark batch with the receipt for that batch, including zero-input state-cleanup batches. It tracks bounded input/processing rates and, for finalized output, ingestion-to-publication-completion latency. That latency uses producer and output-host wall clocks, includes watermark delay, and may expose clock skew; it is not Kafka acknowledgement latency or UI response time. See the [streaming contract](docs/module3-contracts.md).
 
-See [progress](docs/progress.md) for the evidence boundaries and follow-up work.
+## Module 4 — Recommendations, graph, Hybrid and dashboard
 
-## Module 4A–4B completed
+**Module 4A, ALS.** The model fits implicit-feedback ALS from prior user-product purchase counts. Its internal holdout is drawn from eligible prior-history users; official train baskets are kept for evaluation and do not select ALS fitting parameters. Evaluation compares ALS with global popularity and personal frequency at multiple cutoffs and reports macro ranking metrics and coverage. A historical full-data run recorded ALS Recall@10 below personal frequency; no claim of recommendation-quality improvement is made. The pipeline preserves its exact scope and run identity.
 
-Historical full-data acceptance passed 21/21 gates on 10 October 2026. The
-measured ALS Recall@10 was below the personal-frequency baseline; see the
-[acceptance record](docs/evidence/module4/acceptance-20261010/README.md) for
-metrics and limitations.
+**Module 4B, product graph.** The graph uses prior baskets and retains the full catalog, including inactive products as isolated vertices. It counts co-occurring product pairs, applies configured edge thresholds, derives neighbor and weighted-degree metrics, and runs GraphFrames PageRank on symmetric directed topology. Co-purchase weights inform weighted degree; PageRank uses the graph topology rather than weighted PageRank. The recorded 10 October run is historical evidence, not a fresh acceptance for the current source revision.
 
-## Module 4C — Hybrid serving and Kafka integration
+**Module 4C, Hybrid.** Serving reads ready versioned ALS/graph snapshots and the newest eligible finalized trend bundle at an explicit cutoff. It normalizes the selected ALS and trend candidate scores, unions their candidates, ranks a bounded endpoint candidate set deterministically and publishes immutable per-user results behind a readiness pointer. Cold users can use trend candidates. Prior-only evaluation uses a fixed prior global-frequency candidate source and a preregistered lambda sweep against official train truth; it does not claim temporal trend quality because the generated stream mixes prior and train and drops `eval_set` from the message schema. Synthetic C8A/C8B experiments show integration behavior only, not accuracy or capacity.
 
-Module 4C combines ready A/B snapshots with a verified immutable trend bundle
-at an explicit event-time cutoff. C8A/C8B are bounded synthetic experiments;
-no leakage-safe official-train Hybrid quality result is available. See the
-[Module 4 plan](docs/module4-plan.md#module4c-spec) and [Module 4C evidence](docs/evidence/module4c/README.md).
+**Module 4D, API and Streamlit.** FastAPI provides bounded, indexed, read-only views for Hybrid recommendations, ALS outputs where available, batch metrics, order distributions, trends, streaming metrics and registered evidence. API readiness checks are distinct from liveness; the dashboard accesses data only through the API. The four dashboard pages cover overview, real-time and batch views, Hybrid recommendations, and evaluation/performance. Missing, empty, unavailable and malformed snapshots have distinct responses; unavailable scores remain blank instead of being presented as zero. Exact ranking, read and route contracts are in the [Module 4 plan](docs/module4-plan.md#module4c-spec).
 
-## Module 4D — Dashboard demonstration
+## Run it
 
-The four-page Streamlit UI reads through FastAPI. It displays trends, batch
-metrics, Hybrid recommendations, and registered historical evidence; it has no
-independently verified per-user ALS recommendation view. The isolated synthetic
-demo does not establish production capacity. See the [API/UI contracts](docs/module4-plan.md#module4d-spec)
-and [Docker runbook](docs/docker.md).
+The fastest way to see the serving layer working is the isolated synthetic
+dashboard. It needs Docker and nothing else — no dataset, no HDFS, no Kafka:
 
-## Docker architecture
+```bash
+python3 scripts/dashboard/demo.py up
+# then open http://127.0.0.1:18501
+```
 
-The root `compose.yaml` owns persistent pipeline services. The separate
-`deploy/module4/compose.demo.yaml` uses disposable synthetic data and loopback
-API/UI bindings. See the [Docker operations guide](docs/docker.md) for their
-prerequisites and cleanup boundaries.
+The command builds the API and UI images, starts a disposable MongoDB on
+tmpfs, publishes a synthetic fixture through the accepted publishers, starts
+the API and the dashboard, and verifies every HTTP response against what was
+stored. It prints the run identifier; `python3 scripts/dashboard/demo.py down
+<run-id>` stops it and discards the data.
+
+The full pipeline needs the persistent Compose stack. The [Docker guide](docs/docker.md)
+owns those commands, and the [Kubernetes guide](docs/kubernetes.md) owns the
+isolated cluster demonstration.
+
+## Environments and where to work
+
+The root `compose.yaml` is the persistent development stack for Kafka, Spark, HDFS and MongoDB. Its named volumes preserve state. The isolated synthetic dashboard environment in `deploy/dashboard/compose.demo.yaml` uses disposable MongoDB storage and loopback-only API/UI ports; it does not exercise production capacity. The [Docker guide](docs/docker.md) owns verified image targets, prerequisites, operating commands, and cleanup boundaries.
+
+Use the approved [Proposal](docs/Proposal.md) for the assignment objectives and requirements, and the [documentation index](docs/README.md) to navigate current contracts, procedures and historical evidence.
+
+The Kubernetes demonstration uses a fresh run identity, profile, context, namespace and storage. It separates serving (B2), processing (B3) and acceptance (B4), records private receipts, disables automatic retry/resume, and retains resources on failure. Teardown is a separate operation that rechecks run ownership. Its resource bounds, runtime identity lock, exact commands and limitations are in the [Kubernetes guide](docs/kubernetes.md). Kubernetes Spark runs in local mode inside run-owned jobs; this is not Spark executor scaling across Kubernetes workers.
+
+For an executable procedure, use the canonical runbooks rather than copying a command into this overview: [Module 1](docs/docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [Module 2](docs/docker.md#module-2-batch-processing-and-benchmarks), [Module 3](docs/docker.md#module-3-streaming-operations), [Module 4A/4B](docs/docker.md#module-4a4b-operation-and-full-data-acceptance), and [Kubernetes](docs/kubernetes.md). Test selection and service-backed exclusions are recorded in the [acceptance handoff](docs/acceptance.md); implementation files are mapped in the [repository layout](README.md).
+
+Start the [External Acceptance Tutorial](docs/acceptance.md) for a beginner-friendly path through preparation, execution decisions, evidence, and handoff.
+
+## Results and limits
+
+The project status page reports offline development checks associated with the reviewed source revision: 803 passed and 7 Spark-dependent modules skipped in the broad non-service selection, plus focused selections of 59 and 134 passes, repository Ruff, and compilation of 190 files. The independent source-code review is a separate outcome and does not imply runtime behavior. None of these are new results from this documentation update.
+
+Selected historical findings help show what the evidence means:
+
+| Experiment | Recorded observation | Scope limit |
+|---|---|---|
+| Full-data batch joins | Median Sort-Merge Join 17.581934 s; Broadcast Hash Join 2.304046 s. | One warm, two-core executor; not a cluster comparison. |
+| Full-data date filtering | All-date scan 3.497363 s; date filter 1.666808 s; partition filter 0.074906 s for the same 177,739-event filtered result. | The all-date scan reads a different amount of data; OS/HDFS caches were not flushed. |
+| Cached aggregation | Uncached 2.110284 s; cache materialization 2.175583 s; cached reuse 0.088085 s. | Include materialization cost when comparing total work. |
+| Bounded streaming | The 50k-event run processed 3,203.90 rows/s and finalized 35,701 windows into 580,342 Mongo documents. | One broker and a small Spark runtime; sliding windows amplified state to 1,174,010 aggregate rows. |
+| ALS quality baseline | Historical Recall@10 was 0.121472 for ALS versus 0.319232 for personal frequency. | Dated Module 4 acceptance; no quality-improvement claim. |
+
+Full configuration and runtime limits are specified in [config/pipeline.yaml](config/pipeline.yaml).
+
+External runtime acceptance remains pending. That work includes pinned Spark/MongoDB integration, browser and container-package checks, isolated Kubernetes B2/B3/B4 execution, runtime checkpoint recovery, full-data processing, actual performance/executor experiments, and fresh identity-bound evidence. Historical results, offline fixture checks, source review and runtime acceptance are different evidence scopes. See [current project progress](docs/progress.md) and the [external acceptance](docs/acceptance.md) for the exact boundaries.
+
+## Repository layout
+
+This guide maps stable code and documentation entry points. Module 4 application
+code remains under `src/module4/`; its deployment assets and operational tools
+are grouped under `deploy/dashboard/` and `scripts/dashboard/`.
+
+## Canonical structure
+
+```text
+Dockerfile                         spark, api, ui, browser, k8s-runner, pipeline targets
+compose.yaml                       persistent pipeline services
+requirements.txt                   shared runtime dependencies
+requirements-dev.txt               shared development/test dependencies
+src/common/                        shared building blocks: env, redaction, run context,
+                                   Spark session, type guards, source identity
+src/module1/ … src/module4/        processing and application packages
+scripts/module1.py … module4.py    project pipeline entry points
+scripts/module3_smoke.py          bounded Module 3 live and checkpoint-recovery checks
+scripts/module4_smoke.py          bounded Module 4 runtime, flow and cross-module checks
+scripts/dashboard/                 Module 4D demo, fixture, validator and browser tools
+scripts/experiments/               archived Module 4C experiment harnesses
+scripts/k8s/                       Kubernetes demo coordinator (io, constants and phases)
+deploy/dashboard/                  isolated synthetic dashboard Compose environment
+deploy/dashboard/requirements/     separate API, UI, UI-dev and browser pins
+deploy/k8s/                        serving and pipeline manifests, version lock
+tests/                             unit, contract, Spark and service-backed tests
+docs/                              requirements, current guides and evidence
+.github/workflows/                 CI and gated full-data validation
+```
+
+### Module 4 package paths
+
+<a id="module4-package-paths"></a>
+
+Module 4A and 4B remain in the root package. Module 4C and 4D use dedicated
+subpackages under the same canonical `src.module4` namespace:
+
+| Former path | Canonical path |
+|---|---|
+| `src/module4/` | `src/module4/` (Module 4A/4B retained) |
+| `src/module4c/` | `src/module4/hybrid/` |
+| `src/module4d/` | `src/module4/dashboard/` |
+
+Use `from src.module4.hybrid.service import serve_hybrid_user` for Hybrid
+serving and `from src.module4.dashboard.api import create_app` for the API.
+The dashboard ASGI application is `src.module4.dashboard.api:app`. There are
+no compatibility packages at `src.module4c` or `src.module4d`.
+
+## Documentation map
+
+| Document | Responsibility |
+|---|---|
+| [Proposal](docs/Proposal.md) | Approved project requirements and architecture baseline. |
+| [Documentation index](README.md) | Entry points for project, technical, operating, and evidence guides. |
+| [Progress](docs/progress.md) | Current implementation and the boundary of completed checks and pending acceptance. |
+| [External acceptance handoff](docs/acceptance.md#delivered-scope-and-evidence-boundaries) | Operator preparation, delivered scope, and external validation tasks. |
+| [Implementation summary](docs/implementation-ledger.md) | Design decisions, important contracts, safety, and verification boundaries. |
+| [Synthetic event generation](docs/docker.md#synthetic-event-generation) | Timestamp construction, scenario configuration, determinism, and feed provenance. |
+| [Module 3 contracts](docs/module3-contracts.md) | Kafka, event-time aggregation, Mongo publication, bundles, and Module 4C boundary. |
+| [Module 4 plan](docs/module4-plan.md) | Module 4A–4D algorithms, data, ranking, evaluation, API, and dashboard contracts. |
+| [Docker guide](docs/docker.md) | Image targets, runtime prerequisites, operational procedures, and scoped cleanup. |
+
+Use current guides for current behavior and procedures. The Module 4C/4D
+standalone design and release documents live in the evidence archives; their
+original dates, run identities, measurements, and limitations remain part of
+the record.
+
+## Application and deployment paths
+
+- `src/module1/clean.py`, `config.py`, `generate.py`, `producer.py`, and
+  `stage_hdfs.py` own raw validation, synthetic timing, Kafka payloads, and
+  HDFS handoff behavior; see the [generation guide](docs/docker.md#synthetic-event-generation).
+- `src/module2/` contains Spark handoff validation, analytics, prior-only
+  feature extraction, Mongo publication, and local/standalone benchmarks; see
+  the [executor benchmark guide](docs/docker.md#spark-executor-layout-experiment).
+- `src/module3/` contains Kafka parsing, Structured Streaming, legacy and
+  immutable trend writers, finite replay, checkpoint versioning, and completed
+  batch telemetry; see the [Module 3 contract guide](docs/module3-contracts.md).
+- `src/module4/` contains ALS, graph, Hybrid serving, API, and dashboard code.
+  The retired `src.module4c` and `src.module4d` packages are not valid imports.
+- `deploy/dashboard/requirements/` separates API, UI, UI-development, and browser
+  dependencies. The UI development manifest includes the runtime UI pins.
+- `scripts/dashboard/` groups the Module 4C evaluation/streaming experiments and
+  Module 4D demo, validation and browser tools. `scripts/k8s/` owns run identity,
+  image provenance, pipeline and acceptance coordination. Core project runners
+  stay in `scripts/`.
+- `tests/` separates unit and contract tests from Spark, MongoDB, API/UI and
+  browser/runtime selections. The [acceptance handoff](docs/acceptance.md#delivered-scope-and-evidence-boundaries)
+  records the exact historic broad-suite selection and its exclusions.
+
+The main `compose.yaml` owns persistent Kafka, Spark, HDFS, and MongoDB
+services. The isolated `deploy/dashboard/compose.demo.yaml` uses disposable
+MongoDB storage and loopback-only UI/API ports and does not mount main pipeline
+data. See the [Docker guide](docs/docker.md) for their separate boundaries.
+
+## Stable names and evidence
+
+`MODULE4D_` environment variables, API routes, MongoDB collection/readiness
+identifiers, Hybrid serving-version format, and established test filenames are
+runtime contracts. Script basenames and command arguments are also stable entry
+points. Check the relevant canonical guide before changing these contracts.
+
+Runtime contracts, configurations, and test suites are maintained consistently with zero legacy shims.

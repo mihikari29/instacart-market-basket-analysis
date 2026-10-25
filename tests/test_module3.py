@@ -15,12 +15,58 @@ import pytest
 pyspark = pytest.importorskip("pyspark")
 from pyspark.sql.types import StringType, StructField, StructType
 
-from src.module3.config import Config
-from src.module3.checkpoint import ensure_checkpoint
-from src.module3.spark import session
-from src.module3.fixtures import make_events_dataframe
-from src.module3.parse import parse_json_events, parse_json_records, read_kafka_source
-from src.module3.schemas import KAFKA_EVENT_SCHEMA
+from src.module3.config import Config, session
+from src.module3.progress_log import ensure_checkpoint
+from src.module3.parse import (
+    KAFKA_EVENT_SCHEMA,
+    parse_json_events,
+    parse_json_records,
+    read_kafka_source,
+)
+
+
+def _evt(product_id, event_time_epoch_ms):
+    return {
+        "event_id": f"e_{product_id}_{event_time_epoch_ms}",
+        "order_id": event_time_epoch_ms,
+        "user_id": 1,
+        "product_id": product_id,
+        "add_to_cart_order": 1,
+        "reordered": True,
+        "aisle_id": 1,
+        "department_id": 1,
+        "order_dow": 1,
+        "order_hour_of_day": 0,
+        "event_time_epoch_ms": event_time_epoch_ms,
+        "event_time_iso": "2024-01-01T00:00:00Z",
+        "ingestion_time_epoch_ms": event_time_epoch_ms,
+    }
+
+
+def make_events_dataframe(spark, rows=None):
+    from datetime import datetime, timezone
+    from pyspark.sql import Row
+    from pyspark.sql.types import StructField, StructType, TimestampType
+
+    if rows is None:
+        base_ms = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
+        rows = [
+            _evt(1, base_ms + 0 * 60_000),
+            _evt(2, base_ms + 1 * 60_000),
+            _evt(3, base_ms + 2 * 60_000),
+            _evt(1, base_ms + 25 * 60_000),
+            _evt(2, base_ms + 35 * 60_000),
+            _evt(1, base_ms + 100 * 60_000),
+            _evt(3, base_ms + 5 * 60_000),
+        ]
+    rows_with_time = [
+        Row(**{**r, "event_time": datetime.fromtimestamp(r["event_time_epoch_ms"] / 1000, tz=timezone.utc)})
+        for r in rows
+    ]
+    schema = StructType(
+        list(KAFKA_EVENT_SCHEMA.fields) + [StructField("event_time", TimestampType())]
+    )
+    return spark.createDataFrame(rows_with_time, schema=schema)
 from src.module3.trending import (
     _window_agg,
     build_trending,
@@ -140,6 +186,7 @@ def test_domain_validation_labels_poison_reasons(spark_session):
         valid | {"event_id": "bad-dow", "order_dow": 7},
         valid | {"event_id": "bad-hour", "order_hour_of_day": 24},
         valid | {"event_id": "bad-iso", "event_time_iso": "not-a-time"},
+        valid | {"event_id": "bad-ingestion", "ingestion_time_epoch_ms": 0},
     ]
     payloads = [json.dumps(valid), *map(json.dumps, invalid), "not-json"]
     raw = spark_session.createDataFrame(
@@ -152,6 +199,7 @@ def test_domain_validation_labels_poison_reasons(spark_session):
     assert {
         "event_id", "user_id", "order_id", "product_id", "add_to_cart_order",
         "order_dow", "order_hour_of_day", "event_time_epoch_ms", "event_time_iso",
+        "ingestion_time_epoch_ms",
     } <= reasons
 
 

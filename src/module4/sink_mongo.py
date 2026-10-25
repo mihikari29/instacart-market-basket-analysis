@@ -45,7 +45,7 @@ def ensure_graph_indexes(collection) -> None:
     )
 
 
-def _snapshot_validation(collection, version_field, version, expected_count, run_id):
+def snapshot_validation(collection, version_field, version, expected_count, run_id):
     query = {version_field: version, "run_id": run_id}
     count = int(collection.count_documents(query))
     logical_keys = (
@@ -114,12 +114,12 @@ def _write_snapshot(db, collection_name, documents, ensure_indexes, version_fiel
                 f"snapshot writer inserted {inserted} documents; expected {expected_count}"
             )
         ensure_indexes(temp)
-        before = _snapshot_validation(temp, version_field, version, expected_count, run_id)
+        before = snapshot_validation(temp, version_field, version, expected_count, run_id)
         if not before["valid"]:
             raise RuntimeError(f"temporary snapshot validation failed: {before}")
         temp.rename(collection_name, dropTarget=True)
         active = db[collection_name]
-        after = _snapshot_validation(active, version_field, version, expected_count, run_id)
+        after = snapshot_validation(active, version_field, version, expected_count, run_id)
         if not after["valid"]:
             raise RuntimeError(f"promoted snapshot validation failed: {after}")
         return {
@@ -133,8 +133,7 @@ def _write_snapshot(db, collection_name, documents, ensure_indexes, version_fiel
         try:
             temp.drop()
         except Exception as cleanup_error:
-            if hasattr(exc, "add_note"):
-                exc.add_note(f"Could not remove owned temporary collection {temp_name}: {cleanup_error}")
+            exc.add_note(f"Could not remove owned temporary collection {temp_name}: {cleanup_error}")
         raise
 
 
@@ -239,9 +238,9 @@ def publication_lock(config, run_id, lease_minutes=180):
                 if result.deleted_count != 1:
                     raise RuntimeError("Module 4 MongoDB writer lock ownership was lost")
             except Exception as cleanup_error:
-                if active_error is not None and hasattr(active_error, "add_note"):
+                if active_error is not None:
                     active_error.add_note(f"Could not release MongoDB writer lock: {cleanup_error}")
-                elif active_error is None:
+                else:
                     raise
 
 

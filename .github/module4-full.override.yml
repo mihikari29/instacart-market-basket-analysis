@@ -1,8 +1,0 @@
-services:
-  spark-worker:
-    entrypoint: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "--cores", "4", "--memory", "2g", "spark://spark-master:7077"]
-  module4:
-    environment:
-      PYSPARK_SUBMIT_ARGS: --driver-memory 1g --conf spark.ui.showConsoleProgress=false --conf spark.driver.host=module4 --conf spark.driver.bindAddress=0.0.0.0 pyspark-shell
-  mongodb:
-    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from pyspark.sql import functions as F
+
 
 def build_edges(prior_enriched, min_edge_weight: int = 2):
     """Create canonical undirected co-purchase edges from prior baskets."""
-    from pyspark.sql import functions as F
 
     if min_edge_weight < 1:
         raise ValueError("min_edge_weight must be positive")
@@ -36,7 +37,6 @@ def build_edges(prior_enriched, min_edge_weight: int = 2):
 
 def build_vertices(prior_enriched, products=None):
     """Return active prior products, or the full product catalog when supplied."""
-    from pyspark.sql import functions as F
 
     active = prior_enriched.select("product_id").distinct()
     if products is None:
@@ -47,7 +47,6 @@ def build_vertices(prior_enriched, products=None):
 
 def directed_edges(edges):
     """Expand canonical edges in both directions for GraphFrames algorithms."""
-    from pyspark.sql import functions as F
 
     required = {"src", "dst"}
     missing = required.difference(edges.columns)
@@ -64,7 +63,6 @@ def directed_edges(edges):
 
 def weighted_degree(edges, vertices=None):
     """Compute neighbor count and weighted degree from undirected edges."""
-    from pyspark.sql import functions as F
 
     incident = edges.select(
         F.col("src").alias("product_id"), "dst", "weight"
@@ -93,7 +91,6 @@ def pagerank(
     backend: str = "graphframes",
 ):
     """Run topology-only PageRank with an explicitly selected implementation."""
-    from pyspark.sql import functions as F
 
     if not 0.0 < reset_probability < 1.0:
         raise ValueError("reset_probability must be between 0 and 1")
@@ -101,49 +98,14 @@ def pagerank(
         raise ValueError("max_iter must be positive")
     vertex_frame = vertices.select("id").distinct()
     edge_frame = edges.select("src", "dst").distinct()
-    if backend == "graphframes":
-        from graphframes import GraphFrame
+    if backend != "graphframes":
+        raise ValueError(f"backend must be 'graphframes'; got {backend!r}")
+    from graphframes import GraphFrame
 
-        graph = GraphFrame(vertex_frame, edge_frame)
-        return graph.pageRank(resetProbability=reset_probability, maxIter=max_iter).vertices.select(
-            "id", "pagerank"
-        )
-    if backend != "dataframe":
-        raise ValueError("backend must be graphframes or dataframe")
-
-    # PageRank fallback using the same unweighted directed topology.
-    count = vertex_frame.count()
-    if count == 0:
-        return vertex_frame.withColumn("pagerank", F.lit(0.0))
-    out_degree = edge_frame.groupBy("src").count().withColumnRenamed("count", "out_degree")
-    rank = vertex_frame.withColumn("pagerank", F.lit(1.0 / count))
-    dangling = vertex_frame.join(out_degree, vertex_frame.id == out_degree.src, "left").where(
-        F.col("out_degree").isNull()
-    ).select("id")
-    for _ in range(max_iter):
-        dangling_mass = rank.join(dangling, "id", "inner").agg(F.sum("pagerank")).first()[0] or 0.0
-        contribution = (
-            edge_frame.join(rank.withColumnRenamed("id", "rank_src"), F.col("src") == F.col("rank_src"))
-            .join(out_degree, "src")
-            .select(
-                F.col("dst").alias("id"),
-                (F.col("pagerank") / F.col("out_degree")).alias("contribution"),
-            )
-            .groupBy("id")
-            .agg(F.sum("contribution").alias("incoming"))
-        )
-        rank = (
-            vertex_frame.join(contribution, "id", "left")
-            .fillna({"incoming": 0.0})
-            .withColumn(
-                "pagerank",
-                F.lit(reset_probability / count)
-                + F.lit(1.0 - reset_probability)
-                * (F.col("incoming") + F.lit(dangling_mass / count)),
-            )
-            .select("id", "pagerank")
-        )
-    return rank
+    graph = GraphFrame(vertex_frame, edge_frame)
+    return graph.pageRank(resetProbability=reset_probability, maxIter=max_iter).vertices.select(
+        "id", "pagerank"
+    )
 
 
 def build_metrics(vertices, edges, reset_probability=0.15, max_iter=10, backend="graphframes"):
@@ -157,7 +119,6 @@ def build_metrics(vertices, edges, reset_probability=0.15, max_iter=10, backend=
 
 def validate_edges(edges) -> dict:
     """Run canonical-edge invariants and return compact counts."""
-    from pyspark.sql import functions as F
 
     if not {"src", "dst", "weight"}.issubset(edges.columns):
         raise ValueError("edges must contain src, dst and weight")
@@ -186,7 +147,6 @@ def validate_edges(edges) -> dict:
 
 def validate_metrics(metrics, edges, vertices=None) -> dict:
     """Validate degree conservation, vertex uniqueness and finite PageRank."""
-    from pyspark.sql import functions as F
 
     required = {"product_id", "neighbor_count", "weighted_degree", "pagerank"}
     missing = required.difference(metrics.columns)

@@ -167,7 +167,15 @@ def recommend_top_k(model, users, k: int = 20):
     if missing:
         raise ValueError(f"users: missing required columns {sorted(missing)}")
 
-    requested = users.select(F.col("user_id").cast("int").alias("user_id")).distinct()
+    user_rows = [
+        int(r.user_id)
+        for r in users.select(F.col("user_id").cast("int").alias("user_id")).distinct().collect()
+    ]
+    if not user_rows:
+        return users.sparkSession.createDataFrame(
+            [], "user_id int, product_id int, als_score double, als_rank int"
+        )
+    requested = users.sparkSession.createDataFrame([(u,) for u in user_rows], "user_id int")
     available_items = int(model.itemFactors.select("id").distinct().count())
     if available_items == 0:
         return model.userFactors.sparkSession.createDataFrame(
@@ -176,7 +184,7 @@ def recommend_top_k(model, users, k: int = 20):
 
     def fetch(user_frame, count):
         return (
-            model.recommendForUserSubset(user_frame, count)
+            model.recommendForUserSubset(F.broadcast(user_frame), count)
             .select("user_id", F.explode("recommendations").alias("recommendation"))
             .select(
                 "user_id",
@@ -185,6 +193,7 @@ def recommend_top_k(model, users, k: int = 20):
                 F.col("recommendation.rating").cast("double").alias("als_score"),
             )
         )
+
 
     cached = []
 
@@ -206,6 +215,7 @@ def _materialize_top_k(fetch, requested, available_items, k, retain):
 
     limit = min(available_items, max(1, k + 1))
     candidates = retain(fetch(requested, limit))
+    candidates.count()
     while limit < available_items:
         by_rank = Window.partitionBy("user_id").orderBy(
             F.desc("als_score"), F.asc("product_id")
@@ -218,19 +228,20 @@ def _materialize_top_k(fetch, requested, available_items, k, retain):
             F.count("*").alias("_candidate_count"), F.min("als_score").alias("_last_score")
         )
         ambiguous = (
-            boundary.join(last, "user_id")
+            boundary.join(F.broadcast(last), "user_id")
             .where(
                 (F.col("_candidate_count") >= limit)
                 & (F.col("_last_score") == F.col("_boundary_score"))
             )
             .select("user_id")
         )
-        if not ambiguous.limit(1).count():
+        if not [r.user_id for r in ambiguous.take(1)]:
             candidates = ranked.drop("_candidate_rank")
             break
-        stable = candidates.join(ambiguous, "user_id", "left_anti")
+        stable = candidates.join(F.broadcast(ambiguous), "user_id", "left_anti")
         limit = min(available_items, limit * 2)
         candidates = retain(stable.unionByName(fetch(ambiguous, limit)))
+        candidates.count()
 
     ranking = Window.partitionBy("user_id").orderBy(
         F.desc("als_score"), F.asc("product_id")
@@ -258,10 +269,13 @@ def recommend_with_fallback(model, users, interactions, k: int = 20):
     users only.  This helper is used solely for the all-test-user evaluation
     cohort and makes that fallback explicit in the report.
     """
+    from pyspark.sql import functions as F
+
     warm = recommend_top_k(model, users, k)
+
     requested = users.select("user_id").distinct()
-    missing = requested.join(warm.select("user_id").distinct(), "user_id", "left_anti")
-    if not missing.limit(1).count():
+    missing = requested.join(F.broadcast(warm.select("user_id").distinct()), "user_id", "left_anti")
+    if not [r.user_id for r in missing.take(1)]:
         return warm
     from .evaluation import global_popularity
 
