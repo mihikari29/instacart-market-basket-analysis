@@ -24,7 +24,7 @@ class PipelineCheckpointResumeTests(unittest.TestCase):
     def test_checkpoint_tree_structure_and_marker(self):
         with tempfile.TemporaryDirectory() as tmp:
             checkpoint_root = Path(tmp) / "run" / "checkpoints" / "module3"
-            checkpoint_uri = ensure_checkpoint(
+            ensure_checkpoint(
                 output_dir=Path(tmp),
                 checkpoint_id="run-123456",
                 checkpoint_root=checkpoint_root,

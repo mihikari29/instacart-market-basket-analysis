@@ -50,7 +50,7 @@ def main(argv=None):
         "run_id": run_id,
         "status": "running",
         "environment": {
-            **revision(),
+            **git_revision(),
             "source_code_sha256": code_digest(),
             "config": asdict(config),
             "python": platform.python_version(),

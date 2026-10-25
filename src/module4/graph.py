@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from pyspark.sql import functions as F
+
 
 def build_edges(prior_enriched, min_edge_weight: int = 2):
     """Create canonical undirected co-purchase edges from prior baskets."""
-    from pyspark.sql import functions as F
 
     if min_edge_weight < 1:
         raise ValueError("min_edge_weight must be positive")
@@ -36,7 +37,6 @@ def build_edges(prior_enriched, min_edge_weight: int = 2):
 
 def build_vertices(prior_enriched, products=None):
     """Return active prior products, or the full product catalog when supplied."""
-    from pyspark.sql import functions as F
 
     active = prior_enriched.select("product_id").distinct()
     if products is None:
@@ -47,7 +47,6 @@ def build_vertices(prior_enriched, products=None):
 
 def directed_edges(edges):
     """Expand canonical edges in both directions for GraphFrames algorithms."""
-    from pyspark.sql import functions as F
 
     required = {"src", "dst"}
     missing = required.difference(edges.columns)
@@ -64,7 +63,6 @@ def directed_edges(edges):
 
 def weighted_degree(edges, vertices=None):
     """Compute neighbor count and weighted degree from undirected edges."""
-    from pyspark.sql import functions as F
 
     incident = edges.select(
         F.col("src").alias("product_id"), "dst", "weight"
@@ -93,7 +91,6 @@ def pagerank(
     backend: str = "graphframes",
 ):
     """Run topology-only PageRank with an explicitly selected implementation."""
-    from pyspark.sql import functions as F
 
     if not 0.0 < reset_probability < 1.0:
         raise ValueError("reset_probability must be between 0 and 1")
@@ -122,7 +119,6 @@ def build_metrics(vertices, edges, reset_probability=0.15, max_iter=10, backend=
 
 def validate_edges(edges) -> dict:
     """Run canonical-edge invariants and return compact counts."""
-    from pyspark.sql import functions as F
 
     if not {"src", "dst", "weight"}.issubset(edges.columns):
         raise ValueError("edges must contain src, dst and weight")
@@ -151,7 +147,6 @@ def validate_edges(edges) -> dict:
 
 def validate_metrics(metrics, edges, vertices=None) -> dict:
     """Validate degree conservation, vertex uniqueness and finite PageRank."""
-    from pyspark.sql import functions as F
 
     required = {"product_id", "neighbor_count", "weighted_degree", "pagerank"}
     missing = required.difference(metrics.columns)

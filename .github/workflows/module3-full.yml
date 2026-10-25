@@ -21,26 +21,6 @@ on:
       - '.dockerignore'
       - 'requirements*.txt'
       - '.github/workflows/module3-full.yml'
-  pull_request:
-    branches:
-      - main
-      - module3-speed-layer
-    paths:
-      - 'src/module3/**'
-      - 'src/module1/producer.py'
-      - 'src/module1/event_reader.py'
-      - 'src/module1/generate.py'
-      - 'scripts/module3*.py'
-      - 'scripts/dashboard/demo_fixture.py'
-      - 'scripts/dashboard/demo_validate.py'
-      - 'deploy/dashboard/compose.demo.yaml'
-      - 'tests/test_module3.py'
-      - 'tests/test_module1_hardening.py'
-      - 'compose.yaml'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'requirements*.txt'
-      - '.github/workflows/module3-full.yml'
   workflow_dispatch:
 permissions:
   contents: read

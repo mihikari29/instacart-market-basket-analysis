@@ -41,3 +41,7 @@
 ## 8. Development Workflow: Batch Refactoring & Test Efficiency
 - Implement refactoring, cleanups, and edits across all affected files in cohesive batches.
 - **Do not spam the test suite**: Never run test runs after every minor file edit. Verify the full batched change set once editing across modules is complete.
+
+## 9. Communication & Pre-Push Verification Invariants
+- **Answer First on Diagnostic Inquiries**: When the user asks a question about errors, failures, or status (e.g., "what's the problem?"), immediately explain what is known. Do not silently chain background tasks, tool installations, or multi-step fixes across multiple turns without directly updating the user.
+- **Mandatory Pre-Push Lint Verification**: Never push commits to remote branches without running both the linter (`ruff check .`) and the relevant test suite locally. Zero tolerance for unverified syntax, unused imports, or undefined variable names reaching remote CI.

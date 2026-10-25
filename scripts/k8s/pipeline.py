@@ -26,7 +26,7 @@ from .common import (
 )
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
 from .runtime import containerd_image_inventory_command, kubectl
-from .config import get_infrastructure_timeout, get_step_timeout, get_capacity_reserve
+from .config import get_step_timeout, get_capacity_reserve
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
