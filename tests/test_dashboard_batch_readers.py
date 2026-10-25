@@ -52,12 +52,7 @@ def department(department_id=1, *, purchase=100, users=40, rate=0.4, run="module
 class IndexCursor:
     def __init__(self, indexes):
         self.indexes = indexes
-        self.max_time = None
         self.closed = False
-
-    def max_time_ms(self, value):
-        self.max_time = value
-        return self
 
     def __iter__(self):
         return iter(self.indexes)

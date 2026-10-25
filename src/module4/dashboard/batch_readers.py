@@ -141,12 +141,11 @@ def _index_keys(document: Mapping[str, Any]) -> tuple[tuple[str, int], ...] | No
         return None
 
 
-def _require_product_index(collection: Any, order: str, max_time_ms: int) -> str:
+def _require_product_index(collection: Any, order: str) -> str:
     index_name, expected_keys = PRODUCT_INDEXES[order]
     cursor = None
     try:
-        raw_cursor = collection.list_indexes()
-        cursor = raw_cursor.max_time_ms(max_time_ms) if hasattr(raw_cursor, 'max_time_ms') else raw_cursor
+        cursor = collection.list_indexes()
         for index in cursor:
             collation = index.get("collation")
             if collation is None:
@@ -202,7 +201,7 @@ def read_batch_products(
 
     try:
         collection = database[PRODUCT_COLLECTION]
-        index_name = _require_product_index(collection, order, max_time_ms)
+        index_name = _require_product_index(collection, order)
         sort = [(order, -1), ("product_id", 1)]
         cursor = collection.find({}, PRODUCT_PROJECTION).sort(sort).hint(index_name).limit(limit)
         cursor = cursor.max_time_ms(max_time_ms)
