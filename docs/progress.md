@@ -219,7 +219,6 @@ manifest and compact summaries (11). Everything else was merged or removed:
 | Top-level documents | 18 | 11 |
 | Legacy-named test files | 25 | 0 |
 | Raw evidence dumps | 8 | 0 |
-| `docs/evidence/` | 186 files, 1.55 MB | 188 files, 0.85 MB |
 | Tracked files | 426 | 424 |
 
 **Dependency direction.** Every implementation-to-implementation private

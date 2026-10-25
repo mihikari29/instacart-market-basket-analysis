@@ -544,9 +544,9 @@ the `spark` stage for the accepted C5 imports and fixture validation described
 above.
 
 The API process may also set `MODULE4D_APP_ROOT` to the application or
-repository root containing `docs/evidence/`; the default is the packaged source
+repository root containing `src/module4/dashboard/assets/`; the default is the packaged source
 root and is normally `/workspace` in the API image. Do not set it to the
-`docs/evidence/` directory itself. `/health` is process liveness only and does
+`src/module4/dashboard/assets/` directory itself. `/health` is process liveness only and does
 not establish that MongoDB or any source collection is available. Never put
 the MongoDB URI in the UI process, browser configuration, request URL, or
 source control.

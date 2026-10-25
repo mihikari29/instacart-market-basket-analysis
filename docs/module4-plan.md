@@ -203,7 +203,7 @@ tests/test_module4.py               # hiện có: Spark fixture
 tests/test_module4_spark.py         # đề xuất: mở rộng runtime/standalone tests
 tests/test_module4_mongo.py         # đề xuất: live publish/replay/failure
 tests/test_module4_flow.py          # đề xuất: staged Module 1–2–4 flow
-docs/evidence/module4/<run_id>/
+results/module4/<run_id>/
 ```
 
 Docker image phải pin GraphFrames Python package và JAR tương thích Spark
@@ -531,7 +531,7 @@ validate
 ## 9. Required Evidence
 
 ```text
-docs/evidence/module4/<run_id>/
+results/module4/<run_id>/
 ├── manifest.json
 ├── environment.txt
 ├── test-results.txt
@@ -964,7 +964,7 @@ fallback:
 MODULE4D_MONGODB_URI=<MongoDB URI for a database-scoped read-only account>
 MODULE4D_MONGO_DATABASE=<explicit database name>
 MODULE4D_TREND_SOURCE_NAMESPACES=<comma-separated exact namespace allowlist>
-MODULE4D_APP_ROOT=<application/repository root containing docs/evidence; optional default>
+MODULE4D_APP_ROOT=<application/repository root; optional default>
 ```
 
 The UI process receives only:

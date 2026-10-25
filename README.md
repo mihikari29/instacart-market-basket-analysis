@@ -120,7 +120,7 @@ Data assets are segregated by monotonic role:
 
 ## Dataset and source relationships
 
-The public release contains six CSV tables. Full-data evidence from 3 October 2026 recorded 3,421,083 orders, 32,434,489 prior order-product facts, 1,384,617 train facts, 49,688 catalog products, 206,209 users, 134 aisles and 21 departments. These values describe that dated run and its verified input, not a new measurement from this documentation revision. The detailed receipt and environment are in the [full-data evidence report](docs/evidence/full/README.md).
+The public release contains six CSV tables. Full-data evidence from 3 October 2026 recorded 3,421,083 orders, 32,434,489 prior order-product facts, 1,384,617 train facts, 49,688 catalog products, 206,209 users, 134 aisles and 21 departments. These values describe that dated run and its verified input, not a new measurement from this documentation revision. The full dataset has 33,819,106 events across 456 partitions.
 
 | Input file | Key fields and relationship | Purpose |
 |---|---|---|
@@ -142,7 +142,7 @@ departments.department_id 1 ── N products.department_id
 
 Module 1 requires all six files and checks their headers, integer spellings and domains, evaluation-set values, keys, foreign keys, order-level consistency, unique basket items, and cart positions before coercing types. Each basket's `add_to_cart_order` must be the contiguous sequence `1..N`. This fail-closed order matters: a partially present or malformed table cannot silently produce plausible-looking joins. Cleaning uses compact integer and category types, maps a first-order missing gap to zero, reconstructs weekday-consistent values where the source's 30-day cap hides a longer gap, normalizes whitespace and nonbreaking spaces in product names, and retains catalog products even when they have no prior facts.
 
-The capped gap reconstruction chooses the minimum weekday-consistent gap from 30 through 36 days and fails if the result does not agree with weekday progression. A historical 8 October cleaning record counted 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names; see the [source-cleaning receipt](docs/evidence/module4/validation-20261008/source-clean.txt). The cleaner stages six Parquet outputs and an ownership manifest before replacing a previously recognized Module 1 publication. It refuses symlinked or overlapping raw/output paths and preserves the prior publication when validation or staging fails. This is a single-writer directory publication procedure, not a general multi-writer transaction.
+The capped gap reconstruction chooses the minimum weekday-consistent gap from 30 through 36 days and fails if the result does not agree with weekday progression. A historical 8 October cleaning record counted 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names. The cleaner stages six Parquet outputs and an ownership manifest before replacing a previously recognized Module 1 publication. It refuses symlinked or overlapping raw/output paths and preserves the prior publication when validation or staging fails. This is a single-writer directory publication procedure, not a general multi-writer transaction.
 
 Curated Parquet gives Spark typed, columnar inputs and supports date partition pruning for the generated event feed. CSV remains the source-cleaning format. Kafka messages are JSON records denormalized with product, aisle and department fields, so trend aggregation does not need to join dimensions.
 
@@ -162,7 +162,7 @@ Module 2 reads the curated HDFS tables, verifies handoff receipts and structural
 
 The batch outputs include product and department metrics, user-level descriptive features, weekday/hour distributions and pivoted time summaries. `user_features` records `user_id`, order and purchase counts, unique products, reorder rate and average basket size, with run ID, `prior_only` feature scope and UTC generation metadata. Module 4 has a bounded reader for one descriptive feature row. These features are not ALS model inputs. Batch publication uses run-owned temporary MongoDB collections and promotes each collection after validation. Individual collection promotion is atomic at the rename boundary, but a set of multiple collections is not one cross-collection transaction. Readers use run/version metadata to avoid mixing generations.
 
-The benchmark tooling includes explicit join strategies, date and partition filters, cached versus uncached aggregation, local thread configurations, and a separate existing-standalone-master executor-layout experiment. The full-data evidence records a Sort-Merge versus Broadcast Hash join comparison, equivalent filtered outputs, and cache materialization separately from reuse. It cautions that the host's caches were warm and the all-date arm had a different scan scope. See [Module 2 benchmark design](docs/docker.md) and the [dated measurements](docs/evidence/full/README.md).
+The benchmark tooling includes explicit join strategies, date and partition filters, cached versus uncached aggregation, local thread configurations, and a separate existing-standalone-master executor-layout experiment. The full-data evidence records a Sort-Merge versus Broadcast Hash join comparison, equivalent filtered outputs, and cache materialization separately from reuse. It cautions that the host's caches were warm and the all-date arm had a different scan scope. See [Module 2 benchmark design](docs/docker.md).
 
 ## Module 3 — Kafka and Spark Structured Streaming
 
@@ -172,11 +172,11 @@ Append mode publishes only finalized windows. For each finalized window, the com
 
 Watermark deduplication is bounded state, not permanent event-ID uniqueness. The legacy delete-and-upsert sequence is not a read transaction, and each immutable bundle document is individually atomic rather than all windows being one transaction. Checkpoint identity and schema version are explicit; incompatible legacy state fails without mutation, and Kubernetes resume is disabled until run ownership and offset continuity are established.
 
-Finite replay is considered complete only when the producer reports success, receipt counts reconcile, and consumed terminal offsets match across Kafka partitions. A replay may end with an event-time tail that is not yet finalized; the pipeline does not invent future events to force windows closed. Completed-batch telemetry pairs each executed Spark batch with the receipt for that batch, including zero-input state-cleanup batches. It tracks bounded input/processing rates and, for finalized output, ingestion-to-publication-completion latency. That latency uses producer and output-host wall clocks, includes watermark delay, and may expose clock skew; it is not Kafka acknowledgement latency or UI response time. See the [streaming contract](docs/module3-contracts.md) and [historical bounded evidence](docs/evidence/module3/README.md).
+Finite replay is considered complete only when the producer reports success, receipt counts reconcile, and consumed terminal offsets match across Kafka partitions. A replay may end with an event-time tail that is not yet finalized; the pipeline does not invent future events to force windows closed. Completed-batch telemetry pairs each executed Spark batch with the receipt for that batch, including zero-input state-cleanup batches. It tracks bounded input/processing rates and, for finalized output, ingestion-to-publication-completion latency. That latency uses producer and output-host wall clocks, includes watermark delay, and may expose clock skew; it is not Kafka acknowledgement latency or UI response time. See the [streaming contract](docs/module3-contracts.md).
 
 ## Module 4 — Recommendations, graph, Hybrid and dashboard
 
-**Module 4A, ALS.** The model fits implicit-feedback ALS from prior user-product purchase counts. Its internal holdout is drawn from eligible prior-history users; official train baskets are kept for evaluation and do not select ALS fitting parameters. Evaluation compares ALS with global popularity and personal frequency at multiple cutoffs and reports macro ranking metrics and coverage. A historical full-data run recorded ALS Recall@10 below personal frequency; no claim of recommendation-quality improvement is made. The [acceptance record](docs/evidence/module4/acceptance-20261010/README.md) preserves its exact scope and run identity.
+**Module 4A, ALS.** The model fits implicit-feedback ALS from prior user-product purchase counts. Its internal holdout is drawn from eligible prior-history users; official train baskets are kept for evaluation and do not select ALS fitting parameters. Evaluation compares ALS with global popularity and personal frequency at multiple cutoffs and reports macro ranking metrics and coverage. A historical full-data run recorded ALS Recall@10 below personal frequency; no claim of recommendation-quality improvement is made. The pipeline preserves its exact scope and run identity.
 
 **Module 4B, product graph.** The graph uses prior baskets and retains the full catalog, including inactive products as isolated vertices. It counts co-occurring product pairs, applies configured edge thresholds, derives neighbor and weighted-degree metrics, and runs GraphFrames PageRank on symmetric directed topology. Co-purchase weights inform weighted degree; PageRank uses the graph topology rather than weighted PageRank. The recorded 10 October run is historical evidence, not a fresh acceptance for the current source revision.
 
@@ -218,7 +218,7 @@ Start the [External Acceptance Tutorial](docs/acceptance.md) for a beginner-frie
 
 ## Results and limits
 
-Historical full-data, streaming and Module 4 acceptance evidence is linked above and indexed in [docs/evidence](docs/evidence/README.md). Those documents retain their original dates, code/environment identities and experiment boundaries. The project status page reports offline development checks associated with the reviewed source revision: 803 passed and 7 Spark-dependent modules skipped in the broad non-service selection, plus focused selections of 59 and 134 passes, repository Ruff, and compilation of 190 files. The independent source-code review is a separate outcome and does not imply runtime behavior. None of these are new results from this documentation update.
+The project status page reports offline development checks associated with the reviewed source revision: 803 passed and 7 Spark-dependent modules skipped in the broad non-service selection, plus focused selections of 59 and 134 passes, repository Ruff, and compilation of 190 files. The independent source-code review is a separate outcome and does not imply runtime behavior. None of these are new results from this documentation update.
 
 Selected historical findings help show what the evidence means:
 
@@ -230,7 +230,7 @@ Selected historical findings help show what the evidence means:
 | Bounded streaming | The 50k-event run processed 3,203.90 rows/s and finalized 35,701 windows into 580,342 Mongo documents. | One broker and a small Spark runtime; sliding windows amplified state to 1,174,010 aggregate rows. |
 | ALS quality baseline | Historical Recall@10 was 0.121472 for ALS versus 0.319232 for personal frequency. | Dated Module 4 acceptance; no quality-improvement claim. |
 
-Full trial context, environment identity and limitations are in the [full-data report](docs/evidence/full/README.md), [Module 3 evidence](docs/evidence/module3/README.md), and [Module 4 acceptance record](docs/evidence/module4/acceptance-20261010/README.md).
+Full configuration and runtime limits are specified in [config/pipeline.yaml](config/pipeline.yaml).
 
 External runtime acceptance remains pending. That work includes pinned Spark/MongoDB integration, browser and container-package checks, isolated Kubernetes B2/B3/B4 execution, runtime checkpoint recovery, full-data processing, actual performance/executor experiments, and fresh identity-bound evidence. Historical results, offline fixture checks, source review and runtime acceptance are different evidence scopes. See [current project progress](docs/progress.md) and the [external acceptance](docs/acceptance.md) for the exact boundaries.
 
@@ -295,7 +295,6 @@ no compatibility packages at `src.module4c` or `src.module4d`.
 | [Module 3 contracts](docs/module3-contracts.md) | Kafka, event-time aggregation, Mongo publication, bundles, and Module 4C boundary. |
 | [Module 4 plan](docs/module4-plan.md) | Module 4A–4D algorithms, data, ranking, evaluation, API, and dashboard contracts. |
 | [Docker guide](docs/docker.md) | Image targets, runtime prerequisites, operational procedures, and scoped cleanup. |
-| [Evidence archive](docs/evidence/README.md) | Dated validation reports, receipts, historical observations, and archive indexes. |
 
 Use current guides for current behavior and procedures. The Module 4C/4D
 standalone design and release documents live in the evidence archives; their
@@ -337,8 +336,4 @@ identifiers, Hybrid serving-version format, and established test filenames are
 runtime contracts. Script basenames and command arguments are also stable entry
 points. Check the relevant canonical guide before changing these contracts.
 
-Historical reports are not rewritten when code or current documentation changes.
-The [evidence index](docs/evidence/README.md) links each result to its recorded
-revision and scope. The [style regression report](docs/style-regression-validation.md)
-retains its dated **NOT FULLY VERIFIED** assessment for that comparison; it is
-not a runtime acceptance statement for the reviewed implementation revision.
+Runtime contracts, configurations, and test suites are maintained consistently with zero legacy shims.

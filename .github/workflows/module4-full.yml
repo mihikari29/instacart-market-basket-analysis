@@ -108,7 +108,6 @@ jobs:
             results/module4/acceptance-ci/
             results/module4/ci-*/**/*.json
             results/module4/ci-*/**/*.txt
-            docs/evidence/module4/ci-*/
             data/raw/source-receipt.json
       - name: Stop ephemeral services
         if: always()

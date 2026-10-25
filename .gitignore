@@ -13,7 +13,7 @@ venv/
 .env
 .env.*
 !.env.example
-# Generated experiment outputs and runtime state; curated evidence lives in docs/evidence/.
+# Generated experiment outputs and runtime state
 /results/
 /spark-warehouse/
 /metastore_db/

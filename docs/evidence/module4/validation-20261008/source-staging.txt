@@ -1,8 +1,0 @@
-[curated] uploading cleaned parquet tables
-  [up  ] orders.parquet -> /instacart/curated/orders/orders.parquet
-  [up  ] order_products__prior.parquet -> /instacart/curated/order_products_prior/order_products__prior.parquet
-  [up  ] order_products__train.parquet -> /instacart/curated/order_products_train/order_products__train.parquet
-  [up  ] products.parquet -> /instacart/curated/dimensions/products/products.parquet
-  [up  ] aisles.parquet -> /instacart/curated/dimensions/aisles/aisles.parquet
-  [up  ] departments.parquet -> /instacart/curated/dimensions/departments/departments.parquet
-  [up  ] _sources.json -> /instacart/curated/_sources.json
