@@ -145,7 +145,8 @@ def _require_product_index(collection: Any, order: str, max_time_ms: int) -> str
     index_name, expected_keys = PRODUCT_INDEXES[order]
     cursor = None
     try:
-        cursor = collection.list_indexes().max_time_ms(max_time_ms)
+        raw_cursor = collection.list_indexes()
+        cursor = raw_cursor.max_time_ms(max_time_ms) if hasattr(raw_cursor, 'max_time_ms') else raw_cursor
         for index in cursor:
             collation = index.get("collation")
             if collation is None:
