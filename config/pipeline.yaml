@@ -26,7 +26,7 @@ models:
     pilot_users: 5000
     max_trials: 1                  # 1 to use explicit params above; >1 for grid search
   graph:
-    backend: "graphframes"         # graphframes or dataframe
+    backend: "graphframes"
     min_edge_weight: 2
     reset_probability: 0.15
     max_iter: 10
