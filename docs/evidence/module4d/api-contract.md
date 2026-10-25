@@ -151,11 +151,11 @@ artifacts:
 
 | Evidence ID | Registered artifact | Classification |
 |---|---|---|
-| `module2-full-analytics` | `docs/evidence/full/analytics.json` | Full public dataset analytics |
-| `module2-full-hardening-benchmarks` | `docs/evidence/full/current-hardening-2026-10-03.json` | One dated full-data Module 2 benchmark run and environment |
-| `module4a-full-als-evaluation` | `docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json` | Official-train ALS and baseline evaluation |
-| `module4c-c8a-responsiveness` | `docs/evidence/module4c/c8a-receipt.json` | Controlled synthetic responsiveness experiment |
-| `module4c-c8b-streaming-demo` | `docs/evidence/module4c/c8b-receipt.json` | Bounded synthetic Kafka/Spark demonstration |
+| `module2-full-analytics` | `src/module4/dashboard/assets/analytics.json` | Full public dataset analytics |
+| `module2-full-hardening-benchmarks` | `src/module4/dashboard/assets/current-hardening-2026-10-03.json` | One dated full-data Module 2 benchmark run and environment |
+| `module4a-full-als-evaluation` | `src/module4/dashboard/assets/evaluation.json` | Official-train ALS and baseline evaluation |
+| `module4c-c8a-responsiveness` | `src/module4/dashboard/assets/c8a-receipt.json` | Controlled synthetic responsiveness experiment |
+| `module4c-c8b-streaming-demo` | `src/module4/dashboard/assets/c8b-receipt.json` | Bounded synthetic Kafka/Spark demonstration |
 
 `GET /api/v1/evidence` returns the five registry entries, availability state,
 classification, safe source label, and content digest. Detail responses expose

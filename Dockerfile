@@ -48,11 +48,6 @@ COPY scripts/dashboard/demo_fixture.py /workspace/scripts/dashboard/demo_fixture
 COPY scripts/dashboard/demo_validate.py /workspace/scripts/dashboard/demo_validate.py
 COPY scripts/experiments/module4c_responsiveness.py /workspace/scripts/experiments/module4c_responsiveness.py
 COPY scripts/experiments/module4c_streaming_demo.py /workspace/scripts/experiments/module4c_streaming_demo.py
-COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
-COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
-COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
-COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
 ENV PYTHONPATH=/workspace
 
 # The image is exercised with explicit test commands by the validation script.
@@ -146,12 +141,6 @@ COPY compose.yaml /workspace/compose.yaml
 COPY requirements.txt /workspace/requirements.txt
 COPY requirements-dev.txt /workspace/requirements-dev.txt
 
-# Module 4D's registered historical evidence route reads exactly these files.
-COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
-COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
-COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
-COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
 COPY scripts/k8s/api_readiness.py /workspace/scripts/k8s/api_readiness.py
 
 USER 10001:10001
@@ -182,11 +171,6 @@ COPY pyproject.toml /workspace/pyproject.toml
 COPY Dockerfile /workspace/Dockerfile
 COPY compose.yaml /workspace/compose.yaml
 COPY requirements.txt requirements-dev.txt /workspace/
-COPY docs/evidence/full/analytics.json /workspace/docs/evidence/full/analytics.json
-COPY docs/evidence/full/current-hardening-2026-10-03.json /workspace/docs/evidence/full/current-hardening-2026-10-03.json
-COPY docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json /workspace/docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-COPY docs/evidence/module4c/c8a-receipt.json /workspace/docs/evidence/module4c/c8a-receipt.json
-COPY docs/evidence/module4c/c8b-receipt.json /workspace/docs/evidence/module4c/c8b-receipt.json
 COPY scripts/k8s/write_python_environment.py /tmp/write-python-environment.py
 RUN python3 /tmp/write-python-environment.py
 ENV PYTHONPATH=/workspace \

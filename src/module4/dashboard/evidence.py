@@ -14,35 +14,35 @@ from typing import Any
 MAX_EVIDENCE_BYTES = 256 * 1024
 EVIDENCE_SPECS = {
     "module2-full-analytics": {
-        "path": "docs/evidence/full/analytics.json",
+        "path": "src/module4/dashboard/assets/analytics.json",
         "title": "Module 2 full public dataset analytics",
         "kind": "analytics",
         "classification": "full_public_dataset",
         "source_label": "Module 2 archived full-data analytics",
     },
     "module2-full-hardening-benchmarks": {
-        "path": "docs/evidence/full/current-hardening-2026-10-03.json",
+        "path": "src/module4/dashboard/assets/current-hardening-2026-10-03.json",
         "title": "Module 2 full-data hardening benchmark",
         "kind": "benchmarks",
         "classification": "full_public_dataset_isolated_runtime_validation",
         "source_label": "Module 2 archived benchmark run 2026-10-03",
     },
     "module4a-full-als-evaluation": {
-        "path": "docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json",
+        "path": "src/module4/dashboard/assets/evaluation.json",
         "title": "Module 4A full-data ALS and baseline evaluation",
         "kind": "als_evaluation",
         "classification": "official_train_evaluation",
         "source_label": "Module 4A archived official-train evaluation",
     },
     "module4c-c8a-responsiveness": {
-        "path": "docs/evidence/module4c/c8a-receipt.json",
+        "path": "src/module4/dashboard/assets/c8a-receipt.json",
         "title": "Module 4C C8A controlled responsiveness receipt",
         "kind": "synthetic_responsiveness",
         "classification": "controlled_synthetic_experiment",
         "source_label": "Module 4C archived C8A synthetic responsiveness experiment",
     },
     "module4c-c8b-streaming-demo": {
-        "path": "docs/evidence/module4c/c8b-receipt.json",
+        "path": "src/module4/dashboard/assets/c8b-receipt.json",
         "title": "Module 4C C8B bounded streaming demonstration receipt",
         "kind": "synthetic_streaming_demo",
         "classification": "bounded_synthetic_kafka_spark_demonstration",

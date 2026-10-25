@@ -40,7 +40,7 @@ def test_registry_is_exact_bounded_allowlist_and_reports_safe_provenance():
 
 
 def test_unknown_id_and_path_traversal_never_select_a_filename():
-    for value in ("../../etc/passwd", "docs/evidence/full/analytics.json", "unknown"):
+    for value in ("../../etc/passwd", "src/module4/dashboard/assets/analytics.json", "unknown"):
         with pytest.raises(UnknownEvidence):
             read_evidence(REPOSITORY_ROOT, value)
 
@@ -160,7 +160,10 @@ def test_symlink_escape_from_configured_application_root_is_rejected(tmp_path):
     evidence_id = "module2-full-analytics"
     target = tmp_path / EVIDENCE_SPECS[evidence_id]["path"]
     target.parent.mkdir(parents=True)
-    target.symlink_to(REPOSITORY_ROOT / EVIDENCE_SPECS[evidence_id]["path"])
+    try:
+        target.symlink_to(REPOSITORY_ROOT / EVIDENCE_SPECS[evidence_id]["path"])
+    except OSError:
+        pytest.skip("Symlink creation not permitted on this environment")
     with pytest.raises(InvalidEvidence, match="outside"):
         read_orders_distribution(tmp_path)
 

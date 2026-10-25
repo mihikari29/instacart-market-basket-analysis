@@ -26,18 +26,17 @@ The technical acceptance checklist for Modules 1 to 3 is in
 
 ## Files registered by live code
 
-Five archived artifacts are served by the Module 4D API through the registry in
-`src/module4/dashboard/evidence.py`. Their paths are a **runtime contract**:
-the API resolves them by path and enforces a 256 KiB per-artifact limit. They
-must never be moved, renamed or trimmed.
+Five benchmark artifacts are served by the Module 4D API through the registry in
+`src/module4/dashboard/evidence.py`. For clean architectural separation from documentation,
+these live runtime assets reside in `src/module4/dashboard/assets/`.
 
-| Evidence ID | Path |
+| Evidence ID | Application Asset Path |
 |---|---|
-| `module2-full-analytics` | `full/analytics.json` |
-| `module2-full-hardening-benchmarks` | `full/current-hardening-2026-10-03.json` |
-| `module4a-full-als-evaluation` | `module4/full-ab-20261010-fixed-first/evaluation.json` |
-| `module4c-c8a-responsiveness` | `module4c/c8a-receipt.json` |
-| `module4c-c8b-streaming-demo` | `module4c/c8b-receipt.json` |
+| `module2-full-analytics` | `src/module4/dashboard/assets/analytics.json` |
+| `module2-full-hardening-benchmarks` | `src/module4/dashboard/assets/current-hardening-2026-10-03.json` |
+| `module4a-full-als-evaluation` | `src/module4/dashboard/assets/evaluation.json` |
+| `module4c-c8a-responsiveness` | `src/module4/dashboard/assets/c8a-receipt.json` |
+| `module4c-c8b-streaming-demo` | `src/module4/dashboard/assets/c8b-receipt.json` |
 
 Every other archived file is documentation. [SHA256SUMS](SHA256SUMS) records
 the digest of each one, so an accidental rewrite of history is detectable and

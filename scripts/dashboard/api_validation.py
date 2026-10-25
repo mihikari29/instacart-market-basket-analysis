@@ -81,17 +81,7 @@ def _copy_context(destination: Path) -> None:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / relative, target)
-    for relative in (
-        "docs/evidence/full/analytics.json",
-        "docs/evidence/full/current-hardening-2026-10-03.json",
-        "docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json",
-        "docs/evidence/module4c/c8a-receipt.json",
-        "docs/evidence/module4c/c8b-receipt.json",
-    ):
-        source = ROOT / relative
-        target = destination / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+
 
 
 def _build(image_tag: str) -> None:

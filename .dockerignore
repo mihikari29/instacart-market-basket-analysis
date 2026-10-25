@@ -18,11 +18,6 @@ tests/test_k8s_*.py
 # would be redundant; which scripts actually reach an image is decided by the
 # COPY instructions in the Dockerfile, not by this file.
 !scripts/
-!docs/evidence/full/analytics.json
-!docs/evidence/full/current-hardening-2026-10-03.json
-!docs/evidence/module4/full-ab-20261010-fixed-first/evaluation.json
-!docs/evidence/module4c/c8a-receipt.json
-!docs/evidence/module4c/c8b-receipt.json
 
 # These exclusions remain last so future allowlist changes cannot include local state or secrets.
 **/.git/**
