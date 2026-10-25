@@ -54,15 +54,16 @@ def project_for(run_id: str) -> str:
     return f"module4d-demo-{run_id}"
 
 
-def compose_command(run_id: str) -> list[str]:
+def compose_command(run_id: str, env_file: Path | None = None) -> list[str]:
     """Return the Compose invocation for one run."""
+    actual_env = env_file or env_file_for(run_id)
     return [
         "docker",
         "compose",
         "--project-name",
         project_for(run_id),
         "--env-file",
-        str(env_file_for(run_id)),
+        str(actual_env),
         "-f",
         str(COMPOSE_FILE),
     ]
@@ -117,18 +118,18 @@ def create_environment_file(path: Path) -> None:
     path.chmod(0o600)
 
 
-def stop_demo(run_id: str) -> None:
+def stop_demo(run_id: str, env_file: Path | None = None) -> None:
     """Stop the demo, remove its images and delete its private file."""
     if not RUN_ID_PATTERN.fullmatch(run_id):
         raise DemoError("run ID must be exactly 12 lowercase hexadecimal characters")
-    env_file = env_file_for(run_id)
-    if not env_file.is_file():
+    actual_env = env_file or env_file_for(run_id)
+    if not actual_env.is_file():
         raise DemoError(f"no private environment file exists for demo run {run_id}")
     try:
-        run(compose_command(run_id) + ["down", "--remove-orphans"])
+        run(compose_command(run_id, actual_env) + ["down", "--remove-orphans"])
     except DemoError as exc:
         raise DemoError(f"could not stop demo {run_id}; keeping its private file: {exc}") from exc
-    tag = read_tag(env_file)
+    tag = read_tag(actual_env)
     if not RUN_ID_PATTERN.fullmatch(tag):
         raise DemoError("the private environment file has an invalid image tag; keeping it")
     for name in TASK_IMAGES:
@@ -145,7 +146,7 @@ def stop_demo(run_id: str) -> None:
             )
             if remove.returncode != 0:
                 raise DemoError(f"could not remove the task-owned image {name}:{tag}")
-    env_file.unlink(missing_ok=True)
+    actual_env.unlink(missing_ok=True)
     print(f"Stopped and removed the task-owned demo {run_id}; tmpfs data was discarded.")
 
 
@@ -162,7 +163,7 @@ def start_demo(run_id: str | None = None, env_file: Path | None = None) -> str:
         create_environment_file(env_file)
         if os.name != "nt":
             env_file.chmod(0o600)
-        compose = compose_command(run_id)
+        compose = compose_command(run_id, env_file)
         run(compose + ["config", "--quiet"])
         run(compose + ["build", "module4d-api", "module4d-ui"])
         run(compose + ["up", "-d", "module4d-mongo"])
@@ -172,7 +173,7 @@ def start_demo(run_id: str | None = None, env_file: Path | None = None) -> str:
     except Exception:
         print(f"Demo startup failed; cleaning only the task-owned run {run_id}.", file=sys.stderr)
         try:
-            stop_demo(run_id)
+            stop_demo(run_id, env_file)
         except DemoError:
             pass
         raise
