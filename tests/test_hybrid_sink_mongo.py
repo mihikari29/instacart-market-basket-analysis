@@ -894,3 +894,21 @@ def test_preparation_does_not_mutate_c1_c3_c5_input_objects():
     assert captured == captured_before
     assert trend == trend_before
     assert ranking == ranking_before
+
+def test_preparation_preserves_pagerank_scores():
+    products = (
+        ProductMetadata(1, "product-1", pagerank=0.85),
+        ProductMetadata(2, "product-2", pagerank=0.15),
+    )
+    captured = replace(_captured(), product_catalog=products)
+    trend = _trend_result()
+    config, ranking = _rank(captured, trend)
+    prepared = prepare_hybrid_snapshot(
+        captured, trend, ranking, config, as_of_event_time=AS_OF
+    )
+    assert len(prepared.rows) == 2
+    assert prepared.rows[0].pagerank_score == 0.85
+    assert prepared.rows[0].normalized_pagerank_score == pytest.approx(1.0)
+    assert prepared.rows[1].pagerank_score == 0.15
+    assert prepared.rows[1].normalized_pagerank_score == pytest.approx(0.0)
+

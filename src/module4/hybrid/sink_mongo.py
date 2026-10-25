@@ -258,6 +258,20 @@ def _canonical_recommendation(row: Recommendation, index: int) -> Recommendation
         raise HybridSnapshotContractError(
             f"recommendations[{index}] normalized trend score must be zero when absent"
         )
+    pagerank_score = _finite_float(
+        row.pagerank_score, f"recommendations[{index}].pagerank_score", nullable=True
+    )
+    if pagerank_score is not None and pagerank_score < 0.0:
+        raise HybridSnapshotContractError(
+            f"recommendations[{index}].pagerank_score must be non-negative"
+        )
+    normalized_pagerank = _unit_float(
+        row.normalized_pagerank_score, f"recommendations[{index}].normalized_pagerank_score"
+    )
+    if pagerank_score is None and normalized_pagerank != 0.0:
+        raise HybridSnapshotContractError(
+            f"recommendations[{index}] normalized PageRank score must be zero when PageRank is absent"
+        )
     return Recommendation(
         user_id=row.user_id,
         product_id=row.product_id,
@@ -270,6 +284,8 @@ def _canonical_recommendation(row: Recommendation, index: int) -> Recommendation
         rank=row.rank,
         from_als=row.from_als,
         from_trend=row.from_trend,
+        pagerank_score=pagerank_score,
+        normalized_pagerank_score=normalized_pagerank,
     )
 
 
