@@ -1253,7 +1253,7 @@ def build_parser():
     parser.add_argument("--graph-min-edge-weight", type=int)
     parser.add_argument("--graph-reset-probability", type=float)
     parser.add_argument("--graph-max-iter", type=int)
-    parser.add_argument("--graph-backend", choices=["graphframes", "dataframe"])
+    parser.add_argument("--graph-backend", choices=["graphframes"], default="graphframes")
     parser.add_argument("--graph-top-products", type=int)
     parser.add_argument("--executor-memory")
     parser.add_argument("--executor-cores", type=int)
@@ -1292,8 +1292,7 @@ def main(argv=None):
         "als_blocks": args.als_blocks,
     }
     config = Config.environment(**{key: value for key, value in overrides.items() if value is not None})
-    if config.graph_backend == "dataframe" and args.scope != "staged_fixture":
-        raise ValueError("the dataframe graph backend is restricted to explicit staged_fixture scope")
+
     if args.scope == "full_data" and args.source_receipt is None:
         raise ValueError("full_data scope requires --source-receipt from the verified source download")
     if args.pilot_users < 1:

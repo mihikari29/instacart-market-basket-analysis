@@ -147,7 +147,11 @@ def _serve_user(arguments: argparse.Namespace) -> int:
             mongodb_uri=arguments.mongodb_uri,
             mongo_database=arguments.mongo_database,
         )
-        ranking_config = HybridRankingConfig(lambda_weight=arguments.lambda_weight)
+        ranking_config = (
+            HybridRankingConfig(lambda_weight=arguments.lambda_weight)
+            if arguments.lambda_weight is not None and arguments.lambda_weight != 0.7
+            else HybridRankingConfig.from_pipeline_config()
+        )
         client = MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=10000)
         result = serve_hybrid_user(
             config,

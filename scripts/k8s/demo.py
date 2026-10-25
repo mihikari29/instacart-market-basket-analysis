@@ -1057,10 +1057,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
                 capacity["windows_backing_disk_gib"] = args.windows_backing_disk_gib
                 capacity["windows_backing_disk_source"] = "operator-supplied measured value"
-    elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
-        reserve = get_capacity_reserve()
-        capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
-        capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
+        elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
+            reserve = get_capacity_reserve()
+            capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
+            capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
             source = _validate_mode_inputs(args.mode, input_directory=args.input_dir, capacity=capacity)
             report = plan_document(
                 identity, args.mode, host_capacity=capacity,

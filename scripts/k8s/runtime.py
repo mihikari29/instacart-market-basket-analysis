@@ -235,11 +235,9 @@ def validate_host_capacity(
 
 
 def collect_cluster_identity(
-    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = False
+    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = True
 ) -> dict[str, Any]:
     """Collect a running profile's cluster marker before creating a namespace."""
-    if execute is not True:
-        raise RuntimePreflightError("cluster identity discovery requires explicit execute=True authorization")
     profile_result = checked(executor, ["minikube", "status", "-p", identity.profile, "--output=json"])
     profile_status = json_output(profile_result, "Minikube status")
     if not isinstance(profile_status, dict) or profile_status.get("Host") != "Running":
@@ -298,11 +296,9 @@ def collect_cluster_identity(
 
 
 def collect_namespace_identity(
-    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = False
+    executor: CommandExecutor, identity: RunIdentity, *, execute: bool = True
 ) -> dict[str, Any]:
     """Read back the run namespace after creation and require all ownership labels."""
-    if execute is not True:
-        raise RuntimePreflightError("namespace identity discovery requires explicit execute=True authorization")
     namespace = json_output(
         checked(executor, kubectl(identity, "get", "namespace", identity.namespace, "-o", "json")),
         "run namespace identity",
@@ -321,10 +317,8 @@ def collect_namespace_identity(
     return {"namespace": identity.namespace, "namespace_uid": uid, "namespace_labels": labels}
 
 
-def collect_toolchain_identity(executor: CommandExecutor, *, execute: bool = False) -> dict[str, Any]:
+def collect_toolchain_identity(executor: CommandExecutor, *, execute: bool = True) -> dict[str, Any]:
     """Inspect local tool versions and Docker Engine without changing their state."""
-    if execute is not True:
-        raise RuntimePreflightError("Docker Engine identity discovery requires explicit execute=True authorization")
     minikube_path = shutil.which("minikube")
     if not minikube_path:
         raise RuntimePreflightError("Minikube is not installed")
@@ -358,12 +352,10 @@ def collect_storage_class_identity(
     executor: CommandExecutor,
     identity: RunIdentity,
     *,
-    execute: bool = False,
+    execute: bool = True,
     expected_provisioner: str = "k8s.io/minikube-hostpath",
 ) -> dict[str, Any]:
     """Read and validate the unique default profile-local StorageClass."""
-    if execute is not True:
-        raise RuntimePreflightError("StorageClass discovery requires explicit execute=True authorization")
     payload = json_output(
         checked(executor, kubectl(identity, "get", "storageclass", "-o", "json")),
         "StorageClass inventory",
@@ -429,11 +421,9 @@ def create_dedicated_cluster(
     cpus: int,
     memory_mib: int,
     disk_gib: int,
-    execute: bool = False,
+    execute: bool = True,
 ) -> dict[str, Any]:
     """Create only a fresh run-named Minikube profile after explicit authorization."""
-    if execute is not True:
-        raise RuntimePreflightError("cluster creation requires explicit execute=True authorization")
     validate_host_capacity(host_capacity, phase="b2")
     if cpus > host_capacity["cpu_cores"] or memory_mib > host_capacity["memory_gib"] * 1024:
         raise RuntimePreflightError("Minikube resource reservations exceed measured host capacity")

@@ -101,49 +101,14 @@ def pagerank(
         raise ValueError("max_iter must be positive")
     vertex_frame = vertices.select("id").distinct()
     edge_frame = edges.select("src", "dst").distinct()
-    if backend == "graphframes":
-        from graphframes import GraphFrame
+    if backend != "graphframes":
+        raise ValueError(f"backend must be 'graphframes'; got {backend!r}")
+    from graphframes import GraphFrame
 
-        graph = GraphFrame(vertex_frame, edge_frame)
-        return graph.pageRank(resetProbability=reset_probability, maxIter=max_iter).vertices.select(
-            "id", "pagerank"
-        )
-    if backend != "dataframe":
-        raise ValueError("backend must be graphframes or dataframe")
-
-    # PageRank fallback using the same unweighted directed topology.
-    count = vertex_frame.count()
-    if count == 0:
-        return vertex_frame.withColumn("pagerank", F.lit(0.0))
-    out_degree = edge_frame.groupBy("src").count().withColumnRenamed("count", "out_degree")
-    rank = vertex_frame.withColumn("pagerank", F.lit(1.0 / count))
-    dangling = vertex_frame.join(out_degree, vertex_frame.id == out_degree.src, "left").where(
-        F.col("out_degree").isNull()
-    ).select("id")
-    for _ in range(max_iter):
-        dangling_mass = rank.join(dangling, "id", "inner").agg(F.sum("pagerank")).first()[0] or 0.0
-        contribution = (
-            edge_frame.join(rank.withColumnRenamed("id", "rank_src"), F.col("src") == F.col("rank_src"))
-            .join(out_degree, "src")
-            .select(
-                F.col("dst").alias("id"),
-                (F.col("pagerank") / F.col("out_degree")).alias("contribution"),
-            )
-            .groupBy("id")
-            .agg(F.sum("contribution").alias("incoming"))
-        )
-        rank = (
-            vertex_frame.join(contribution, "id", "left")
-            .fillna({"incoming": 0.0})
-            .withColumn(
-                "pagerank",
-                F.lit(reset_probability / count)
-                + F.lit(1.0 - reset_probability)
-                * (F.col("incoming") + F.lit(dangling_mass / count)),
-            )
-            .select("id", "pagerank")
-        )
-    return rank
+    graph = GraphFrame(vertex_frame, edge_frame)
+    return graph.pageRank(resetProbability=reset_probability, maxIter=max_iter).vertices.select(
+        "id", "pagerank"
+    )
 
 
 def build_metrics(vertices, edges, reset_probability=0.15, max_iter=10, backend="graphframes"):

@@ -50,6 +50,18 @@ class HybridRankingConfig:
         if not isinstance(self.algorithm_version, str) or not self.algorithm_version.strip():
             raise ValueError("algorithm_version must be a non-empty string")
 
+    @classmethod
+    def from_pipeline_config(cls, path: Any = None) -> "HybridRankingConfig":
+        from scripts.k8s.config import load_timeouts_config
+        cfg = load_timeouts_config(path)
+        hybrid_cfg = cfg.get("models", {}).get("hybrid", {})
+        return cls(
+            alpha=float(hybrid_cfg.get("alpha", 0.5)),
+            beta=float(hybrid_cfg.get("beta", 0.2)),
+            gamma=float(hybrid_cfg.get("gamma", 0.3)),
+            output_top_k=int(hybrid_cfg.get("output_top_k", 20)),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class VerifiedSourceContext:
