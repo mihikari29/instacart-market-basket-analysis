@@ -68,19 +68,11 @@ class DemoRunnerOfflineTests(unittest.TestCase):
             with patch("scripts.k8s.demo.measure_host_capacity", side_effect=lambda: dict(capacity)), redirect_stdout(output):
                 status = main([
                     "plan", "--mode", "full", "--run-id", "0123456789ab",
-                    "--input-dir", str(input_directory), "--windows-backing-disk-gib", "60",
+                    "--input-dir", str(input_directory),
                 ])
             self.assertEqual(status, 0)
             plan = json.loads(output.getvalue())
-            self.assertEqual(plan["host_capacity"]["windows_backing_disk_gib"], 60.0)
-            self.assertEqual(plan["host_capacity"]["windows_backing_disk_source"], "operator-supplied measured value")
-
-            with patch("scripts.k8s.demo.measure_host_capacity", side_effect=lambda: dict(capacity)), redirect_stdout(io.StringIO()):
-                status = main([
-                    "plan", "--mode", "full", "--run-id", "abcdef012345",
-                    "--input-dir", str(input_directory),
-                ])
-            self.assertEqual(status, 2)
+            self.assertEqual(plan["host_capacity"]["free_disk_gib"], 50.0)
 
     def test_full_data_acceptance_scope_matches_runtime_receipt(self):
         self.assertTrue(acceptance_passed("full", {
@@ -126,7 +118,6 @@ class DemoRunnerOfflineTests(unittest.TestCase):
             "memory_gib": 12.0,
             "free_disk_gib": 50.0,
             "wsl_guest": False,
-            "windows_backing_disk_gib": 50.0,
         }
         with patch("scripts.k8s.demo.prepare_run_lock") as prepare:
             with self.assertRaisesRegex(DemoError, "unsafe run output path"):

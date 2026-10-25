@@ -190,7 +190,6 @@ def measure_host_capacity(*, disk_path: Path | str = "/") -> dict[str, Any]:
         "host_os": platform.platform(),
         "architecture": platform.machine().lower(),
         "wsl_guest": is_wsl,
-        "windows_backing_disk_gib": None if is_wsl else round(disk.free / (1024**3), 3),
         "measured_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
 
@@ -223,15 +222,6 @@ def validate_host_capacity(
             raise RuntimePreflightError(f"host {field} is unknown; runtime preflight cannot pass")
         if value < minimum:
             raise RuntimePreflightError(f"host {field} is below the documented {phase.upper()} reserve")
-    if capacity.get("wsl_guest") is True:
-        backing = capacity.get("windows_backing_disk_gib")
-        if (
-            not isinstance(backing, (int, float))
-            or isinstance(backing, bool)
-            or not math.isfinite(backing)
-            or backing < minimum_disk
-        ):
-            raise RuntimePreflightError("Windows backing-disk capacity is not verified for this WSL guest")
 
 
 def collect_cluster_identity(

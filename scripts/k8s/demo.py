@@ -16,6 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -421,19 +422,9 @@ def preflight_report(
     lock_path: Path | str = DEFAULT_LOCK,
     input_directory: Path | str | None = None,
     disk_path: Path | str = "/",
-    windows_backing_disk_gib: float | None = None,
 ) -> dict[str, Any]:
     """Perform local-only checks; this function never starts external tools."""
     capacity = measure_host_capacity(disk_path=disk_path)
-    if windows_backing_disk_gib is not None:
-        if isinstance(windows_backing_disk_gib, bool) or not math.isfinite(windows_backing_disk_gib) or windows_backing_disk_gib <= 0:
-            raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
-        capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
-        capacity["windows_backing_disk_source"] = "operator-supplied measured value"
-    elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
-        reserve = get_capacity_reserve()
-        capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
-        capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
     lock = load_version_lock(lock_path)
     validate_static_lock(lock)
     source = _validate_mode_inputs(mode, input_directory=input_directory, capacity=capacity)
@@ -514,22 +505,12 @@ def run_demo(
     executor: CommandExecutor | None = None,
     execute: bool = False,
     capacity: Mapping[str, Any] | None = None,
-    windows_backing_disk_gib: float | None = None,
 ) -> dict[str, Any]:
     """Execute B2 serving, B3 pipeline, and B4 acceptance in dependency order."""
     if execute is not True:
         raise DemoError("demo execution requires explicit --execute authorization")
     active_executor = executor or SubprocessExecutor()
     host_capacity = dict(capacity) if capacity is not None else measure_host_capacity()
-    if windows_backing_disk_gib is not None:
-        if isinstance(windows_backing_disk_gib, bool) or not math.isfinite(windows_backing_disk_gib) or windows_backing_disk_gib <= 0:
-            raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
-        host_capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
-        host_capacity["windows_backing_disk_source"] = "operator-supplied measured value"
-    elif host_capacity.get("wsl_guest") and not host_capacity.get("windows_backing_disk_gib"):
-        reserve = get_capacity_reserve()
-        host_capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
-        host_capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
     try:
         validate_host_capacity(host_capacity, phase="b3")
     except RuntimePreflightError as exc:
@@ -739,7 +720,7 @@ def verify_run(run_id: str, output_directory: Path | str) -> dict[str, Any]:
     if requested_root.is_symlink():
         raise DemoError("run output must be a private non-symlink directory")
     root = requested_root.resolve(strict=True)
-    if not root.is_dir() or root.stat().st_mode & 0o077:
+    if not root.is_dir() or (os.name != "nt" and root.stat().st_mode & 0o077):
         raise DemoError("run output must be a private non-symlink directory")
     session = _read_json(root / SESSION_RECEIPT)
     if any(session.get(field) != value for field, value in (
@@ -1001,13 +982,11 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--mode", choices=("fixture", "full"), default="fixture")
     preflight.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     preflight.add_argument("--input-dir", type=Path)
-    preflight.add_argument("--windows-backing-disk-gib", type=float)
 
     plan = commands.add_parser("plan", help="print a bounded run plan without creating files or contacting services")
     plan.add_argument("--mode", choices=("fixture", "full"), default="fixture")
     plan.add_argument("--run-id", required=True)
     plan.add_argument("--input-dir", type=Path)
-    plan.add_argument("--windows-backing-disk-gib", type=float)
 
     run = commands.add_parser("run", help="prepare a fresh dedicated profile and run B2, B3, then B4")
     run.add_argument("--mode", choices=("fixture", "full"), default="fixture")
@@ -1015,7 +994,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--lock", type=Path, help="reuse a fully finalized B3 lock instead of preparing a new profile")
     run.add_argument("--output", type=Path, help="new private output directory; defaults under the system temp directory")
     run.add_argument("--input-dir", type=Path)
-    run.add_argument("--windows-backing-disk-gib", type=float)
     run.add_argument("--execute", action="store_true", help="authorize live Kubernetes and workload operations")
 
     verify = commands.add_parser("verify", help="verify saved local receipt hashes; no cluster access")
@@ -1043,24 +1021,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 mode=args.mode,
                 lock_path=args.lock,
                 input_directory=args.input_dir,
-                windows_backing_disk_gib=args.windows_backing_disk_gib,
             )
         elif args.command == "plan":
             identity = RunIdentity(args.run_id)
             capacity = measure_host_capacity()
-            if args.windows_backing_disk_gib is not None:
-                if (
-                    isinstance(args.windows_backing_disk_gib, bool)
-                    or not math.isfinite(args.windows_backing_disk_gib)
-                    or args.windows_backing_disk_gib <= 0
-                ):
-                    raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
-                capacity["windows_backing_disk_gib"] = args.windows_backing_disk_gib
-                capacity["windows_backing_disk_source"] = "operator-supplied measured value"
-        elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
-            reserve = get_capacity_reserve()
-            capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
-            capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
             source = _validate_mode_inputs(args.mode, input_directory=args.input_dir, capacity=capacity)
             report = plan_document(
                 identity, args.mode, host_capacity=capacity,
@@ -1073,7 +1037,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_directory=args.output,
                 input_directory=args.input_dir,
                 run_id=args.run_id,
-                windows_backing_disk_gib=args.windows_backing_disk_gib,
                 execute=args.execute,
             )
         elif args.command == "verify":

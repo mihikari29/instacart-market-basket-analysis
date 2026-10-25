@@ -956,16 +956,18 @@ class ApiClient:
     def _raise_backend_error(status: int, payload: Any) -> None:
         if isinstance(payload, dict) and "error" in payload:
             from src.module4.dashboard.schemas import ErrorEnvelope
+            envelope = None
             try:
                 envelope = ErrorEnvelope.model_validate(payload)
+            except Exception:
+                pass
+            if envelope is not None:
                 raise ApiClientError(
                     envelope.error.message[:512],
                     status_code=status,
                     code=envelope.error.code,
                     request_id=envelope.error.request_id[:128],
                 )
-            except Exception:
-                pass
         raise ApiClientError(
             "The dashboard API could not complete this request.", status_code=status, code="http_error"
         )

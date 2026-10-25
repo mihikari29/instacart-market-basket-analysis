@@ -7,7 +7,7 @@ complete receipt before any destructive action.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import math
 import re
 import secrets
