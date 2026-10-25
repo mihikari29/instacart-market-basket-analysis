@@ -14,8 +14,6 @@ jobs:
   full-data:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
-    env:
-      COMPOSE_FILE: compose.yaml:.github/module4-full.override.yml
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

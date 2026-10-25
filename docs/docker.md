@@ -422,7 +422,6 @@ first run and replay:
 ```bash
 # Use a fresh suffix and keep these exports for the entire procedure.
 run_suffix="$(date -u +%Y%m%dT%H%M%SZ)"
-export COMPOSE_FILE=compose.yaml:.github/module4-full.override.yml
 export COMPOSE_PROJECT_NAME="instacart-module4-full-$run_suffix"
 
 # In a fresh checkout, create the Python environment used by the host-side
