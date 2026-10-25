@@ -435,10 +435,9 @@ def _validate_rows(
 
 def _close_cursor(cursor: Any) -> None:
     # Best effort: a cursor that fails to close must not mask the read result.
-    close = getattr(cursor, "close", None)
-    if callable(close):
+    if cursor is not None:
         try:
-            close()
+            cursor.close()
         except Exception:
             pass
 

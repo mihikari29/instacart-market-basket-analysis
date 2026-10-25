@@ -321,7 +321,7 @@ def validate_receipt(identity: RunIdentity, receipt: OwnershipReceipt) -> None:
     if not isinstance(storage, StorageIdentity):
         raise OwnershipError("storage receipt is invalid")
     for attribute, expected in DECLARED_STORAGE_OWNERSHIP.items():
-        if getattr(storage, attribute) != expected:
+        if asdict(storage).get(attribute) != expected:
             raise OwnershipError(f"storage receipt field {attribute} does not match the declaration")
     pvc = actual[("PersistentVolumeClaim", DECLARED_STORAGE_OWNERSHIP["claim_name"])]
     if storage.namespace != identity.namespace or storage.claim_uid != pvc.uid:

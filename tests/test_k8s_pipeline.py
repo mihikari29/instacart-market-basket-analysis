@@ -296,7 +296,7 @@ class PipelinePlannerTests(unittest.TestCase):
                 "PIPELINE_KAFKA_BOOTSTRAP": "kafka:29092",
             }
             with patch.dict(os.environ, env), patch.object(pipeline_task, "RUNTIME_ROOT", root / "runtime"), patch.object(pipeline_task, "INPUT_ROOT", root / "runtime" / "input"), redirect_stdout(io.StringIO()):
-                receipt = pipeline_task.input_stage()
+                receipt = pipeline_task.step_input()
             self.assertEqual(receipt["status"], "completed")
             self.assertEqual(receipt["fixture_manifest"]["scope"], "synthetic_fixture")
             saved = json.loads((root / "runtime/evidence/source-receipt.json").read_text())
@@ -346,7 +346,7 @@ class PipelinePlannerTests(unittest.TestCase):
                 patch.object(pipeline_task, "_subprocess", side_effect=fake_subprocess),
                 patch.dict("sys.modules", {"pyarrow": pyarrow, "pyarrow.parquet": parquet}),
             ):
-                receipt = pipeline_task.module1()
+                receipt = pipeline_task.step_module1()
             clean = calls[0][0]
             self.assertEqual(clean[clean.index("--data-dir") + 1], str(runtime_root / "work" / "module1-offline"))
             self.assertEqual(clean[clean.index("--raw-dir") + 1], str(input_root))
@@ -374,7 +374,7 @@ class PipelinePlannerTests(unittest.TestCase):
             patch.object(pipeline_task, "_subprocess", side_effect=lambda command, **kwargs: calls.append((command, kwargs))),
             patch.object(pipeline_task, "_artifact_inventory", return_value=[]),
         ):
-            pipeline_task.module4()
+            pipeline_task.step_module4()
         self.assertEqual(calls[0][1]["env"]["MODULE4_MONGO_DATABASE"], f"module4d_demo_{self.identity.run_id}")
         self.assertEqual(calls[0][1]["env"]["MODULE4D_MONGO_DATABASE"], f"module4d_demo_{self.identity.run_id}")
 

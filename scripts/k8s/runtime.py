@@ -198,14 +198,20 @@ def measure_host_capacity(*, disk_path: Path | str = "/") -> dict[str, Any]:
 def validate_host_capacity(
     capacity: dict[str, Any], *, phase: str = "b2", require_backing_disk: bool = True
 ) -> None:
-    """Fail closed against documented B2/B3 reserves and unknown WSL backing space."""
+    """Fail closed against configured B2/B3 reserves and unknown backing space."""
     if phase not in {"b2", "b3"}:
         raise RuntimePreflightError("phase must be b2 or b3")
-    # Developer laptops running WSL2 with 16 GB host RAM are capped at ~9.7 GB guest RAM.
-    # When wsl_guest is True and available memory is under 12 GiB, apply the 6.0 GiB reserve.
-    b3_memory = 6.0 if capacity.get("wsl_guest") and (capacity.get("memory_gib") or 0) < 12.0 else 12.0
-    b3_cpu = 4 if capacity.get("wsl_guest") and (capacity.get("cpu_cores") or 0) < 6 else 6
-    minimums = {"b2": (4, 6.0, 20.0), "b3": (b3_cpu, b3_memory, 40.0)}
+
+    from .config import get_capacity_reserve
+    reserve = get_capacity_reserve()
+    configured_cpu = int(reserve.get("cpu_cores", 6))
+    configured_memory = float(reserve.get("memory_gib", 12.0))
+    configured_disk = float(reserve.get("free_disk_gib", 40.0))
+
+    minimums = {
+        "b2": (min(4, configured_cpu), min(6.0, configured_memory), min(20.0, configured_disk)),
+        "b3": (configured_cpu, configured_memory, configured_disk),
+    }
     minimum_cpu, minimum_memory, minimum_disk = minimums[phase]
     for field, minimum in (
         ("cpu_cores", minimum_cpu),

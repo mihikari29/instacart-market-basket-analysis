@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--clean-dir", type=Path, default=CLEAN_DATA_DIR)
     parser.add_argument(
         "--rewrite-datanode-to-localhost", action=argparse.BooleanOptionalAction, default=True,
-        help="Use only for the legacy Compose redirect workaround; pass --no-rewrite-datanode-to-localhost in Kubernetes.",
+        help="Pass --no-rewrite-datanode-to-localhost when running in Kubernetes.",
     )
     parser.add_argument("--interactions-only", action="store_true")
     parser.add_argument("--tree-only", action="store_true")

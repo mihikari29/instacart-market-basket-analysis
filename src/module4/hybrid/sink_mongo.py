@@ -621,8 +621,6 @@ def prepare_hybrid_snapshot(
 
 def ensure_final_recommendation_indexes(collection: Any) -> None:
     """Create and verify the two immutable per-version uniqueness indexes."""
-    if not hasattr(collection, "create_index"):
-        raise HybridSnapshotContractError("final recommendation collection must support create_index")
     for keys, options in _ROW_INDEXES:
         try:
             collection.create_index(keys, **options)
@@ -1227,7 +1225,7 @@ def _compare_and_promote(
         if isinstance(after_error, Mapping) and _pointer_matches(after_error, prepared):
             return "published", False
         raise HybridPublicationPromotionError("per-user pointer promotion failed") from exc
-    if getattr(result, "matched_count", 0) == 1:
+    if result.matched_count == 1:
         try:
             promoted_pointer = readiness.find_one({"_id": pointer_id})
         except Exception as exc:

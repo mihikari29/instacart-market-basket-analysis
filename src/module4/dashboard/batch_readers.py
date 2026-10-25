@@ -145,9 +145,7 @@ def _require_product_index(collection: Any, order: str, max_time_ms: int) -> str
     index_name, expected_keys = PRODUCT_INDEXES[order]
     cursor = None
     try:
-        cursor = collection.list_indexes()
-        if hasattr(cursor, "max_time_ms"):
-            cursor = cursor.max_time_ms(max_time_ms)
+        cursor = collection.list_indexes().max_time_ms(max_time_ms)
         for index in cursor:
             collation = index.get("collation")
             if collation is None:
@@ -168,7 +166,7 @@ def _require_product_index(collection: Any, order: str, max_time_ms: int) -> str
     except PyMongoError as exc:
         raise BatchDatabaseFailure("MongoDB index metadata could not be read") from exc
     finally:
-        if cursor is not None and hasattr(cursor, "close"):
+        if cursor is not None:
             try:
                 cursor.close()
             except PyMongoError:

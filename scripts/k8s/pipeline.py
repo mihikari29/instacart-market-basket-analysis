@@ -968,11 +968,12 @@ def validate_pipeline_plan(
         host_capacity=host_capacity or lock.get("host_capacity"),
         source_receipt_sha256=(source_receipt_sha256 if plan["mode"] == "full" else None),
     )
+    expected_plan_dict = asdict(expected_plan)
     for field in (
         "hdfs_root", "topic", "trend_source_namespace", "fixture_max_users",
         "fixture_max_events", "execution_model",
     ):
-        if plan.get(field) != getattr(expected_plan, field):
+        if plan.get(field) != expected_plan_dict.get(field):
             raise PipelineError(f"private B3 {field} does not match the validated run plan")
     expected_steps = [asdict(step) for step in _step_specs(identity, plan["mode"])]
     if plan.get("steps") != expected_steps:

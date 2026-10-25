@@ -8,7 +8,6 @@ from typing import Any
 import yaml
 
 PIPELINE_CONFIG_DEFAULT = Path(__file__).resolve().parents[2] / "config" / "pipeline.yaml"
-TIMEOUTS_FILE_DEFAULT = Path(__file__).resolve().parents[2] / "deploy" / "k8s" / "timeouts.yaml"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "synthesis": {
@@ -93,7 +92,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def load_timeouts_config(path: Path | str | None = None) -> dict[str, Any]:
-    """Load configuration from pipeline.yaml or timeouts.yaml with defaults fallback."""
+    """Load configuration from pipeline.yaml with defaults fallback."""
     config_path = None
     if path:
         config_path = Path(path)
@@ -101,10 +100,6 @@ def load_timeouts_config(path: Path | str | None = None) -> dict[str, Any]:
         config_path = Path(os.environ["IT4931_PIPELINE_CONFIG"])
     elif PIPELINE_CONFIG_DEFAULT.is_file():
         config_path = PIPELINE_CONFIG_DEFAULT
-    elif os.environ.get("IT4931_TIMEOUTS_FILE"):
-        config_path = Path(os.environ["IT4931_TIMEOUTS_FILE"])
-    elif TIMEOUTS_FILE_DEFAULT.is_file():
-        config_path = TIMEOUTS_FILE_DEFAULT
 
     if config_path and config_path.is_file():
         try:

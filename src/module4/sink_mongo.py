@@ -133,8 +133,7 @@ def _write_snapshot(db, collection_name, documents, ensure_indexes, version_fiel
         try:
             temp.drop()
         except Exception as cleanup_error:
-            if hasattr(exc, "add_note"):
-                exc.add_note(f"Could not remove owned temporary collection {temp_name}: {cleanup_error}")
+            exc.add_note(f"Could not remove owned temporary collection {temp_name}: {cleanup_error}")
         raise
 
 
@@ -239,9 +238,9 @@ def publication_lock(config, run_id, lease_minutes=180):
                 if result.deleted_count != 1:
                     raise RuntimeError("Module 4 MongoDB writer lock ownership was lost")
             except Exception as cleanup_error:
-                if active_error is not None and hasattr(active_error, "add_note"):
+                if active_error is not None:
                     active_error.add_note(f"Could not release MongoDB writer lock: {cleanup_error}")
-                elif active_error is None:
+                else:
                     raise
 
 

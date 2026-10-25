@@ -638,14 +638,6 @@ STEPS = {
     "hybrid": step_hybrid,
 }
 
-# Monotonic aliases for backward compatibility
-input_stage = step_input
-module1 = step_module1
-module2 = step_module2
-module4 = step_module4
-replay = step_replay
-hybrid = step_hybrid
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)

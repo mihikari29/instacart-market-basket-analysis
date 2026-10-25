@@ -31,7 +31,7 @@ def make_internal_holdout(prior_enriched, official_train_order_ids=None):
             except Exception as cleanup_error:
                 if original_error is None:
                     raise
-                if hasattr(original_error, "add_note"):
+                if original_error is not None:
                     original_error.add_note(f"Split cache cleanup failed: {cleanup_error}")
 
 

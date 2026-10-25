@@ -363,11 +363,12 @@ def validate_user_feature_columns(columns: Sequence[str]) -> None:
 def _feature_record_mapping(row: Any) -> Mapping[str, Any]:
     if isinstance(row, Mapping):
         return row
-    as_dict = getattr(row, "asDict", None)
-    if callable(as_dict):
-        result = as_dict(recursive=True)
+    try:
+        result = row.asDict(recursive=True)
         if isinstance(result, Mapping):
             return result
+    except (AttributeError, TypeError):
+        pass
     raise ValueError("Module 2 user_features returned a non-record row")
 
 

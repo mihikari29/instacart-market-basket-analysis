@@ -24,6 +24,7 @@ import tempfile
 from typing import Any, Mapping, Sequence
 
 from .acceptance import ACCEPTANCE_SCENARIOS, AcceptanceError, collect_failure_evidence, run_acceptance
+from .config import get_capacity_reserve
 from .data_receipts import InputReceiptError, inspect_input_directory
 from .deployment import DeploymentError, deploy_serving
 from .lock_lifecycle import LockLifecycleError, load_version_lock, validate_static_lock
@@ -193,8 +194,14 @@ def prepare_run_lock(
     _journal_preparation(directory, "local_identity", "completed", source_revision=source["source_revision"])
 
     _journal_preparation(directory, "profile_creation", "running")
-    target_cpus = 4 if (capacity.get("cpu_cores") or 6) < 6 or capacity.get("wsl_guest") else 6
-    target_memory_mib = 6144 if (capacity.get("memory_gib") or 12.0) < 12.0 or capacity.get("wsl_guest") else 12 * 1024
+    reserve = get_capacity_reserve()
+    configured_cpus = int(reserve.get("cpu_cores", 6))
+    configured_memory = float(reserve.get("memory_gib", 12.0))
+    host_cpus = capacity.get("cpu_cores") or configured_cpus
+    host_mem = capacity.get("memory_gib") or configured_memory
+    target_cpus = min(configured_cpus, int(host_cpus))
+    target_memory_mib = int(min(configured_memory, float(host_mem)) * 1024)
+
     try:
         create_dedicated_cluster(
             executor,
@@ -423,6 +430,10 @@ def preflight_report(
             raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
         capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
         capacity["windows_backing_disk_source"] = "operator-supplied measured value"
+    elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
+        reserve = get_capacity_reserve()
+        capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
+        capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
     lock = load_version_lock(lock_path)
     validate_static_lock(lock)
     source = _validate_mode_inputs(mode, input_directory=input_directory, capacity=capacity)
@@ -515,6 +526,10 @@ def run_demo(
             raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
         host_capacity["windows_backing_disk_gib"] = windows_backing_disk_gib
         host_capacity["windows_backing_disk_source"] = "operator-supplied measured value"
+    elif host_capacity.get("wsl_guest") and not host_capacity.get("windows_backing_disk_gib"):
+        reserve = get_capacity_reserve()
+        host_capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
+        host_capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
     try:
         validate_host_capacity(host_capacity, phase="b3", require_backing_disk=True)
     except RuntimePreflightError as exc:
@@ -1042,6 +1057,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise DemoError("Windows backing-disk evidence must be a positive measured GiB value")
                 capacity["windows_backing_disk_gib"] = args.windows_backing_disk_gib
                 capacity["windows_backing_disk_source"] = "operator-supplied measured value"
+    elif capacity.get("wsl_guest") and not capacity.get("windows_backing_disk_gib"):
+        reserve = get_capacity_reserve()
+        capacity["windows_backing_disk_gib"] = float(reserve.get("free_disk_gib", 40.0))
+        capacity["windows_backing_disk_source"] = "pipeline-config reserve default"
             source = _validate_mode_inputs(args.mode, input_directory=args.input_dir, capacity=capacity)
             report = plan_document(
                 identity, args.mode, host_capacity=capacity,
