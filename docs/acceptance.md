@@ -173,24 +173,6 @@ Measure additional space for source copies, images, temporary files, models,
 and retained evidence on their actual filesystems. Reserve checks are admission
 conditions, not throughput or latency guarantees.
 
-Use an empty Bash array on Linux:
-
-```bash
-WSL_ARGS=()
-```
-
-On WSL2, first inspect the Windows drive that actually backs the WSL/Docker
-storage, record its current free GiB and timestamp, then enter that measured
-value:
-
-```bash
-read -r -p 'Measured Windows backing-disk free GiB: ' WINDOWS_BACKING_DISK_GIB
-WSL_ARGS=(--windows-backing-disk-gib "$WINDOWS_BACKING_DISK_GIB")
-```
-
-This prompt records a measurement; it does not perform the Windows measurement.
-Pass `"${WSL_ARGS[@]}"` independently to every applicable preflight, plan, and
-run command. A previous invocation does not persist this value.
 
 ### P0.4 — Source data and provenance
 
@@ -662,9 +644,9 @@ symlinks and unsafe/nested managed locations.
 | Side effects | READ_ONLY local inspection; input hashing may be RESOURCE_INTENSIVE in full mode; LOCAL_WRITE if outputs are saved. |
 
 ```bash
-python3 -m scripts.k8s.demo preflight --mode fixture "${WSL_ARGS[@]}"
+python3 -m scripts.k8s.demo preflight --mode fixture
 python3 -m scripts.k8s.demo plan --mode fixture \
-  --run-id "$FIXTURE_RUN_ID" "${WSL_ARGS[@]}"
+  --run-id "$FIXTURE_RUN_ID"
 ```
 
 Preflight reports `checks.required_executables_present`,
@@ -690,7 +672,7 @@ prerequisites through their owning phases as well.
 ```bash
 python3 -m scripts.k8s.demo run --mode fixture \
   --run-id "$FIXTURE_RUN_ID" --output "$FIXTURE_OUTPUT" \
-  "${WSL_ARGS[@]}" --execute
+  --execute
 ```
 
 B2 establishes serving and ownership; B3 performs the isolated pipeline; B4
@@ -854,9 +836,9 @@ its domain/key/relationship checks.
 FULL_RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
 FULL_OUTPUT="$EVIDENCE_ROOT/k8s-full-$FULL_RUN_ID"
 python3 -m scripts.k8s.demo preflight --mode full \
-  --input-dir "$FULL_INPUT_DIR" "${WSL_ARGS[@]}"
+  --input-dir "$FULL_INPUT_DIR"
 python3 -m scripts.k8s.demo plan --mode full --run-id "$FULL_RUN_ID" \
-  --input-dir "$FULL_INPUT_DIR" "${WSL_ARGS[@]}"
+  --input-dir "$FULL_INPUT_DIR"
 ```
 
 Inspect readiness, blockers, source receipt, plan and fresh paths as in P4.1/P4.2.
@@ -865,7 +847,7 @@ Only after those gates and explicit authorization:
 ```bash
 python3 -m scripts.k8s.demo run --mode full --run-id "$FULL_RUN_ID" \
   --input-dir "$FULL_INPUT_DIR" --output "$FULL_OUTPUT" \
-  "${WSL_ARGS[@]}" --execute
+  --execute
 ```
 
 The current full replay retains the entire generated feed at 1,000 events/s
