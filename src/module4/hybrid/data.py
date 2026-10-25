@@ -180,19 +180,22 @@ def _read_als_recommendations(
     if len(rows) > MAX_SOURCE_RECOMMENDATIONS:
         raise SourceSnapshotError("ALS recommendations exceed the published Top-20 bound")
 
-    catalog_sample = _bounded_documents(
-        database[config.mongo_graph_collection],
-        {"graph_version": identity.graph_version, "run_id": identity.run_id},
-        {"_id": 0, "product_id": 1},
-        [("product_id", 1)],
-        config.recommendation_k,
-        "graph/catalog",
-    )
-    expected_count = min(config.recommendation_k, len(catalog_sample)) if catalog_sample else config.recommendation_k
+    expected_count = config.recommendation_k
     if rows and len(rows) != expected_count:
-        raise SourceSnapshotError(
-            f"ALS recommendations are truncated: found {len(rows)} rows; expected {expected_count}"
+        catalog_sample = _bounded_documents(
+            database[config.mongo_graph_collection],
+            {"graph_version": identity.graph_version, "run_id": identity.run_id},
+            {"_id": 0, "product_id": 1},
+            [("product_id", 1)],
+            expected_count,
+            "graph/catalog",
         )
+        if catalog_sample and len(rows) == len(catalog_sample):
+            expected_count = len(catalog_sample)
+        else:
+            raise SourceSnapshotError(
+                f"ALS recommendations are truncated: found {len(rows)} rows; expected {expected_count}"
+            )
 
     recommendations = []
     product_ids: set[int] = set()
