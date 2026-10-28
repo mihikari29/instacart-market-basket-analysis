@@ -10,7 +10,7 @@ import os
 import re
 import sys
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import urlopen
 
 from playwright.sync_api import Page, expect, sync_playwright
@@ -82,6 +82,24 @@ def _select_option(page: Page, label: str, option: str) -> None:
     expect(choice).to_be_visible(timeout=5_000)
     choice.click()
     expect(selector).to_have_value(option, timeout=5_000)
+
+
+def _wait_for_evaluation_evidence(page: Page) -> None:
+    """Wait for the later C8B section before taking the evaluation text snapshot."""
+    heading = "Recorded Spark batch durations (milliseconds)"
+    try:
+        expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible(timeout=20_000)
+    except AssertionError as exc:
+        url = urlsplit(page.url)
+        headings = page.locator("h1:visible, h2:visible, h3:visible").all_text_contents()
+        visible_headings = [value[:120] for value in headings[:20]]
+        raise RuntimeError(
+            f"evaluation page did not render required evidence heading {heading!r}; "
+            f"url_origin={url.scheme}://{url.hostname}:{url.port}, "
+            f"visible_headings={visible_headings}, "
+            f"charts={page.locator('[data-testid=stVegaLiteChart]').count()}, "
+            f"exceptions={page.locator('[data-testid=stException]').count()}"
+        ) from exc
 
 
 def _wait_for_chart_minimum(page: Page, minimum: int, section: str, expected: str) -> int:
@@ -225,6 +243,7 @@ def run() -> dict[str, Any]:
         expect(page.get_by_text("Structured shuffle metrics unavailable", exact=False)).to_be_visible(timeout=20_000)
         expect(page.get_by_text("Finalized windows", exact=True)).to_be_visible(timeout=20_000)
         expect(page.get_by_text("Planned events", exact=True)).to_be_visible(timeout=20_000)
+        _wait_for_evaluation_evidence(page)
         evaluation_text = _all_text(page)
         if "0.121472" not in evaluation_text or "0.319232" not in evaluation_text:
             raise RuntimeError("evaluation page omitted accepted ALS and personal-frequency Recall@10 values")
