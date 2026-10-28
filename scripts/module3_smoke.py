@@ -9,6 +9,7 @@ and reads only new records.
 from __future__ import annotations
 
 from __future__ import annotations
+from collections.abc import Sequence
 import os
 from pathlib import Path
 import re
@@ -115,14 +116,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 
-def run_live(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--events", type=int, default=50_000)
-    parser.add_argument("--duration-seconds", type=int, default=120)
-    parser.add_argument("--feed", type=Path, default=Path("data/synthesized/module3_dev"))
-    parser.add_argument("--output", type=Path, default=Path("results/module3/smoke"))
-    parser.add_argument("--top-k", type=int, default=20)
-    args = parser.parse_args(argv)
+def run_live(args: argparse.Namespace) -> int:
     if args.events < 1 or args.duration_seconds < 20:
         raise ValueError("Smoke requires positive events and at least 20 seconds")
 
@@ -341,11 +335,7 @@ def _non_empty_total(rows: list[dict]) -> int:
 
 
 
-def run_recovery(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--duration-seconds", type=int, default=25)
-    parser.add_argument("--output", type=Path, default=Path("results/module3/recovery"))
-    args = parser.parse_args(argv)
+def run_recovery(args: argparse.Namespace) -> int:
     if args.duration_seconds < 15:
         raise ValueError("Recovery runs require at least 15 seconds")
 
@@ -495,7 +485,7 @@ with MongoClient('mongodb://mongodb:27017/instacart') as client:
     return 0
 
 
-def main(argv=None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Run one Module 3 smoke scenario."""
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="scenario", required=True)
