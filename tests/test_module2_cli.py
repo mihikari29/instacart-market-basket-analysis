@@ -20,6 +20,8 @@ from src.module2 import cli
 
 @pytest.fixture
 def cli_runtime(monkeypatch):
+    monkeypatch.delenv("MODULE2_ROOT", raising=False)
+    monkeypatch.delenv("SPARK_MASTER", raising=False)
     monkeypatch.setattr(runtime, "subprocess", SimpleNamespace(
         check_output=Mock(side_effect=FileNotFoundError("git unavailable")),
         CalledProcessError=subprocess.CalledProcessError,
@@ -75,6 +77,23 @@ def test_validate_records_revision_and_environment(tmp_path, monkeypatch, cli_ru
     assert environment["spark"] == "3.5.5"
     assert environment["java"] == "17.0.14"
     assert environment["spark_conf"] == {"spark.master": "local[2]", "spark.sql.shuffle.partitions": "8"}
+    cli_runtime.stop.assert_called_once_with()
+
+
+def test_validate_records_explicit_environment(tmp_path, monkeypatch, cli_runtime):
+    monkeypatch.setenv("MODULE2_ROOT", "file:///isolated-fixture")
+    monkeypatch.setenv("SPARK_MASTER", "spark://fixture-master:7077")
+
+    assert cli.main(["validate", "--output", str(tmp_path), "--run-id", "environment-test"]) == 0
+
+    report = json.loads((tmp_path / "environment-test" / "summary.json").read_text())
+    assert report["environment"]["config"] == asdict(
+        cli.Config(root="file:///isolated-fixture", master="spark://fixture-master:7077")
+    )
+    cli.session.assert_called_once()
+    config = cli.session.call_args.args[0]
+    assert config.root == "file:///isolated-fixture"
+    assert config.master == "spark://fixture-master:7077"
     cli_runtime.stop.assert_called_once_with()
 
 
