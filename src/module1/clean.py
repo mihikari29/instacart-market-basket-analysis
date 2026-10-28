@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import math
 import os
 import re
 import shutil
@@ -150,10 +149,12 @@ def _validate_raw_tables(tables: dict[str, pd.DataFrame]) -> None:
 
     orders = tables["orders"]
     gaps = orders["days_since_prior_order"].astype("string")
-    blank_gap = gaps.eq("")
+    blank_gap = gaps.eq("").fillna(False)
     numeric_gap = gaps.str.fullmatch(_NUMBER.pattern, na=False)
     gap_values = pd.to_numeric(gaps.where(numeric_gap), errors="coerce")
-    invalid_gap = (~blank_gap & (~numeric_gap | gap_values.isna() | ~gap_values.map(math.isfinite) | (gap_values < 0) | (gap_values > 30)))
+    # The bounded range excludes infinities; missing parse results fail closed.
+    valid_gap = gap_values.between(0, 30).fillna(False)
+    invalid_gap = ~blank_gap & (~numeric_gap | ~valid_gap)
     if invalid_gap.any():
         row = int(invalid_gap[invalid_gap].index[0]) + 2
         errors.append(f"orders.csv row {row}: days_since_prior_order must be blank or a finite number in [0, 30]")
