@@ -194,11 +194,14 @@ def stage_interactions(
 def stage_places(client: InsecureClient, *, hdfs_root: str = HDFS_ROOT) -> None:
     for path in (
         f"{hdfs_root}/features/user_features",
+        f"{hdfs_root}/features/user_behavior_features",
+        f"{hdfs_root}/features/product_features",
+        f"{hdfs_root}/features/user_product_features",
         f"{hdfs_root}/features/als_interactions",
         f"{hdfs_root}/models/als",
     ):
         ensure_dirs(client, path)
-    print("[place] features/{user_features,als_interactions}, models/als created", flush=True)
+    print("[place] features, models/als directory tree created", flush=True)
 
 
 def print_tree(client: InsecureClient, path: str, depth: int = 0) -> None:

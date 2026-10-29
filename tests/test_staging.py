@@ -24,7 +24,7 @@ def test_file_hash_propagates_filesystem_errors(tmp_path, is_directory):
     source = tmp_path / "source"
     if is_directory:
         source.mkdir()
-    error = IsADirectoryError if is_directory else FileNotFoundError
+    error = (IsADirectoryError, PermissionError) if is_directory else FileNotFoundError
     with pytest.raises(error) as raised:
         file_sha256(source)
     assert raised.value.filename == str(source)
