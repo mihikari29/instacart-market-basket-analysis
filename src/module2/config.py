@@ -50,9 +50,9 @@ class Config:
         """Resolve a curated table by its logical key in TABLES."""
         return self.root.rstrip("/") + "/curated/" + TABLES[name]
 
-    def features(self) -> str:
-        """Return the user-feature handoff path consumed by Module 4."""
-        return self.root.rstrip("/") + "/features/user_features"
+    def features(self, kind: str = "user_features") -> str:
+        """Return the feature handoff path consumed by downstream stages."""
+        return self.root.rstrip("/") + f"/features/{kind}"
 
     @classmethod
     def environment(cls, **overrides) -> "Config":
