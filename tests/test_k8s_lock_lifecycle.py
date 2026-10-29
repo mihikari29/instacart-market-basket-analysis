@@ -15,7 +15,6 @@ from scripts.k8s.lock_lifecycle import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-_FAKE_DIGEST_A = "sha256:" + "a" * 64
 _FAKE_DIGEST_B = "sha256:" + "b" * 64
 
 

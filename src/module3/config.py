@@ -6,19 +6,51 @@ reproducible from the run summary alone.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 import os
 from pathlib import Path
 import re
 
 # Re-exported so `from .config import parse_bool` keeps working for callers
 # that treat the Module 3 configuration module as the owner of the flag.
-from ..common.runtime import parse_bool
+from ..common.runtime import env_int, finite_number, parse_bool, positive_int
 
 DEFAULT_TOPIC = "instacart-purchase-events"
 DEFAULT_MONGO_TOP_K = 20
 DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
 MAX_TREND_BUNDLE_TOP_K = 20
+MIN_BENCHMARK_SECONDS = 12
 _STABLE_LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*\Z")
+_INTERVAL_PART = re.compile(
+    r"\s*([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))\s+"
+    r"(weeks?|days?|hours?|minutes?|seconds?|milliseconds?|microseconds?)\b", re.IGNORECASE
+)
+_INTERVAL_UNITS = {"week": 604800000000, "day": 86400000000, "hour": 3600000000,
+                   "minute": 60000000, "second": 1000000, "millisecond": 1000, "microsecond": 1}
+
+
+def _interval_microseconds(value: str, field: str) -> int:
+    """Validate Spark's fixed-length interval components without starting Spark."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a fixed-length Spark interval")
+    text = value.strip()
+    if text.lower().startswith("interval ") and field != "window_short":
+        text = text[len("interval "):].strip()
+    position = 0
+    total = Decimal(0)
+    while position < len(text):
+        part = _INTERVAL_PART.match(text, position)
+        if part is None:
+            raise ValueError(f"{field} must use fixed-length Spark interval units")
+        amount, unit = part.groups()
+        unit = unit.lower().rstrip("s")
+        if "." in amount and unit != "second":
+            raise ValueError(f"{field} permits fractional amounts only for seconds")
+        total += Decimal(amount) * _INTERVAL_UNITS[unit]
+        position = part.end()
+    if total != total.to_integral_value() or not 0 <= total <= 2**63 - 1:
+        raise ValueError(f"{field} must be a non-negative interval with microsecond precision")
+    return int(total)
 
 
 def _validate_stable_label(value: str | None, field: str, maximum: int) -> None:
@@ -71,6 +103,8 @@ class Config:
     mongo_top_k_per_window: int = DEFAULT_MONGO_TOP_K
     ttl_seconds: int = DEFAULT_TTL_SECONDS
     checkpoint_dir: str = "checkpoint"
+    # Kept in the public config/report schema. Actual checkpoint paths are
+    # owned by run_stream(checkpoint_root=...) and ensure_checkpoint().
 
     # Optional immutable finalized-window bundle publication.
     publish_trend_bundles: bool = False
@@ -78,20 +112,47 @@ class Config:
     trend_source_scope: str = "unknown_or_mixed"
 
     def __post_init__(self) -> None:
-        if self.shuffle_partitions < 1 or self.repetitions < 3 or self.warmups < 1:
+        for name, value in (("shuffle_partitions", self.shuffle_partitions), ("repetitions", self.repetitions), ("warmups", self.warmups)):
+            positive_int(value, name)
+        if self.repetitions < 3:
             raise ValueError("Require positive partitions, >=3 measured runs and >=1 warm-up")
-        if not self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
+        if not isinstance(self.root, str) or not self.root.strip() or "\x00" in self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
             raise ValueError("An explicit dataset root is required")
-        if not 0.0 <= self.weight_short <= 1.0 or not 0.0 <= self.weight_long <= 1.0:
+        if not isinstance(self.master, str) or not self.master.strip() or "\x00" in self.master:
+            raise ValueError("Spark master must not be empty or contain NUL")
+        short_weight = finite_number(self.weight_short, "weight_short")
+        long_weight = finite_number(self.weight_long, "weight_long")
+        if not 0.0 <= short_weight <= 1.0 or not 0.0 <= long_weight <= 1.0:
             raise ValueError("Trend weights must lie in [0, 1]")
         if abs(self.weight_short + self.weight_long - 1.0) > 1e-9:
             raise ValueError("Trend weights must sum to 1.0")
-        if self.ttl_seconds < 0:
+        if type(self.ttl_seconds) is not int or self.ttl_seconds < 0:
             raise ValueError("ttl_seconds must be non-negative (0 disables TTL)")
-        if self.mongo_top_k_per_window <= 0:
-            raise ValueError("mongo_top_k_per_window must be positive")
-        if not self.topic or not self.bootstrap_servers:
+        positive_int(self.mongo_top_k_per_window, "mongo_top_k_per_window")
+        if not isinstance(self.topic, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,249}", self.topic) or self.topic in {".", ".."}:
+            raise ValueError("topic must be a valid Kafka topic name")
+        if not isinstance(self.bootstrap_servers, str) or not self.bootstrap_servers.strip() or "\x00" in self.bootstrap_servers:
             raise ValueError("Kafka topic and bootstrap servers are required")
+        if not isinstance(self.mongodb_uri, str) or not self.mongodb_uri.strip() or "\x00" in self.mongodb_uri:
+            raise ValueError("mongodb_uri must not be empty or contain NUL")
+        for name, value, forbidden in (
+            ("mongo_database", self.mongo_database, (".", "$", "\x00", "/", "\\", " ")),
+            ("mongo_collection", self.mongo_collection, ("$", "\x00")),
+        ):
+            if not isinstance(value, str) or not value.strip() or any(character in value for character in forbidden):
+                raise ValueError(f"{name} must be a valid MongoDB identifier")
+        short = _interval_microseconds(self.window_short, "window_short")
+        long = _interval_microseconds(self.window_long, "window_long")
+        slide = _interval_microseconds(self.slide, "slide")
+        if short == 0 or long == 0 or slide == 0:
+            raise ValueError("window_short, window_long and slide must be positive intervals")
+        if short > long:
+            raise ValueError("window_short must not exceed window_long")
+        if slide > long:
+            raise ValueError("slide must not exceed window_long")
+        _interval_microseconds(self.watermark, "watermark")
+        if self.trigger_interval not in (None, ""):
+            _interval_microseconds(self.trigger_interval, "trigger_interval")
         if not isinstance(self.fail_on_data_loss, bool):
             raise ValueError("fail_on_data_loss must be a boolean")
         if not isinstance(self.publish_trend_bundles, bool):
@@ -124,22 +185,7 @@ class Config:
             "bootstrap_servers": os.environ.get(
                 "KAFKA_BOOTSTRAP_SERVERS", cls.bootstrap_servers
             ),
-            "fail_on_data_loss": parse_bool(
-                os.environ.get(
-                    "MODULE3_FAIL_ON_DATA_LOSS", str(cls.fail_on_data_loss)
-                )
-            ),
             "mongodb_uri": os.environ.get("MONGODB_URI", cls.mongodb_uri),
-            "mongo_top_k_per_window": int(
-                os.environ.get("MONGO_TOP_K_PER_WINDOW", cls.mongo_top_k_per_window)
-            ),
-            "ttl_seconds": int(os.environ.get("MONGO_TTL_SECONDS", cls.ttl_seconds)),
-            "publish_trend_bundles": parse_bool(
-                os.environ.get(
-                    "MODULE3_PUBLISH_TREND_BUNDLES",
-                    str(cls.publish_trend_bundles),
-                )
-            ),
             "trend_source_namespace": os.environ.get(
                 "MODULE3_TREND_SOURCE_NAMESPACE", cls.trend_source_namespace
             ),
@@ -147,6 +193,18 @@ class Config:
                 "MODULE3_TREND_SOURCE_SCOPE", cls.trend_source_scope
             ),
         }
+        for field, variable, default in (
+            ("mongo_top_k_per_window", "MONGO_TOP_K_PER_WINDOW", cls.mongo_top_k_per_window),
+            ("ttl_seconds", "MONGO_TTL_SECONDS", cls.ttl_seconds),
+        ):
+            if field not in overrides:
+                values[field] = env_int(variable, default)
+        for field, variable, default in (
+            ("fail_on_data_loss", "MODULE3_FAIL_ON_DATA_LOSS", cls.fail_on_data_loss),
+            ("publish_trend_bundles", "MODULE3_PUBLISH_TREND_BUNDLES", cls.publish_trend_bundles),
+        ):
+            if field not in overrides:
+                values[field] = parse_bool(os.environ.get(variable, str(default)))
         values.update(overrides)
         return cls(**values)
 

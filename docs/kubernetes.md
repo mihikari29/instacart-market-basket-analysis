@@ -2,7 +2,7 @@
 
 ## Status and relationship to the Proposal
 
-**CODE COMPLETE — READY FOR EXTERNAL ACCEPTANCE; RUNTIME ACCEPTANCE PENDING.**
+**Implementation available; Kubernetes runtime acceptance remains pending.**
 The implementation targets a bounded Lambda demonstration in one dedicated
 local Minikube profile. It owns its HDFS, Kafka, MongoDB, Spark, API, dashboard
 resources, and storage. Spark runs in local mode inside Kubernetes-managed
@@ -10,7 +10,7 @@ Jobs. This is a single-node course demonstration, not a high-availability or
 production-capacity design. See [project status](progress.md) for the current
 verification summary.
 
-The approved [Proposal](Proposal.md) remains the requirements baseline. Its
+The repository [Proposal](Proposal.md) is retained as the requirements baseline. Its
 §§3.1, 36.2, 39, 42, and 45 define the demonstration, acceptance, and
 deliverables. This implementation follows the fully isolated topology. A real
 runtime demonstration is still required to close the Proposal requirements.
@@ -24,7 +24,7 @@ ALS API/dashboard view and the prior-only Hybrid evaluation harness.
 live service probe, or teardown has been accepted for this implementation.
 Offline receipts and tests are not Kubernetes runtime acceptance.
 
-## Implemented phases
+## Implemented components
 
 - **B1 — static foundation:** serving manifests, identity contract, image
   packaging target, version lock, runbook, and pure/static checks.
@@ -35,7 +35,7 @@ Offline receipts and tests are not Kubernetes runtime acceptance.
   Module 1/2/4, and Hybrid Jobs use run-specific PVCs, names, manifests, and receipts.
 - **B4 — acceptance and teardown:** the runtime scenario collector, sanitized
   failure evidence, and separately gated exact-profile/namespace teardown are implemented.
-- **M6 — one-session coordinator:** `python3 -m scripts.k8s.demo run --mode fixture
+- **Coordinator:** `python3 -m scripts.k8s.demo run --mode fixture
   --execute` can discover a fresh run identity, create the dedicated profile,
   build and inspect images, finalize the lock, deploy B2/B3, run B4, and retain
   evidence. `preflight`, `plan`, `verify`, `collect`, and `teardown` are separate
@@ -250,13 +250,13 @@ Profile-specific image loading follows the [Minikube image-loading guide](https:
 
 ## Verification and remaining runtime checks
 
-The reviewed implementation passed offline fake-client, static, runner, and
-local-rendering checks. The broad offline suite reported 803 passed and 7
-skipped; see the [acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries) for the
-recorded development checks and their scope. Offline checks do not exercise
-Docker, Minikube, Kubernetes, live MongoDB, or deployed application behavior.
+Offline fake-client, static, runner and local-rendering checks exercise source
+contracts. [Project status](progress.md) owns the current verification summary;
+the [acceptance appendix](acceptance.md#historical-development-record) records
+the older host-check scope and missing artifacts. Neither those checks nor
+cached package imports establish deployed Kubernetes behavior.
 
-The following remain **RUNTIME NOT VERIFIED**: image builds and image loading;
+Fresh Kubernetes acceptance still requires qualifying image builds and loading;
 Minikube scheduling and DNS; PVC/PV behavior; MongoDB initialization with
 authentication enabled; creation and denial of admin, publisher, and API
 permissions; startup/liveness/readiness behavior; API query and index
@@ -455,7 +455,10 @@ receipt checks the shared source hash, output checksum, actual master, runtime,
 input size, and task/shuffle metrics. This compares local thread pools; it does
 not claim distributed executor scaling.
 
-Automatic resume is disabled. After a failed run, inspect the session and
+The coordinator does not automatically recover a failed run. Container-step
+receipt reuse is a separate `execution.resume_policy` behavior; see
+[configuration and recovery boundaries](progress.md#configuration-and-recovery-boundaries).
+After a failed run, inspect the session and
 preparation state, `collect` sanitized evidence, and confirm which Jobs,
 checkpoints, and PVCs exist. Use a verified continuation only if an explicit
 recovery procedure can bind the live ownership receipts and Kafka offsets to
@@ -534,8 +537,9 @@ runtime acceptance. The test matrix and evidence scope are recorded in
   part of the B4 runtime-pass receipt.
 - WSL backing disk is operator-supplied evidence and is not independently
   inspected by the CLI.
-- Automatic resume is intentionally disabled. The runner requires a new run
-  identity and fresh output path; it does not resume Kafka offsets/checkpoints.
+- Automatic coordinator recovery is unavailable. It requires a new run
+  identity and fresh output path; task-level reuse does not establish safe
+  Kafka offset/checkpoint recovery.
 - B4 verifies NetworkPolicy behavior only at runtime. Static manifest validity
   does not establish that the chosen CNI enforces the intended flows.
 - The automated B3 comparison measures local thread pools. Proposal §15.6

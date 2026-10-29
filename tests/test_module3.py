@@ -139,6 +139,17 @@ def test_kafka_event_schema_round_trip(spark_session):
     assert collected["event_time_epoch_ms"] == base
 
 
+@pytest.mark.parametrize("short,long,slide", [
+    ("90 seconds", "5 minutes", "2 minutes"),
+    ("1.5 seconds", "5 seconds", "2 seconds"),
+])
+def test_validated_intervals_remain_compatible_with_spark(spark_session, short, long, slide):
+    config = Config(window_short=short, window_long=long, slide=slide, watermark="0 seconds")
+    counts = build_window_counts(make_events_dataframe(spark_session), config).collect()
+    assert counts
+    assert all(0 <= row.purchase_count_30m <= row.purchase_count_120m for row in counts)
+
+
 def test_poison_pill_product_id_falls_to_null_and_drops(spark_session):
     """Producer --inject poison corrupts product_id to string 'MALFORMED'.
 

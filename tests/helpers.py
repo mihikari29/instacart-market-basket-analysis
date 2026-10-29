@@ -47,7 +47,6 @@ def context_paths(ignore_file: Path, relative_paths: list[str]) -> dict[str, boo
 
 def context_paths_from_lines(ignore_lines: list[str], relative_paths: list[str]) -> dict[str, bool]:
     """Return the admission decision for each path."""
-    included = False
     decisions: dict[str, bool] = {}
     for path in relative_paths:
         included = False

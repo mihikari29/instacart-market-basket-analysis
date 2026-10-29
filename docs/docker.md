@@ -236,7 +236,13 @@ docker compose --profile tools run --rm --use-aliases --no-deps module2 all
 ```
 
 Every command writes a unique `results/module2/<run-id>/summary.json` and Spark
-event log. `stats` and `all` also write `analytics.json` and per-run Parquet
+event log. After run initialization, runtime failures save a failed report and
+print sanitized diagnostics; `src.module2.cli.main()` returns `1`, which its
+module entry point and process wrappers propagate as a nonzero exit status.
+Spark cleanup runs once, and a cleanup failure does not replace an earlier
+failure in the report. Invalid arguments and existing output paths fail before
+Spark starts and preserve existing artifacts.
+`stats` and `all` also write `analytics.json` and per-run Parquet
 outputs, and overwrite HDFS `/instacart/features/user_features`; unless `--skip-serving` is
 passed, they also publish to MongoDB `batch_product_metrics` and
 `department_metrics` using the configured `MONGODB_URI`. The three benchmark
@@ -481,10 +487,10 @@ docker compose --profile tools run --rm --no-deps --entrypoint python3 module4 \
 The checker requires a passed full-data A/B publication and verifies the active
 readiness pointer, counts, versions, indexes, and logical snapshot digests;
 replay also checks the same source/config/version and rounds floating values to
-six decimal places. See the [dated October 10 acceptance record](evidence/module4/acceptance-20261010/README.md)
-and its [exact environment-specific commands](evidence/module4/acceptance-20261010/run-acceptance.sh)
-for the historical WSL storage mount and accepted measurements. That record is
-not a portable Linux recipe. Never use `docker compose down -v` or remove these
+six decimal places. The historical October acceptance record and its exact
+environment-specific shell script are absent from this checkout; the procedure
+above is a current operator reference, not a reconstruction of those artifacts.
+Historical measurements and their limits are summarized in [project status](progress.md#historical-findings-and-evidence-limits). Never use `docker compose down -v` or remove these
 volumes as routine cleanup.
 
 ## Start and stop the synthetic dashboard
@@ -496,8 +502,10 @@ repository root. It does not mount main pipeline volumes or the repository:
 ```bash
 python3 scripts/dashboard/demo.py up
 # Open http://127.0.0.1:18501 and retain the printed run ID.
-python3 scripts/dashboard/demo.py down <12-hex-run-id>
+python3 scripts/dashboard/demo.py down RUN_ID
 ```
+
+Replace `RUN_ID` with the 12-hex identifier printed by `up`.
 
 Startup builds images, creates a unique MongoDB database, publishes valid
 synthetic snapshots, starts FastAPI and Streamlit, and compares HTTP responses
@@ -597,9 +605,9 @@ Missing or incompatible indexes fail closed with an explicit API error rather
 than triggering an unbounded collection scan.
 
 The route schemas, bounds, provenance and error contracts live in
-[Module 4 plan §20](module4-plan.md#module4d-spec).
-The retired API and Streamlit documents remain in the
-[Module 4D archive](evidence/module4d/README.md).
+[Module 4 API specification](module4-plan.md#module4d-spec).
+The retired API/Streamlit design and release archive is not included here;
+the linked specification owns the current route and UI contracts.
 
 ### Standalone API container
 
@@ -737,8 +745,11 @@ ordinary event feed can include both prior and train events. See the
 
 ## Module 4C controlled streaming demo
 
-The archived [C8B procedure](evidence/module4c/c8b-streaming-demo.md) is a
-bounded synthetic experiment, not a production or full-data workflow. It
+The original C8B report and procedure are absent. The existing
+`scripts/experiments/module4c_streaming_demo.py` harness implements a bounded
+synthetic experiment, not a production or full-data workflow. Inspect its
+`--help` and the remaining [curated receipt](../src/module4/dashboard/assets/c8b-receipt.json)
+before planning an isolated run; the receipt is not a complete reproduction log. It
 requires the pinned Kafka 3.7.0, MongoDB 7.0.16, and `instacart-spark:3.5.5`
 images to be present locally and refuses to pull or build them. It creates an
 internal task-labeled network, a temporary KRaft broker, tmpfs-only MongoDB,
@@ -752,8 +763,9 @@ and the Kafka image's anonymous volumes before removing run-owned resources.
 If cleanup fails, inspect the run's `docker-cleanup.json` and listed IDs; do
 not use a global prune or remove shared/named volumes. The historical C8B
 report predates the anonymous-volume correction, so its cleanup flag is not
-proof that those volumes were removed. Current test commands and all historical
-observations are in the archived procedure and [Module 4C evidence index](evidence/module4c/README.md).
+proof that those volumes were removed. The curated receipt preserves that
+limitation. Original command logs and full historical observations are not
+available here; do not infer a new successful run from the harness or receipt.
 
 ## Build context and image safety
 
@@ -866,40 +878,33 @@ Every browser expectation and curated evidence artifact remains unchanged.
 
 ## Historical Docker validation — 14 October 2026
 
-The archived validation notes identify `refactor/unified-docker-build` at
-`d44bb14615f57e78b1611a64954b9f2ead6709ad` as the starting baseline. The
-repository tree at that commit does not contain the root `Dockerfile`, which
-was introduced later; the recorded baseline therefore does not by itself
-identify the exact copied Docker build context. Preserve this provenance limit
-when citing the archived result. It is not a fresh result for the current
-implementation. The four runtime targets and UI development target built
-successfully, passed `pip check`, and matched
-their pinned base, dependency, and jar digests. The context exporter admitted
-127 files (1,568,612 bytes), including five registered evidence files and six
-scripts; protected exclusions were rejected. Staged file names and SHA-256
-values matched their manifests. Spark contained no repository source; API,
-UI, and browser images contained 119, 15, and 2 files respectively. UI omitted
-PyMongo, PySpark, and Playwright; API omitted Streamlit and Playwright. The two
-Compose service topologies were unchanged apart from build definitions.
+This is a historical record, not a current build result. The notes identify
+baseline `d44bb14615f57e78b1611a64954b9f2ead6709ad`, whose repository tree did
+not yet contain the root Dockerfile. That identity therefore does not establish
+the exact copied build context. Raw build manifests/logs are unavailable here;
+the reported findings below cannot be independently reproduced from the summary.
 
-| Recorded check | Result |
-|---|---|
-| Repository Spark suite | 690 passed, 69 service-backed skips, 5 warnings |
-| UI client/AppTest/evaluation suites | 64 passed |
-| API/Hybrid unit suites | 497 passed |
-| Live API Mongo suites | 26 passed |
-| Supplementary Module 3/4/4C Mongo suites | 93 passed |
-| Publisher and read-only route validation | 21 HTTP cases and source/index/evidence assertions passed |
-| Chromium end-to-end run | Four pages, five evaluation charts, selectors, refresh, fallback, error recovery, and no JavaScript exceptions |
-| Ruff, compilation, shell syntax, Compose/workflow YAML, image checks, and diff checks | Passed |
+The record reports successful `pip check` and pinned base/dependency/JAR checks
+for four runtime targets plus UI development. Its exported context contained
+127 files and 1,568,612 bytes, including five registered artifacts and six
+scripts; protected exclusions were rejected. Spark carried no repository
+source; API/UI/browser carried 119/15/2 files. UI excluded PyMongo, PySpark and
+Playwright; API excluded Streamlit and Playwright. Staged names/hashes matched
+recorded manifests and the two Compose topologies were unchanged except for
+build definitions.
 
-The recorded runtime versions were Python 3.10.12, Java 17.0.14, Spark 3.5.5,
-GraphFrames Python 0.6, FastAPI 0.143.0, and PyMongo 4.11.3 for Spark/API;
-Python 3.14.8 and Streamlit 1.65.0 for UI; Python 3.12.3, Playwright 1.63.0,
-and Chromium 153.0.8010.12 for browser checks. The isolated demo used run ID
-`83ea6e42419a`, a temporary database, scoped accounts, exact indexes,
-loopback-only ports, and separate networks. These records preserve the measured
-scope and do not establish acceptance of a later source revision.
+Reported tests were 690 repository passes with 69 service skips and five
+warnings; 64 UI, 497 API/Hybrid unit, 26 live API Mongo, and 93 supplementary
+Mongo passes. Publisher/read-only validation covered 21 HTTP cases; the browser
+record covered four pages, five evaluation charts, controls, refresh and
+fallback/recovery. These selections overlap and are not a current CI total.
+
+Recorded Spark/API versions were Python 3.10.12, Java 17.0.14, Spark 3.5.5,
+GraphFrames Python 0.6, FastAPI 0.143.0 and PyMongo 4.11.3; UI used Python
+3.14.8/Streamlit 1.65.0; browser used Python 3.12.3/Playwright 1.63.0/Chromium
+153.0.8010.12. The demo used an isolated temporary database, scoped accounts,
+exact indexes, loopback ports and separate networks. Preserve the missing-context
+and missing-artifact limitations when citing these observations.
 
 ## Synthetic event generation
 

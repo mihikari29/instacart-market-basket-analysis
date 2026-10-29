@@ -8,6 +8,7 @@ import sys
 import time
 import uuid
 
+from ..common.runtime import redact_sensitive_text
 
 def recommendation_identity(model_version: str, user_id: int, product_id: int) -> str:
     return f"{model_version}__{int(user_id)}__{int(product_id)}"
@@ -269,7 +270,7 @@ def update_pair_readiness(
         "updated_at": datetime.now(timezone.utc),
     }
     if error:
-        document["error"] = error
+        document["error"] = redact_sensitive_text(error)
     client[config.mongo_database]["module4_snapshot_readiness"].replace_one(
         {"_id": "active"}, document, upsert=True
     )

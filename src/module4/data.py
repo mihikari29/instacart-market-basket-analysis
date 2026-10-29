@@ -10,6 +10,7 @@ import math
 from numbers import Real
 from typing import Any
 
+from ..common.runtime import require_columns
 from .config import TABLES
 
 
@@ -19,9 +20,6 @@ REQUIRED = {
     "train": {"order_id", "product_id", "add_to_cart_order", "reordered"},
     "products": {"product_id", "product_name", "aisle_id", "department_id"},
 }
-
-FACT_COLUMNS = {"order_id", "product_id", "add_to_cart_order", "reordered"}
-
 
 def _require(condition: bool, message: str) -> None:
     if not condition:
@@ -347,17 +345,7 @@ USER_FEATURE_COLUMNS = frozenset(
 
 def validate_user_feature_columns(columns: Sequence[str]) -> None:
     """Require the exact descriptive contract and reject unexpected model inputs."""
-    missing = sorted(USER_FEATURE_COLUMNS.difference(columns))
-    unexpected = sorted(set(columns).difference(USER_FEATURE_COLUMNS))
-    if missing or unexpected:
-        problems = []
-        if missing:
-            problems.append("missing fields " + ", ".join(missing))
-        if unexpected:
-            problems.append("unexpected fields " + ", ".join(unexpected))
-        raise ValueError(
-            "Module 2 user_features schema mismatch: " + "; ".join(problems)
-        )
+    require_columns(columns, USER_FEATURE_COLUMNS, "Module 2 user_features")
 
 
 def _feature_record_mapping(row: Any) -> Mapping[str, Any]:

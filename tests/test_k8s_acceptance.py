@@ -419,7 +419,10 @@ class AcceptanceContractTests(unittest.TestCase):
         class EvidenceExecutor:
             def run(self, argv, *, timeout, input_text=None):
                 self.assert_context = "--context" in argv and RunIdentity("0123456789ab").profile in argv
-                return CommandResult(0, json.dumps({"items": [], "diagnostic": "mongodb://user:secret@mongo/db"}))
+                return CommandResult(
+                    0, json.dumps({"items": [], "diagnostic": "mongodb://user:secret@mongo/db"}),
+                    "diagnostic: token=synthetic-token",
+                )
 
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "failure.json"
@@ -429,6 +432,9 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual(result["pods"], 0)
         self.assertNotIn("user:secret", encoded)
         self.assertIn("mongodb://<redacted>", encoded)
+        self.assertNotIn("synthetic-token", encoded)
+        for command in json.loads(encoded)["commands"].values():
+            self.assertEqual(command["stderr"], "diagnostic: token=<redacted>")
 
     def test_teardown_rejects_unhashed_failure_evidence_and_changed_acceptance_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary:

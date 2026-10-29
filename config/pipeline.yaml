@@ -1,6 +1,8 @@
 version: 1.0
 
 # 1. Dataset Synthesis & Ingestion Knobs
+# Kubernetes forwards scenario/scatter_weeks/seed and fixture limits. Standalone
+# generation uses SyntheticConfig; time_mode/delta_sampler below are not forwarded.
 synthesis:
   scenario: "deterministic"        # options: default, mobile-fast, desktop-browse, uniform, deterministic
   scatter_weeks: 1                 # options: 1, 4, 13, 26, 52
@@ -15,6 +17,9 @@ synthesis:
     hi_s: 120.0
 
 # 2. Recommendation Models Hyperparameters
+# Module 4's trial grid reads ALS fit parameters from the optional local file.
+# Kubernetes forwards ALS pilot/trial limits and graph backend/minimum weight.
+# Other graph fields below are declarations for a separate runtime migration.
 models:
   als:
     rank: 32
@@ -32,6 +37,8 @@ models:
     max_iter: 10
     top_products: 20
   hybrid:
+    # Read only by explicit HybridRankingConfig.from_pipeline_config() calls.
+    # The serving CLI keeps its lambda_weight=0.7 two-source scoring contract.
     alpha: 0.5                     # ALS weight
     beta: 0.2                      # Graph / PageRank weight (restores 3-way hybrid)
     gamma: 0.3                     # Real-time Trend weight
@@ -39,6 +46,8 @@ models:
     output_top_k: 20
 
 # 3. Streaming & Replay Knobs
+# Kubernetes consumes rates, durations and mongo_top_k. Window/trigger fields
+# remain declared intent: runtime Config uses 30m/120m windows, 5m slide, 10s trigger.
 streaming:
   trigger_interval: "2 seconds"
   watermark: "10 minutes"
@@ -69,6 +78,8 @@ timeouts:
     pod_ready_timeout: 300
 
 # 5. Resources & Host Capacity Reserve
+# capacity_reserve is consumed by host checks. pipeline_job is not applied to
+# Job manifests; those allocations remain owned by deploy/k8s/pipeline/job.yaml.
 resources:
   pipeline_job:
     cpu_request: "2"
@@ -81,6 +92,9 @@ resources:
     free_disk_gib: 40
 
 # 6. Checkpoint & Resume Policy
+# Only resume_policy is read by steps (strict currently behaves like enabled).
+# Checkpoint/data roots remain fixed by code and volume mounts; retain these
+# declarations for a separately scoped path/recovery migration.
 execution:
   resume_policy: "enabled"         # enabled, strict, or disabled
   checkpoint_dir: "/run/checkpoints"

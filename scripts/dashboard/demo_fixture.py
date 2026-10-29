@@ -357,7 +357,7 @@ def _publish_hybrid(
     }
 
 
-def _provision_and_verify_indexes(database: Any, _namespace: str) -> dict[str, Any]:
+def _provision_and_verify_indexes(database: Any) -> dict[str, Any]:
     for order, (name, keys) in PRODUCT_INDEXES.items():
         database["batch_product_metrics"].create_index(list(keys), name=name)
     database[BUNDLE_COLLECTION_NAME].create_index(
@@ -450,7 +450,7 @@ def seed() -> dict[str, Any]:
             trend_summary["as_of_event_time"],
             processing_time,
         )
-        indexes = _provision_and_verify_indexes(database, namespace)
+        indexes = _provision_and_verify_indexes(database)
         client[database_name].command(
             "createUser",
             reader_name,

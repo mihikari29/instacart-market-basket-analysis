@@ -459,6 +459,9 @@ def test_serving_version_is_stable_order_invariant_and_source_sensitive():
     trend = _trend_result()
     config, result = _rank(captured, trend)
     first = prepare_hybrid_snapshot(captured, trend, result, config, as_of_event_time=AS_OF)
+    assert first.input_content_sha256 == "ff22b6acc4b1b990b3242d55c18dc6701b5c367359dc82a33b7d947404353acc"
+    assert first.fingerprint_sha256 == "35feaa366ccd0dc25bf9ba48f00ec79a1f7d58c2ca1c7a6d580fc07081980ecc"
+    assert first.ranking_config_sha256 == "89fa4c73d2ceacec08d821793dcc530cabcc32e81fa7f329ca1fc31769425528"
     reordered_sources = replace(
         captured,
         als_recommendations=tuple(reversed(captured.als_recommendations)),

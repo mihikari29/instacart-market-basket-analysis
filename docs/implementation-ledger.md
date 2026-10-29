@@ -1,6 +1,6 @@
 # Implementation and design ledger
 
-This ledger records the system's interfaces, important implementation choices and the reasons behind them. It describes current source behavior and known limits, rather than replaying review milestones. The approved [Proposal](Proposal.md) remains the requirements baseline; dated measurements remain immutable in the [evidence archive](evidence/README.md).
+This ledger records the system's interfaces, important implementation choices and the reasons behind them. It describes current source behavior and known limits, rather than replaying review milestones. The repository [Proposal](Proposal.md) is retained as the requirements baseline; [available historical evidence](README.md#historical-evidence-available-here) lists the artifacts actually included in this checkout.
 
 ## 1. Architecture and module boundaries
 
@@ -118,61 +118,35 @@ The join benchmark holds data and output constant while exercising Sort-Merge an
 
 ## 4. Module 3 — event-time processing and telemetry
 
-### 4.1 Parse, state and ranking decisions
+The speed layer uses one sliding stateful aggregate rather than independent
+overlapping state plans. Finalization lets ranking see the complete product
+population. Watermark-bounded deduplication controls state; it does not provide
+permanent uniqueness. A complete immutable window document gives readers a
+stronger consistency boundary than delete/upsert of mutable rows.
 
-The consumer validates each record against the denormalized producer schema and domains, measures invalid records, applies a ten-minute event-time watermark and deduplicates `event_id` only within watermark-managed state. A single stateful 120-minute sliding aggregation computes the 30-minute and 120-minute counts at five-minute slide boundaries. One stateful aggregate avoids maintaining two independent overlapping state plans. Append mode emits only after window finalization so normalization sees the complete product population. The score combines normalized short and long signals at weights 0.7 and 0.3, then ranks all products deterministically by descending score and ascending `product_id` before Top-20.
-
-Watermarking bounds state and lateness; it is not an eternal event-ID registry. Older late events may be dropped after watermark advancement. A finalized leaderboard is intentionally not an open-window display.
-
-### 4.2 Legacy trend collection and immutable bundles
-
-`realtime_trending` preserves a legacy mutable window contract: a complete window is deleted and its rows are upserted. The individual Mongo operations are not a reader transaction, so a concurrent reader may see an incomplete window during replacement. TTL is seven days by default and is based on update/expiry fields, not the event-time cutoff.
-
-Optional `realtime_trending_windows` stores one complete immutable ranked document for each finalized window in a stable logical source namespace. Its identity combines a digest of `source_namespace` with the UTC `window_end`; the document contains schema version, window bounds, Top-K and row counts, an `items` array of ranked products, configuration and canonical content hashes, publication time, and optional `expires_at`. An identical retry is accepted, while conflicting content for an existing identity is rejected. Publishing one whole document is atomic; publishing multiple window documents is not a cross-document transaction. The namespace identifies a logical source, not a run, and descriptive `source_scope` cannot prove prior-only provenance. Expiry/TTL is distinct from event-time cutoff and optional maximum event-age selection. Module 4C and the Module 4D trends API consume these bundles only when publication is explicitly enabled. The legacy `realtime_trending` collection remains the separate mutable product/window-row contract described above. Per-product/window latency samples describe finalized output rows; they are not separate immutable bundle documents.
-
-### 4.3 Checkpoints and finite replay
-
-Stateful checkpoint paths are versioned, including `checkpoint/<id>/ingestion-latency-v1`; a legacy unversioned checkpoint is refused without mutation. Reuse requires the same query identity and compatible topic/configuration. A deliberate fresh identity is required after incompatible state or source changes.
-
-A bounded replay is complete after successful producer delivery, reconciled generated/attempted/acknowledged counts, and terminal consumed offsets across every Kafka partition. The full replay keeps the entire feed and has an 18-hour ceiling in Kubernetes. No synthetic future events are added to flush a final open window; event-time tail state remains in the checkpoint and is disclosed.
-
-### 4.4 Completed-batch telemetry invariants
-
-Spark progress callbacks can contain idle observations and executed micro-batches. The logger recognizes an executed batch by Spark 3.5.5's `durationMs.addBatch` marker before deduplicating IDs. This includes zero-input state-cleanup batches and excludes idle progress. Each executed progress record must pair with a same-ID sink receipt. The pending receipt map is bounded at 16 and blocks the callback at capacity, applying backpressure instead of evicting evidence. Gaps, missing receipts and sink errors become sanitized failures.
-
-Shutdown calls synchronous `query.stop()` even when the query already reports inactive, then signals the logger and joins it. Spark's execution thread may report final progress after state changes to terminated; the ordering ensures the final drain occurs after that thread finishes. These coordination invariants are covered by the historical offline telemetry regression checks.
-
-For every finalized product/window row, the writer retains the latest contributing `ingestion_time_epoch_ms` internally and removes it before publishing. Latency measures ingestion timestamp to output completion after enabled publishers, aggregated as constant-memory min/mean/max. It includes watermark delay and depends on unsynchronized producer/output host clocks, so clock skew can yield negative samples. It is not acknowledgement delay, trigger duration, sink duration, Kafka consumer lag, or API/dashboard latency.
-
-The latest metrics document is keyed by namespace and read through a bounded indexed query. The snapshot is capped at 16 KiB. Signed-64-bit integers, including BSON integer subclasses, are accepted; booleans, floats and out-of-range values fail. The reader converts integer values to built-in Python integers before JSON serialization. An unavailable snapshot has exactly the declared unavailable fields, reason `no_valid_ingestion_timestamps_in_finalized_output`, and integer sample count zero. Invalid data fails closed at API and UI client boundaries.
+The [Module 3 specification](module3-contracts.md) owns parsing, windows,
+normalization, bundle identity/expiry, checkpoint compatibility, replay-offset
+completion, completed-batch coordination and BSON telemetry validation. These
+are separate contracts: consumed terminal offsets do not close an event-time
+tail, and a latency sample is not proof of stream liveness or Kafka lag.
 
 ## 5. Module 4 — model, graph, Hybrid and read interfaces
 
-### 5.1 Module 4A ALS and evaluation
+The [Module 4 specification](module4-plan.md) owns detailed model, graph,
+publication, ranking, API and dashboard contracts. The cross-module decisions
+are:
 
-ALS input is prior user-product purchase count with implicit-feedback settings. Internal holdout and eligibility checks are built from prior history. Official train baskets are evaluation truth, not ALS fit data or model-parameter selection input. Evaluation compares ALS with global popularity and personal frequency at K=5/10/20 and reports macro ranking measures and coverage for defined user cohorts. Versioned output includes source/model/run identities and deterministic rank ties. Published Top-20 results are bounded per user.
+| Boundary | Rationale and authoritative contract |
+|---|---|
+| Prior versus official train | Fit and select parameters using prior history; reserve official train for final evaluation. [ALS and cohorts](module4-plan.md#module4a-als-recommendation) keep the publication population distinct from evaluation cohorts. |
+| Graph versus recommendation | Preserve catalog isolates and distinguish weighted degree from topology PageRank. [Graph contracts](module4-plan.md#module4b-product-co-purchase-graph) govern threshold/scope and runtime semantics. |
+| A/B readiness versus Hybrid publication | Source captures and per-user pointer promotion have distinct identities. Separate Mongo promotions do not become a distributed transaction. [Publication](module4-plan.md#8-mongodb-snapshot-publication) and [Hybrid contracts](module4-plan.md#module4c-spec) define validation and race handling. |
+| Publishers versus read interfaces | API credentials cannot publish or repair indexes; UI uses HTTP only. [API/UI contracts](module4-plan.md#module4d-spec) define bounded reads, errors and registered evidence. |
 
-The current serving contract reads the active paired A/B generation and exposes an indexed per-user ALS view. An empty response is not proof that a user does not exist. Scores are carried from persisted ranked output and are not recomputed by the API.
-
-### 5.2 Module 4B product graph
-
-Graph input is prior baskets and full catalog. Products are deduplicated within each order and unordered pairs are canonicalized to one source/target pair before order-level counts are aggregated. Configured edge thresholds produce undirected co-purchase relationships and two reciprocal directed rows for GraphFrames. Isolated vertices remain so catalog coverage is visible. Weighted degree is based on co-purchase counts; PageRank runs on the symmetric graph topology, not weighted PageRank. Graph outputs carry version, source, scope, threshold and algorithm parameters. Metrics and edge invariants include unique endpoints, positive finite weights, reciprocal rows, vertex foreign keys, degree bounds and weighted-degree conservation.
-
-### 5.3 Module 4C Hybrid ranking and publication
-
-The service first captures a ready A/B generation and verifies that model and graph versions match the readiness identity. It reads bounded ALS and newest eligible immutable trend data at an explicit event-time cutoff, validates bundle integrity and source provenance, normalizes the selected source scores, unions candidates, then ranks the endpoint candidate set. The configured defaults select up to 20 candidates per source, output 20, use lambda 0.7 and epsilon `1e-12`. Ties are deterministic at full precision using product identity. Cold users can fall back to trend candidates; lambda endpoint behavior follows the serving candidate contract.
-
-Hybrid results are written to an immutable `final_recommendations` version. After readback validation, a per-user readiness pointer (`_id="hybrid:<user_id>"`) is advanced. A pointer read before and after bounded row reads detects concurrent version change. A/B source promotions and Hybrid pointer promotion are separate Mongo operations, not one distributed transaction.
-
-Prior-only offline evaluation uses a fixed global-frequency Top-20 candidate list and preregistered lambda values 0, 0.5, 0.7, 0.9 and 1.0. It evaluates official train truth at K=5/10/20 without using those labels for fitting, parameter tuning, trend generation or candidate selection. It is not a temporal trend-quality test. A mixed prior/train event stream lacking `eval_set` cannot serve as clean chronology for that claim.
-
-### 5.4 Module 4D API and UI consistency
-
-The API reads only fixed application collections and evidence registry entries. It uses scalar validation, fixed filters/projections, result limits, `maxTimeMS`, indexed reads and cursor closure. It does not accept arbitrary collection names, query operators or filesystem paths. Its eight read collections are `module4_snapshot_readiness`, `final_recommendations`, `realtime_trending_windows`, `batch_product_metrics`, `department_metrics`, `user_recommendations`, `product_graph_metrics`, and `streaming_metrics`. The Mongo identity is read-only and can inspect required index metadata but cannot publish, create indexes, rename or drop.
-
-The API readiness probe verifies Mongo availability and required index compatibility; `/health` is process liveness only. It distinguishes missing pointer, ready empty result, unavailable source, malformed stored snapshot and backend failure. It does not invoke Spark, Kafka, HDFS or a publisher. Streamlit accepts API configuration only, uses the API for all data, and has no MongoDB dependency. ALS and Hybrid source versions are displayed independently; a missing score remains blank rather than becoming zero. Refreshing a page re-reads data and does not prove a streaming process is alive.
-
-The evidence API uses a fixed five-artifact registry and caps files at 256 KiB. It does not expose arbitrary paths or full raw evidence. API/UI route schemas, indexes, status and dashboard interactions are specified in [Module 4 §20](module4-plan.md#module4d-spec).
+An absent ALS row is not enough to classify an unknown/cold user without
+verified source context. A missing readiness pointer is not proof that a user
+does not exist. Refreshing a view re-reads a snapshot; it does not demonstrate
+that batch or streaming processing is currently running.
 
 ## 6. Kubernetes isolation, security and lifecycle
 
@@ -190,7 +164,7 @@ The host admission reserves six physical CPU cores, 12 GiB available RAM and 40 
 - **B3** runs isolated input preparation, Module 1, Module 2, Module 4, replay/streaming and Hybrid work in ordered run-owned Jobs.
 - **B4** compares live ownership receipts and verifies the run's acceptance matrix, including data receipts, Kafka delivery/consumption, checkpoint, Mongo publication, API/UI and allowed/denied network paths.
 
-Pipeline Jobs use `backoffLimit: 0`; failures retain resources for inspection. Resume is disabled. B3 Spark uses local mode inside run-scoped Kubernetes jobs; Kubernetes does not allocate Spark executors across worker nodes. Mongo admin, publisher and API-read credentials are separate. Secrets are passed through memory/stdin and are not stored in receipts. Network policy defaults to deny and expresses only declared paths, but live CNI probes are needed to prove enforcement.
+Pipeline Jobs use `backoffLimit: 0`; failures retain resources for inspection. The coordinator does not auto-resume; container-step receipt reuse follows `execution.resume_policy` and is not an end-to-end recovery guarantee. B3 Spark uses local mode inside run-scoped Kubernetes jobs; Kubernetes does not allocate Spark executors across worker nodes. Mongo admin, publisher and API-read credentials are separate. Secrets are passed through memory/stdin and are not stored in receipts. Network policy defaults to deny and expresses only declared paths, but live CNI probes are needed to prove enforcement.
 
 A `runtime_pass` coordinator receipt means B4 returned a complete passing receipt for the declared fixture or full-data scope. It does not mean resources were torn down. The separate `verify` operation checks saved receipts offline, contacts no cluster and reports `teardown_performed: false`. Teardown is a separate command with explicit execution, live identity rechecks and exact run-scoped targets. This separation retains evidence and prevents automatic cleanup from hiding a failed run.
 
@@ -214,12 +188,13 @@ The root Dockerfile has explicit `spark`, `api`, `ui`, `browser`, `k8s-runner` a
 
 ## 8. Verification and provenance
 
-The final independent source-code review passed on source revision `a5fe5003134efb26f2a8826ce51e98bc291a2ff9`. The associated recorded development checks were:
+[Project status](progress.md) owns current capabilities, unfinished work and
+verification limits. The [acceptance appendix](acceptance.md#historical-development-record)
+preserves the historical source-review identities, scoped host-check results
+and missing-artifact qualifications once. They do not validate the current
+source's live-service, full-data or deployment behavior.
 
-- Broad non-service test selection: **803 passed, 7 skipped**; the seven skips are PySpark-dependent modules. Eight live MongoDB modules and two PySpark-importing service suites were excluded.
-- Focused streaming telemetry/BSON selection: **59 passed**.
-- Focused telemetry, API and UI selection: **134 passed**.
-- Repository Ruff: **PASS**; Python compilation: **190 files PASS**.
-- Offline Kubernetes fake-client/static, rendering, runner and packaging/source checks: **PASS** for their recorded selection.
-
-The exact test selection, temporary dependency scope and interpretation are in the [acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries). These checks do not prove pinned Spark/Java execution, live Mongo behavior, browser runtime, image builds, Kubernetes B2/B3/B4, full-data processing, runtime recovery, performance or production acceptance. The historical evidence archive keeps earlier measurements tied to their own source revisions and environments. No fresh result is attributed to this documentation change.
+New evidence must identify source/dirty state, runtime, input, configuration,
+commands and outcomes for its actual scope. Historical observations remain tied
+to their original provenance; unavailable artifacts must be reported as missing,
+not replaced by a current runbook or inferred from a configured workflow.

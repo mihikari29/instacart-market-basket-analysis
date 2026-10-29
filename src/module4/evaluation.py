@@ -331,17 +331,6 @@ def _top_k(rows, k: int):
     return _normalise_rank_column(rows).where("als_rank <= {0}".format(int(k)))
 
 
-def _ranking_detail():
-    from pyspark.sql.types import DoubleType, StructField, StructType
-
-    return StructType(
-        [
-            StructField("average_precision", DoubleType(), False),
-            StructField("ndcg", DoubleType(), False),
-        ]
-    )
-
-
 def _score_lists(predicted, truth, k: int = 20):
     """Compute AP/NDCG for one user without making the denominator ambiguous."""
     import math

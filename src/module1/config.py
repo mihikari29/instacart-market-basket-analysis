@@ -1,7 +1,7 @@
 """SyntheticConfig — the knobs that fully describe one generated feed.
 
 The generator reads exactly one object, so a scenario is reproducible and
-documentable. See docs/generate.md -> "SyntheticConfig & scenarios".
+documentable. See docs/docker.md#syntheticconfig-and-scenarios.
 """
 from __future__ import annotations
 

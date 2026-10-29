@@ -209,11 +209,6 @@ def _read_catalog_details(
     return names, pageranks
 
 
-def _read_catalog(catalog: Iterable[ProductMetadata | Mapping[str, Any]]) -> dict[int, str]:
-    names, _ = _read_catalog_details(catalog)
-    return names
-
-
 def rank_hybrid_recommendations(
     user_id: int,
     als_recommendations: Iterable[Any],
@@ -257,11 +252,6 @@ def rank_hybrid_recommendations(
             )
 
     excluded_trend_product_ids = tuple(sorted(set(trend_scores).difference(catalog)))
-    for product_id in excluded_trend_product_ids:
-        if product_id in als_scores:
-            raise RankingContractError(
-                f"ALS product {product_id} is missing from the verified product catalog"
-            )
 
     normalized_als = _normalize_als(als_scores, config.epsilon)
     max_trend_score = max(trend_scores.values(), default=0.0)

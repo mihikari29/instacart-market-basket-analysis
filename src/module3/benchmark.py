@@ -9,7 +9,7 @@ import statistics
 import subprocess
 import sys
 
-from .config import Config
+from .config import Config, MIN_BENCHMARK_SECONDS
 from .kafka_utils import create_topic, safe_topic_name, topic_metadata
 from .stream import PROGRESS_LOG_NAME, run_stream
 
@@ -233,8 +233,8 @@ def benchmark_throughput(
     target_rates: tuple[float, ...] = THROUGHPUT_TARGET_RATES,
 ) -> dict:
     """Vary an explicit producer send-rate limit and measure Spark progress."""
-    if duration_seconds < 12:
-        raise ValueError("Throughput trials require at least 12 seconds")
+    if duration_seconds < MIN_BENCHMARK_SECONDS:
+        raise ValueError(f"Throughput trials require at least {MIN_BENCHMARK_SECONDS} seconds")
     arms = {}
     benchmark_root = output_dir / "throughput"
     for rate in target_rates:
@@ -288,8 +288,8 @@ def benchmark_kafka_partitions(
     partition_counts: tuple[int, ...] = PARTITION_COUNTS,
 ) -> dict:
     """Measure topics physically created with 1, 2, 4, and 8 partitions."""
-    if duration_seconds < 12:
-        raise ValueError("Partition trials require at least 12 seconds")
+    if duration_seconds < MIN_BENCHMARK_SECONDS:
+        raise ValueError(f"Partition trials require at least {MIN_BENCHMARK_SECONDS} seconds")
     arms = {}
     benchmark_root = output_dir / "partitions"
     for partitions in partition_counts:

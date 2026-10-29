@@ -1,7 +1,6 @@
 # Module 3 streaming contracts
 
-This document describes the current Module 3 implementation. The [Module 3
-evidence record](evidence/module3/README.md) preserves dated results; the
+This document describes the current Module 3 implementation. The original historical evidence archive is absent; the
 [Docker guide](docker.md) owns operating commands. The approved requirements
 remain in [Proposal §§9, 17–22, 35–38](Proposal.md).
 
@@ -144,12 +143,12 @@ insert-only upserts. Identical retries converge; different content for the same
 namespace/window is a conflict. A completed bundle remains immutable. These
 guarantees are per window, not a transaction over every window in a microbatch.
 
-The existing Module 3 two-process recovery evidence validates checkpoint
-continuation for the legacy stream. The bounded C8B receipt validates event
-reconciliation and bundle/Hybrid publication, but does not demonstrate
-restarting Spark from a checkpoint during bundle publication. See [Module 3
-recovery evidence](evidence/module3/README.md#checkpoint-recovery) and the
-[C8B archive](evidence/module4c/c8b-streaming-demo.md).
+Historical notes report two-process checkpoint continuation for the legacy
+stream, but their original recovery report/logs are not included here. The
+retained [C8B receipt](../src/module4/dashboard/assets/c8b-receipt.json) records
+bounded event reconciliation and bundle/Hybrid publication; it explicitly did
+not exercise Spark checkpoint restart. It cannot replace the missing legacy
+recovery evidence or prove recovery during bundle publication on current source.
 
 ## Module 4C consumption boundary
 
@@ -199,8 +198,16 @@ validated within 16 KiB; no arbitrary logs or result directories are exposed.
 The isolated Kubernetes finite replay waits for producer success and terminal
 Kafka offsets consumed by completed Spark batches. Its receipt reconciles every
 generated event with delivery and consumption. The full feed is not capped to
-fit a short timer. Final event-time tail windows remain checkpointed when the
-finite source ends; offset drainage does not imply all windows are finalized.
+fit a short timer; the Kubernetes replay contract retains its 18-hour ceiling.
+Final event-time tail windows remain checkpointed when the finite source ends; offset drainage does not imply all windows are finalized.
+
+### Completed-batch coordination and stored telemetry
+
+Spark progress callbacks can contain idle observations and executed micro-batches. The logger recognizes an executed batch by Spark 3.5.5's `durationMs.addBatch` marker before deduplicating IDs. This includes zero-input state-cleanup batches and excludes idle progress. Each executed progress record must pair with a same-ID sink receipt. The pending receipt map is bounded at 16 and blocks the callback at capacity, applying backpressure instead of evicting evidence. Gaps, missing receipts and sink errors become sanitized failures.
+
+Shutdown calls synchronous `query.stop()` even when the query already reports inactive, then signals the logger and joins it. Spark's execution thread may report final progress after state changes to terminated; the ordering ensures the final drain occurs after that thread finishes. These ordering rules are part of the completed-batch telemetry contract.
+
+The latest metrics document is keyed by namespace and read through a bounded indexed query. The snapshot is capped at 16 KiB. Signed-64-bit integers, including BSON integer subclasses, are accepted; booleans, floats and out-of-range values fail. The reader converts integer values to built-in Python integers before JSON serialization. An unavailable snapshot has exactly the declared unavailable fields, reason `no_valid_ingestion_timestamps_in_finalized_output`, and integer sample count zero. Invalid data fails closed at API and UI client boundaries.
 
 ## Source, tests, and evidence
 
@@ -209,5 +216,5 @@ finite source ends; offset drainage does not imply all windows are finalized.
 - Immutable bundle contract: [`src/module3/trend_bundle.py`](../src/module3/trend_bundle.py), [`tests/test_module3_trend_bundle.py`](../tests/test_module3_trend_bundle.py), and [`tests/test_module3_trend_bundle_mongo.py`](../tests/test_module3_trend_bundle_mongo.py).
 - Module 3 to Module 4C integration: [`src/module4/hybrid/trend_reader.py`](../src/module4/hybrid/trend_reader.py), [`tests/test_hybrid_trend_reader.py`](../tests/test_hybrid_trend_reader.py), and [`tests/test_module3_bundle_integration.py`](../tests/test_module3_bundle_integration.py).
 - Static, bounded operating instructions: [Docker guide](docker.md).
-- Dated Module 3 validation and measurements: [Module 3 evidence](evidence/module3/README.md).
-- Bounded C8A/C8B observations: [Module 4C evidence index](evidence/module4c/README.md).
+- Historical Module 3 recovery/performance archives are absent. Their reported scope must not be treated as current acceptance.
+- Available bounded observations and limitations: [historical findings](progress.md#historical-findings-and-evidence-limits) and [curated artifact index](README.md#historical-evidence-available-here).

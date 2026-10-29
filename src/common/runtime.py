@@ -7,6 +7,7 @@ drift apart.
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 import hashlib
@@ -31,8 +32,8 @@ def env_int(name: str, default: int | None) -> int | None:
         return default
     try:
         return int(value)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer, got {value!r}") from exc
+    except ValueError:
+        raise ValueError(f"{name} must be an integer") from None
 
 
 def env_float(name: str, default: float | None) -> float | None:
@@ -42,8 +43,30 @@ def env_float(name: str, default: float | None) -> float | None:
         return default
     try:
         return float(value)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be a number, got {value!r}") from exc
+    except ValueError:
+        raise ValueError(f"{name} must be a number") from None
+
+
+def read_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Read an explicitly selected YAML mapping without echoing source values."""
+    import yaml
+
+    try:
+        value = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError):
+        raise ValueError("pipeline configuration could not be read as valid YAML") from None
+    if not isinstance(value, dict):
+        raise ValueError("pipeline configuration must be a mapping")
+    return value
+
+
+def config_section(value: Mapping[str, Any], *keys: str) -> Mapping[str, Any]:
+    """Read an optional mapping section, rejecting malformed present sections."""
+    for index, key in enumerate(keys):
+        value = value.get(key, {})
+        if not isinstance(value, Mapping):
+            raise ValueError(f"pipeline configuration {'.'.join(keys[:index + 1])} must be a mapping")
+    return value
 
 
 def parse_bool(value: str | bool) -> bool:
@@ -61,9 +84,19 @@ def parse_bool(value: str | bool) -> bool:
 
 
 
-MONGODB_URI_PATTERN = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
+MONGODB_URI_PATTERN = re.compile(r"(?i)mongodb(?:\+srv)?://(?:<redacted>|[^\s\"'<>])+")
+_SECRET_NAME = (
+    r"(?:[a-z0-9]+[_-])*(?:user(?:name)?|password|passwd|pwd|token|secret|credentials?|"
+    r"api[_-]?key|(?:access|private)[_-]?key)"
+)
+SECRET_FIELD_PATTERN = re.compile(_SECRET_NAME, re.IGNORECASE)
 SECRET_ASSIGNMENT_PATTERN = re.compile(
-    r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)"
+    rf"(?i)(?<![\w-])({_SECRET_NAME})([\"']?\s*[:=]\s*)"
+    r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\s,;&}\]]+)"
+)
+SECRET_OPTION_PATTERN = re.compile(
+    rf"(?i)(--{_SECRET_NAME})(\s+|=)"
+    r"(\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|[^\r\n]+?(?=\s+--[\w-]+|$))"
 )
 
 
@@ -89,7 +122,46 @@ def redact_uri(uri: str) -> str:
 def redact_sensitive_text(value: str) -> str:
     """Remove MongoDB credentials and inline secret assignments from text."""
     redacted = MONGODB_URI_PATTERN.sub(lambda match: redact_uri(match.group(0)), value)
+    redacted = SECRET_OPTION_PATTERN.sub(r"\1\2<redacted>", redacted)
     return SECRET_ASSIGNMENT_PATTERN.sub(r"\1\2<redacted>", redacted)
+
+
+def redact_arguments(arguments: Sequence[str]) -> list[str]:
+    """Keep argument positions while removing secret option values and URIs."""
+    result = []
+    secret_value = False
+    for argument in arguments:
+        option, separator, _ = argument.partition("=")
+        if secret_value:
+            result.append("<redacted>")
+            secret_value = False
+        elif option.startswith("--") and SECRET_FIELD_PATTERN.fullmatch(option[2:]):
+            result.append(option + "=<redacted>" if separator else option)
+            secret_value = not separator
+        else:
+            result.append(redact_sensitive_text(argument))
+    return result
+
+
+def redact_sensitive_values(value: Any) -> Any:
+    """Copy report data with secret fields and strings sanitized for output."""
+    if isinstance(value, Mapping):
+        return {
+            key: "<redacted>" if SECRET_FIELD_PATTERN.fullmatch(str(key).rsplit(".", 1)[-1]) else redact_sensitive_values(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [redact_sensitive_values(item) for item in value]
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    return value
+
+
+class SensitiveArgumentParser(argparse.ArgumentParser):
+    """Keep argparse diagnostics useful without echoing secret arguments."""
+
+    def error(self, message: str) -> None:
+        super().error(redact_sensitive_text(message))
 
 
 def safe_error_text(exc: BaseException) -> str:
@@ -126,6 +198,11 @@ def save_json(path: Path, value) -> None:
     path.write_text(
         json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
     )
+
+
+def save_redacted_json(path: Path, value) -> None:
+    """Serialize human-readable evidence without changing live configuration."""
+    save_json(path, redact_sensitive_values(value))
 
 
 
@@ -245,6 +322,17 @@ def record_mapping(row: Any, field: str) -> Mapping[str, Any]:
 def canonical_json(value: Any) -> str:
     """Serialize deterministically so a digest depends only on the content."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def strict_canonical_json(value: Any) -> str:
+    """Encode publication fingerprints as UTF-8 JSON without non-finite numbers."""
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
 
 
 def sha256_hex(payload: bytes | str) -> str:

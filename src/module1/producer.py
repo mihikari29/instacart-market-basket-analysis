@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from threading import Lock
+import sys
 import time
 import warnings
 
@@ -19,6 +20,7 @@ import numpy as np
 import pandas as pd
 from kafka import KafkaProducer
 
+from ..common.runtime import safe_error_text
 from .event_reader import iter_ordered_events, manifest_declares_sorted
 
 warnings.filterwarnings("ignore", message=".*serializer does not implement.*")
@@ -41,6 +43,7 @@ class DeliveryAccounting:
     failed_events: int = 0
     failure_samples: list[str] = field(default_factory=list)
     _lock: Lock = field(default_factory=Lock, repr=False)
+    _finalized: bool = field(default=False, repr=False)
 
     def attempt(self) -> None:
         with self._lock:
@@ -48,10 +51,13 @@ class DeliveryAccounting:
 
     def ack(self, *_args) -> None:
         with self._lock:
-            self.acked_events += 1
+            if not self._finalized:
+                self.acked_events += 1
 
     def fail(self, error=None) -> None:
         with self._lock:
+            if self._finalized:
+                return
             self.failed_events += 1
             if error is not None and len(self.failure_samples) < 10:
                 self.failure_samples.append(f"{type(error).__name__}: {error}")
@@ -59,6 +65,7 @@ class DeliveryAccounting:
     def reconcile_unconfirmed(self, reason: str) -> None:
         """Account for futures left unresolved after flush/close failure."""
         with self._lock:
+            self._finalized = True
             missing = self.attempted_events - self.acked_events - self.failed_events
             if missing > 0:
                 self.failed_events += missing
@@ -150,77 +157,79 @@ def publish_rows(
     injections: dict[str, float],
 ) -> tuple[dict, list[int]]:
     """Publish an ordered iterator and return delivery metrics plus latency samples."""
-    probability_late = injections.get("late", 0.0)
-    probability_duplicate = injections.get("dup", 0.0)
-    burst_count = int(injections.get("burst", 0) or 0)
-    poison_remaining = int(injections.get("poison", 0) or 0)
-    rng = np.random.default_rng(1234)
     accounting = DeliveryAccounting()
     latencies: list[int] = []
-    first_event_ms = None
     lifecycle_errors: list[str] = []
-    late_injection_sequence = 0
+    try:
+        probability_late = injections.get("late", 0.0)
+        probability_duplicate = injections.get("dup", 0.0)
+        burst_count = int(injections.get("burst", 0) or 0)
+        poison_remaining = int(injections.get("poison", 0) or 0)
+        rng = np.random.default_rng(1234)
+        first_event_ms = None
+        late_injection_sequence = 0
 
-    if start_delay_seconds:
-        time.sleep(start_delay_seconds)
-    replay_start = time.monotonic()
+        if start_delay_seconds:
+            time.sleep(start_delay_seconds)
+        replay_start = time.monotonic()
 
-    for index, row in enumerate(rows):
-        event_time_ms = int(row["event_time_epoch_ms"])
-        if first_event_ms is None:
-            first_event_ms = event_time_ms
-        if target_events_per_second is not None and target_events_per_second > 0:
-            target_time = replay_start + accounting.attempted_events / target_events_per_second
-            sleep_duration = target_time - time.monotonic()
-            if sleep_duration > 0:
-                time.sleep(sleep_duration)
-        elif target_events_per_second is None and replay_speed > 0:
-            target_time = replay_start + max(0, event_time_ms - first_event_ms) / (
-                replay_speed * 1000.0
-            )
-            sleep_duration = target_time - time.monotonic()
-            if sleep_duration > 0:
-                time.sleep(sleep_duration)
+        for index, row in enumerate(rows):
+            event_time_ms = int(row["event_time_epoch_ms"])
+            if first_event_ms is None:
+                first_event_ms = event_time_ms
+            if target_events_per_second is not None and target_events_per_second > 0:
+                target_time = replay_start + accounting.attempted_events / target_events_per_second
+                sleep_duration = target_time - time.monotonic()
+                if sleep_duration > 0:
+                    time.sleep(sleep_duration)
+            elif target_events_per_second is None and replay_speed > 0:
+                target_time = replay_start + max(0, event_time_ms - first_event_ms) / (
+                    replay_speed * 1000.0
+                )
+                sleep_duration = target_time - time.monotonic()
+                if sleep_duration > 0:
+                    time.sleep(sleep_duration)
 
-        message = build_message(row, event_time_ms)
-        if poison_remaining > 0:
-            message["product_id"] = "MALFORMED"
-            poison_remaining -= 1
-        send_tracked(producer, topic, message, accounting)
-        if accounting.attempted_events % 100 == 0:
-            latencies.append(message["ingestion_time_epoch_ms"] - event_time_ms)
-        if accounting.attempted_events % 50_000 == 0:
-            rate = accounting.attempted_events / max(1e-9, time.monotonic() - replay_start)
-            print(f"  attempted={accounting.attempted_events:,} rate={rate:,.0f}/s", flush=True)
+            message = build_message(row, event_time_ms)
+            if poison_remaining > 0:
+                message["product_id"] = "MALFORMED"
+                poison_remaining -= 1
+            send_tracked(producer, topic, message, accounting)
+            if accounting.attempted_events % 100 == 0:
+                latencies.append(message["ingestion_time_epoch_ms"] - event_time_ms)
+            if accounting.attempted_events % 50_000 == 0:
+                rate = accounting.attempted_events / max(1e-9, time.monotonic() - replay_start)
+                print(f"  attempted={accounting.attempted_events:,} rate={rate:,.0f}/s", flush=True)
 
-        if burst_count and index % 500 == 0:
-            for _ in range(burst_count):
+            if burst_count and index % 500 == 0:
+                for _ in range(burst_count):
+                    send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
+            if probability_duplicate and rng.random() < probability_duplicate:
                 send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
-        if probability_duplicate and rng.random() < probability_duplicate:
-            send_tracked(producer, topic, build_message(row, event_time_ms), accounting)
-        if probability_late and rng.random() < probability_late:
-            late_injection_sequence += 1
-            late_delta_ms = int(rng.uniform(4 * 60, 25 * 60) * 1000)
-            late_epoch_ms = max(0, event_time_ms - late_delta_ms)
-            late_message = build_message(row, late_epoch_ms, format_iso(late_epoch_ms))
-            late_message["event_id"] = build_late_event_id(
-                message["event_id"], late_injection_sequence
-            )
-            send_tracked(producer, topic, late_message, accounting)
+            if probability_late and rng.random() < probability_late:
+                late_injection_sequence += 1
+                late_delta_ms = int(rng.uniform(4 * 60, 25 * 60) * 1000)
+                late_epoch_ms = max(0, event_time_ms - late_delta_ms)
+                late_message = build_message(row, late_epoch_ms, format_iso(late_epoch_ms))
+                late_message["event_id"] = build_late_event_id(
+                    message["event_id"], late_injection_sequence
+                )
+                send_tracked(producer, topic, late_message, accounting)
 
-    try:
-        producer.flush(timeout=30)
-    except Exception as exc:
-        lifecycle_errors.append(f"flush: {type(exc).__name__}: {exc}")
-    try:
-        producer.close(timeout=10)
-    except Exception as exc:
-        lifecycle_errors.append(f"close: {type(exc).__name__}: {exc}")
-
-    if lifecycle_errors:
-        accounting.reconcile_unconfirmed("; ".join(lifecycle_errors))
-    else:
-        accounting.reconcile_unconfirmed("callback not completed after clean close")
+    finally:
+        try:
+            producer.flush(timeout=30)
+        except Exception as exc:
+            lifecycle_errors.append(f"flush: {safe_error_text(exc)}")
+        try:
+            producer.close(timeout=10)
+        except Exception as exc:
+            lifecycle_errors.append(f"close: {safe_error_text(exc)}")
+        accounting.reconcile_unconfirmed(
+            "; ".join(lifecycle_errors) or "callback not completed after clean close"
+        )
+        for error in lifecycle_errors:
+            print(f"[error] producer {error}", file=sys.stderr, flush=True)
     elapsed = time.monotonic() - replay_start
     receipt = {
         "attempted_events": accounting.attempted_events,

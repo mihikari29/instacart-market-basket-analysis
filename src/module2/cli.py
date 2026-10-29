@@ -8,8 +8,8 @@ from pathlib import Path
 import platform
 import re
 
-from ..common.runtime import safe_error_text
-from ..common.runtime import new_run_id, save_json
+from ..common.runtime import redact_sensitive_text, safe_error_text
+from ..common.runtime import new_run_id, save_redacted_json
 from ..common.runtime import code_digest, git_revision
 from .config import Config, session
 from .data import read_tables, validate, require
@@ -19,13 +19,14 @@ from .eventlog import parse_event_logs, attach_metrics
 
 
 def main(argv=None):
+    """Return 0 on success or 1 after reporting a sanitized runtime failure."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
         choices=["validate", "stats", "benchmark-joins", "benchmark-partitions", "benchmark-cache", "all"],
     )
-    parser.add_argument("--root", default=os.environ.get("MODULE2_ROOT", Config.root))
-    parser.add_argument("--master", default=os.environ.get("SPARK_MASTER", Config.master))
+    parser.add_argument("--root", default=None)
+    parser.add_argument("--master", default=None)
     parser.add_argument("--shuffle-partitions", type=int, default=8)
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
@@ -40,7 +41,9 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     require(args.min_support >= 1, "min-support must be positive")
-    config = Config(args.root, args.master, args.shuffle_partitions, args.repetitions, args.warmups)
+    config_options = {"root": args.root, "master": args.master, "shuffle_partitions": args.shuffle_partitions,
+                      "repetitions": args.repetitions, "warmups": args.warmups}
+    config = Config.environment(**{name: value for name, value in config_options.items() if value is not None})
     run_id = args.run_id or new_run_id()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", run_id) or ".." in run_id:
         parser.error("--run-id must be a 1-80 character path-safe identifier")
@@ -59,6 +62,7 @@ def main(argv=None):
         },
     }
     spark = None
+    exit_code = 0
     try:
         spark = session(config, output / "eventlog")
         report["environment"].update(
@@ -75,7 +79,7 @@ def main(argv=None):
         tables = read_tables(spark, config)
         report["validation"] = validate(spark, config, tables)
         if args.source_events:
-            from src.module1.partition_events import file_sha256
+            from src.common.runtime import file_sha256
 
             require(
                 file_sha256(args.source_events) == report["validation"]["source_receipt"]["source_sha256"],
@@ -84,7 +88,7 @@ def main(argv=None):
         print("[HANDOFF VALIDATION]", report["validation"]["counts"], flush=True)
         if args.command in ("all", "stats"):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
-            save_json(output / "analytics.json", summary)
+            save_redacted_json(output / "analytics.json", summary)
             feature_timestamp = report["environment"]["timestamp_utc"]
             tag_user_features(outputs["user_features"], run_id, feature_timestamp).write.mode(
                 "overwrite"
@@ -115,20 +119,29 @@ def main(argv=None):
             if args.command in ("all", command):
                 report[key] = function(spark, argument, config)
                 print(f"[{key}] complete", flush=True)
-        spark.stop()
+        completed_spark = spark
         spark = None
+        completed_spark.stop()
         attach_metrics(report, parse_event_logs(output / "eventlog"))
         report["status"] = "passed"
-        save_json(output / "summary.json", report)
-        print(f"[ARTIFACTS] {output.resolve()}", flush=True)
-        return 0
     except Exception as exc:
+        exit_code = 1
         report.update(status="failed", error=safe_error_text(exc))
-        save_json(output / "summary.json", report)
-        raise
+        print(f"[FAILED] {report['error']}", flush=True)
     finally:
         if spark is not None:
-            spark.stop()
+            try:
+                spark.stop()
+            except Exception as exc:
+                exit_code = 1
+                error = safe_error_text(exc)
+                report.setdefault("cleanup_errors", []).append(f"Spark stop: {error}")
+                if report["status"] != "failed":
+                    report.update(status="failed", error=error)
+                print(f"[FAILED] Spark stop: {error}", flush=True)
+        save_redacted_json(output / "summary.json", report)
+    print(redact_sensitive_text(f"[ARTIFACTS] {output.resolve()}"), flush=True)
+    return exit_code
 
 
 if __name__ == "__main__":

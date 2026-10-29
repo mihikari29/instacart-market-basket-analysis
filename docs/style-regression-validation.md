@@ -1,68 +1,89 @@
-# Post-refactor system regression validation
+# Historical style regression comparison
 
-**Final assessment: NOT FULLY VERIFIED.** No refactor-induced test outcome change or logical fixture-output mismatch was found. Follow-up investigation verified that the four bounded-fixture Module 4 Parquet hash differences came from footer serialization order, while full-data workflows remain unrun and two historical baseline browser assertion failures remain unexplained. The possible transient effects of an earlier default Compose startup also remain indeterminate, so complete system equivalence is not established.
+**Recorded assessment: NOT FULLY VERIFIED.** This summarizes the comparison
+performed on 15 October 2026. No refactor-induced logical fixture difference was
+reported, but two original browser assertion failures remained unexplained,
+possible earlier persistent-volume effects were indeterminate, and full-data
+workflows were not run. It is not acceptance of the current cleanup worktree.
 
-Validation was performed on 2026-10-15 against the baseline and the current working tree. The original request and the canonical workflows are in force: [CI](../.github/workflows/ci.yml), [Module 2 full](../.github/workflows/module2-full.yml), [Module 3 full](../.github/workflows/module3-full.yml), [Module 4 runtime](../.github/workflows/module4.yml), [Module 4 full](../.github/workflows/module4-full.yml), and the [Docker validation runbook](docker.md).
+## Objective, source scope and evidence availability
 
-## Baseline and environment
+The experiment compared a clean historical baseline with uncommitted
+readability/configuration edits at the same HEAD. The changed historical paths
+were `src/module1/config.py`, `src/module2/analytics.py`, `src/module2/config.py`,
+`src/module3/config.py`, `src/module3/trending.py`, and coding conventions.
+The edits concerned docstrings, annotations, imports, formatting and local
+names. Review and executable-AST comparison reported no
+algorithm change; Module 4 source was outside that edit scope.
 
-The baseline is commit `b89e2787a4ea0faa5bbcfa36b997ec511d292d19`. It was checked out into a clean detached worktree in a temporary directory; the baseline commit and worktree were not modified. At validation time the refactored tree had the same `HEAD` SHA and consisted of working-tree changes to `src/module1/config.py`, `src/module2/analytics.py`, `src/module2/config.py`, `src/module3/config.py`, and `src/module3/trending.py`, plus `docs/coding-conventions.md`. The source edits are docstrings, annotations, imports, formatting, and local-name clarity. Review and an executable-AST comparison found no algorithm change.
+The raw JUnit XML, command logs, fixture JSON, Parquet captures, footer diffs,
+browser traces and Docker snapshots are **not included in this checkout**.
+Some original browser traces were never retained. The observations below are
+preserved historical results, not independently reverified measurements; the
+available source and narrative alone cannot reconstruct the complete experiment.
+No experiments were rerun for this documentation edit.
 
-Both trees used the same `instacart-spark:3.5.5` image (`sha256:7944963206c8f4d1bf29db42c9c4900ba8ceb17a1dfd1f0afc577b4878075636`): Python 3.10.12, Java 17.0.14, Spark 3.5.5, Scala 2.12.18, Ruff 0.11.13, pytest 8.4.2, NumPy 2.2.6, pandas 2.3.3, PyArrow 25.0.1, PyMongo 4.11.3, GraphFrames Python 0.6, and kafka-python 3.0.11. The host had Python 3.14.4, Java 21.0.12.1, Docker 29.8.1, and Docker Compose 5.5.1. The dashboard test image used Python 3.14, Playwright 1.63.0, and Chromium 153.0.8010.12.
+Essential recorded identities are kept together because the corresponding
+technical artifacts are unavailable:
 
-Live-Mongo checks used the repository-pinned MongoDB 7.0.16 image (`sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a`) on a private network with a tmpfs database, no published host port, and the documented `i1-mongo`, `i2-mongo`, and `i3-mongo` aliases. Module 3 and 4 smokes and the dashboard demo used unique project/resource names and isolated fixture data. Those test resources were removed after use. The pre-run environment had no live-Mongo test URI variables set; the documented URIs were supplied only to the isolated test containers.
+| Record | Historical identity |
+|---|---|
+| Baseline Git revision | `b89e2787a4ea0faa5bbcfa36b997ec511d292d19` |
+| Shared Spark image | `sha256:7944963206c8f4d1bf29db42c9c4900ba8ceb17a1dfd1f0afc577b4878075636` |
+| Isolated MongoDB image | `sha256:c630c59342c1493d50345136df2af14a76b9e827dd5316bfabee07a0880a5f3a` |
+| Equal deterministic fixture JSON | `sha256:c48e8cd8411094572213fda1166a0aba36afe7377932cae67933bfc103686e12` |
 
-## Evidence packaging
+## Environment and method
 
-The detailed run logs, JUnit XML, fixture-output JSON, raw Parquet captures, and Docker/browser snapshots remain in the local working copy under `docs/style-regression-artifacts/` and are intentionally excluded from this PR. The JUnit XML contains test-only Mongo connection strings for isolated local service aliases; raw logs and generated data are also unnecessary to ship with this focused refactor. The outcome summaries below were reviewed against that local evidence. No production or remote service credentials were found, and no existing `src/module4/dashboard/assets/**` file was changed. Because the raw artifacts are not included, reviewers of the PR cannot independently open those local logs or binaries from this branch.
+Both source variants used Python 3.10.12, Java 17.0.14, Spark 3.5.5, Scala
+2.12.18, Ruff 0.11.13, pytest 8.4.2, NumPy 2.2.6, pandas 2.3.3, PyArrow 25.0.1,
+PyMongo 4.11.3, GraphFrames Python 0.6 and kafka-python 3.0.11. The recorded host
+used Python 3.14.4, Java 21.0.12.1, Docker 29.8.1 and Compose 5.5.1. Browser
+checks used Playwright 1.63.0/Chromium 153.0.8010.12; the dashboard test image
+used Python 3.14. These describe the historical environment, not today's tools.
 
-## Test results
+Live MongoDB used private networks, tmpfs databases, no published host port and
+isolated `i1-mongo`, `i2-mongo`, `i3-mongo` aliases. Stream, HDFS and dashboard
+fixtures used unique projects/resource identities with scoped cleanup. Matching
+source variants received identical fixtures and settings. Current operator
+commands live in the [Docker runbook](docker.md#validation-commands); they are
+not substitutes for the missing historical command logs.
 
-| Test category | Baseline | Refactored | Equivalence assessment | Evidence and limits |
-|---|---|---|---|---|
-| Ruff, syntax, Compose, diff hygiene | PASS | PASS | Same checks passed | Ruff and compileall ran in the pinned image; Compose config and `git diff --check` ran in each tree. Detailed raw logs are retained locally and excluded from the PR. |
-| Canonical CI-selected pytest, before Mongo was configured | 690 passed, 69 skipped, 0 failed | 690 passed, 69 skipped, 0 failed | Same test identities and outcomes | The 69 skips were conditional live-Mongo tests, not silently omitted. Test logs and XML are retained locally and excluded from the PR. |
-| Same CI-selected suite with live Mongo enabled | 759 passed, 0 skipped, 0 failed | 759 passed, 0 skipped, 0 failed | All 759 test identities matched; zero outcome changes | Each run had the same five Spark deprecation/internal-API warnings. Test logs and XML are retained locally and excluded from the PR. |
-| Module 4D API and isolated Mongo checks (`--mode all`) | 497 unit + 26 live-Mongo passed; Ruff and startup/OpenAPI checks passed | Same | Pass on both | The validator checked 21 expected route statuses and its read-only, index, and credential-leak contracts. Detailed logs are retained locally and excluded from the PR. |
-| Streamlit UI pytest | 64 passed | 64 passed | Pass on both | Detailed logs are retained locally and excluded from the PR. |
-| Module 3 streaming smoke, recovery, and late-data demo | PASS | PASS | Logical late-data outputs matched after removing only run IDs and execution timestamps | One 500-event smoke per tree; a separate recovery run restarted Spark and checked checkpoint continuation. Detailed logs are retained locally and excluded from the PR. |
-| Module 4 runtime, staged A/B flow/replay, and cross-module smoke | PASS | PASS | Logical business summaries and cross-module receipt matched; four flow Parquet hashes differed by verified footer serialization order | Raw logs and generated Parquet captures are retained locally and excluded from the PR; see output comparison below. |
-| Isolated dashboard demo and Chromium E2E | First two browser attempts failed assertions; third passed | Passed on first attempt | Fresh matched reruns passed on both; historical baseline run was inconsistent | Historical attempt notes and fresh rerun logs are retained locally and excluded from the PR. The original raw traces were not retained. |
-| Full-data Module 2, Module 3, and Module 4 workflows | NOT RUN | NOT RUN | Not compared | These acceptance workflows were inspected but not triggered. Fixture tests do not substitute for full-data validation. Automatic pull-request checks are reported separately on GitHub. |
+Comparison covered seeded Module 1 samples; Module 2 schemas/counts/metrics,
+ordered outputs and features; Module 3 schemas/window ranks/Top-K; Hybrid
+recommendations; and representative error type/message contracts. Deterministic
+fixture JSON was reported byte-identical without removing business fields.
+Late-data comparison excluded only generated query IDs and execution times.
+Test selections below overlap and must not be summed.
 
-The static checks used the canonical CI Ruff and pytest commands, plus `python3 -m compileall -q src scripts`, `docker compose config --quiet`, and `git diff --check`. Ruff's cache was directed to container `/tmp` because source mounts were read-only. The initial 69 conditional skips were then explicitly exercised by enabling the isolated Mongo aliases, producing 759 passes and zero skips for each version. D1 API Mongo tests and UI tests are separate CI jobs and were run separately as shown above.
+## Recorded outcomes
 
-## Output comparison
+| Scope | Baseline and refactored observations | Interpretation |
+|---|---|---|
+| Static checks | Ruff, compilation, Compose configuration and diff checks passed on both. | Source checks only. |
+| CI selection without Mongo configuration | Both: 690 passed, 69 skipped, zero failures. | Conditional live-service skips, not completed integration checks. |
+| Same selection with isolated live Mongo | Both: 759 passed, zero skipped/failed; identical test identities/outcomes; five Spark warnings. | Reported fixture/service equivalence within that selection. |
+| API/isolated Mongo harness | Both: 497 unit and 26 live passes, startup/OpenAPI/Ruff checks, 21 expected HTTP statuses and read-only/index/credential assertions. | API package/fixture scope. |
+| Streamlit UI | Both: 64 passed. | Separate UI selection. |
+| Module 3 smokes | Each 500-event smoke acknowledged all events, failed none and wrote 1,860 rows, with no invalid scores, duplicate keys/ranks, missing fields or windows over Top-K. Two-process recovery kept query/checkpoint identity and ended at 96 documents without duplicate groups. | Bounded legacy-stream recovery; not all bundle/full-data recovery paths. |
+| Late-data fixture | Both accepted the in-watermark record, dropped the too-late record and duplicate ID, counted the malformed record as invalid, and matched selected window counts/ranks. | Controlled event-time behavior. |
+| Module 4 runtime and A/B flow | GraphFrames/standalone Spark, HDFS round trip and Mongo ping passed. First/replay output had nine recommendation and five graph documents. Both staged 8 orders, 10 prior, 4 train and 5 products with equal normalized business summaries. | Four raw Parquet hashes differed; strict byte equality failed. See below. |
+| Module 1→2→4 handoff | Equal source receipts/counts (16/24/12/6), four user features, matching downstream counts and ready A/B pair. | Small cross-module fixture only. |
+| Chromium | Baseline failed two assertions, then passed; refactored passed initially. One later matched rerun on each source also passed. | Original assertion failures remain unexplained. |
+| Full-data Module 2/3/4 workflows | NOT RUN for either source. | No full-data equivalence or fresh hosted Actions result established. |
 
-The fixture comparer ran both code trees in the pinned Spark image with identical fixed inputs and settings. It compared Module 1 preset/config results and seeded samples; Module 2 schemas, counts, report metrics, and ordered rows; Module 3 schemas, counts, ranked windows, and Top-K rows; Module 4 hybrid recommendations; and representative error type/message contracts. The resulting baseline and refactored JSON outputs were byte-identical (SHA-256 `c48e8cd8411094572213fda1166a0aba36afe7377932cae67933bfc103686e12`). The generated output JSON files are retained locally and excluded from the PR. No business fields were removed from this comparison.
+## Parquet differences and logical equivalence
 
-For Module 3, each 500-event smoke acknowledged all 500 sends, reported zero failed sends, and wrote 1,860 documents. Both outputs had no missing required fields, duplicate window/product or rank keys, invalid scores, or windows over Top-K. The two-process recovery run kept a stable query ID/checkpoint and ended with 96 documents and no duplicate groups. The late-data demo produced the same normalized result in both trees: a duplicate event ID was dropped, a malformed event counted invalid, an in-watermark event was accepted, and a beyond-watermark event was dropped. The selected product/window count and rank also matched. Only generated query IDs and execution timestamps were excluded from that late-demo comparison.
+The flow fixture wrote one unpartitioned Parquet file per table. Its source
+receipt hashed file bytes, including data pages and footer metadata, rather
+than filenames, directory layout, HDFS timestamps, `_SUCCESS` or the separate
+receipt file. Current ownership is visible in the
+[fixture flow runner](../scripts/module4_smoke.py) and
+[source reader](../src/module4/data.py); their present bytes are not the
+historical artifact capture.
 
-Module 4 runtime checks passed GraphFrames/Spark, HDFS round-trip, and Mongo ping checks. The isolated A/B flow and same-version replay passed readiness and Mongo validation, with 9 recommendation documents and 5 graph documents. Both versions staged the same logical row counts (8 orders, 10 prior, 4 train, 5 products), and the normalized business summaries matched while retaining the business fields. The SHA-256 receipts for all four Parquet outputs differed, so strict byte-for-byte equality **fails**. Follow-up inspection verified that each difference is only the serialized order of equal encoding values in the Parquet footer; the data-page prefixes, writer/schema metadata, complete schemas, and full fixture row multisets match. The hashes therefore differ because of serialization order in these bounded fixture files. This does not establish strict byte equality or full-data equivalence. The separate Module 1 → Module 2 → Module 4 smoke had identical Module 1 source receipt hashes, matching source counts (16/24/12/6), four user features, matching downstream counts, and a ready A/B pair.
-
-## Performance sanity checks
-
-The complete live-Mongo pytest runs took 192.92 seconds for baseline and 191.44 seconds for refactored. The single 500-event Module 3 smokes reported about 663 versus 570 events/second. Those are short single-run measurements and do not establish a throughput regression or improvement. Module 4 fixture measurements were also close (ALS evaluation about 102.7 versus 102.5 seconds; graph work about 11.1 versus 11.7 seconds). No repeated benchmark or full-data performance run was performed, and no historical benchmark report was overwritten.
-
-## Coverage and limitations
-
-- **PASS:** baseline reconstruction, static checks, all 759 live-Mongo CI-selected tests on each tree, API/Mongo checks, UI tests, Module 3 smokes, Module 4 runtime and fixture flows, and exact deterministic fixture JSON equality.
-- **FAIL (byte equality only):** Module 4 A/B flow's four Parquet receipt hashes were not byte-identical. Follow-up inspection verified the footer serialization-order cause, and complete logical fixture data matches.
-- **FAIL (baseline run instability):** two baseline Chromium attempts failed assertions before a third complete pass. The refactored Chromium run passed. The observed failures do not show a refactor-specific regression, but the repeated baseline behavior lowers confidence in the browser check.
-- **NOT RUN:** full Instacart-source ingestion through final serving, Module 1 full HDFS staging/rollback workflow, Module 2 full dataset/HDFS/Mongo serving run, the 5,000-event Module 3 full workflow, and Module 4 full-data acceptance/replay. These workflows use full source data and write service/result state; only isolated fixture/runtime validation was run. No remote GitHub Actions run was part of this pre-PR comparison; automatic pull-request checks are reported separately on GitHub.
-- **BLOCKED:** none. The items above were either run or explicitly left as NOT RUN; no required test was represented as passed without execution.
-
-No source dataset or historical `src/module4/dashboard/assets/**` artifact was intentionally edited, and no remote CI, push, or merge was performed during the validation runs. Detailed validation evidence remains in the local `docs/style-regression-artifacts/` directory and is excluded from this PR as described above. During interface discovery, `python3 scripts/module2.py --help` unexpectedly started the default Compose project before parsing the help flag. I interrupted that startup and did not remove any named volumes; the `instacart_*` volumes remain. The default project's Spark master/worker were reported in Created state and its other listed services stopped. Because the services may have briefly mounted their default data volumes, transient startup writes cannot be ruled out. All later runtime checks used isolated projects and exact resource-scoped cleanup.
-
-The code and test comparisons show no demonstrated refactor-induced logical regression, but the unexplained historical baseline browser assertions, unrun full-data acceptance paths, and indeterminate earlier volume startup leave important gaps. The appropriate completion-gate result is **NOT FULLY VERIFIED**.
-
-## Investigation addendum (2026-10-15)
-
-This addendum preserves the original run counts and outcomes above while recording the follow-up investigation. It resolves the cause of the four bounded-fixture Parquet hash differences, adds matched browser reruns, and confirms the CLI behavior against the baseline. It does not change the overall completion gate: full-data workflows remain **NOT RUN**, and the historical browser failures and possible earlier volume writes cannot be reconstructed completely.
-
-### Module 4 Parquet receipt differences
-
-The four mismatches are the per-table SHA-256 values written to the source receipt. The writer in [`scripts/module4_flow_smoke.py`](../scripts/module4_smoke.py#L75) coalesces each fixed fixture to one Parquet file, and [`src/module4/data.py`](../src/module4/data.py#L98) hashes the raw bytes of that one file through a streaming HDFS read. The hash includes Parquet data pages and its footer, including embedded schema and writer metadata. It does not include the HDFS file name, file status/timestamps, directory or partition layout, `_SUCCESS`, or `_sources.json` as a separate file. The fixture writes one unpartitioned part file per table; UUID-suffixed part filenames differ between runs but are outside the hash.
+The following recorded identifiers are retained for interpretation. File bytes
+are unavailable here; hashes have not been recomputed in this phase.
 
 | Table | Schema (all fields nullable; no field metadata) | Key | Rows | Baseline hash | Refactored hash | File bytes |
 |---|---|---|---:|---|---|---:|
@@ -71,60 +92,68 @@ The four mismatches are the per-table SHA-256 values written to the source recei
 | `order_products_train` | `order_id: long, product_id: integer, add_to_cart_order: integer, reordered: boolean` | `(order_id, product_id)` | 4 | `859fbda042b3ee4dc1ff0f82039bd8ed8517ad19d5c4fa766d825489f57faba2` | `2027b584e54ec3fc51d9ffbbf2df7ebe2ac0da72cdbd611c107c43c749d2d92d` | 1316 |
 | `products` | `product_id: integer, product_name: string, aisle_id: integer, department_id: integer` | `product_id` | 5 | `5b0c6da362d776d118573b9b1aded5a2e6494ca51915f56565127c5f2b8863fb` | `d5e749d27725a36ba1e0c04b8d3d64d89f0590c6d63303c1a00e87f3507616e1` | 1361 |
 
-The investigation reran the same fixture writer in fresh baseline and refactored isolated HDFS projects and captured all eight raw files. The baseline capture produced the four historical refactored hashes; the refactored capture produced the four historical baseline hashes. Both variants therefore recur under both code versions, rather than tracking the refactor. Each file pair has the same length and one row group. Spark distributed comparisons found equal complete schemas (including names, types, nullability, and field metadata), exact row counts, exact full-row multisets using bidirectional `exceptAll`, and exact record-key multisets using grouped key counts plus bidirectional `exceptAll`. This preserves duplicate multiplicities. Null counts are equal and zero for every field. No row ordering contract is declared for these tables; a separate single-file read diagnostic observed identical row sequence as well.
+Follow-up captures reportedly reproduced both hash sets under both code
+versions. Every pair had equal length, one row group, equal complete schemas
+including nullability/metadata, exact counts, bidirectional full-row
+`exceptAll`, and grouped-key multiset comparisons preserving duplicates. Null
+counts matched at zero. No row ordering contract was declared; a separate
+single-file diagnostic also observed the same sequence.
 
-The byte inspection found identical data-page prefixes before the footer. Both sides report the same `parquet-mr 1.13.1` writer build, Spark 3.5.5 footer metadata, schemas, one row group, Snappy compression, and per-column encoding sets and decoded metadata. Only the serialized order of the same encoding enum values in the Parquet footer's per-column `encodings` arrays differs. The file hash covers those footer bytes, so that serialization difference accounts for each hash mismatch. **Classification for all four: Serialization-only difference, verified.** The bounded fixture's logical data matches exactly; this conclusion does not extend to full-data workflows.
+The report attributes each difference to serialized ordering of identical
+encoding enum values in the footer's per-column `encodings` arrays. Data-page
+prefixes, decoded metadata, schema, Snappy compression, encoding sets,
+`parquet-mr 1.13.1` writer identity and Spark 3.5.5 metadata matched. The recorded
+classification is **serialization-only difference in these bounded fixtures**.
+It explains the reported hash difference without establishing byte equality,
+deterministic Parquet output across applications, or full-data equivalence.
 
-Raw captures, both historical hash sets, schemas, comparison JSON, footer byte-diff details, scripts, run logs, and isolated cleanup evidence remain in the local artifact directory and are excluded from the PR. The earlier statement that the cause was unexplained records the initial report; the evidence in this addendum supersedes that interpretation.
+## Browser failures and persistent-state uncertainty
 
-### Browser failure analysis and matched reruns
+| Original baseline assertion | What is known |
+|---|---|
+| Only four evaluation charts instead of the required five | The runner reached the evaluation page and counted charts immediately after the heading. |
+| Missing “Recorded Spark batch durations (milliseconds)” | The runner reached evidence-content assertions; no original timestamped UI/API snapshot or raw traceback survived. |
 
-The original baseline attempt record says fixture and API validation passed before each failure. The raw browser output and per-attempt service snapshots were not retained. The failing assertions can be identified from the unchanged browser test script:
+These were application E2E assertions, not browser-startup failures. API fixture
+validation had passed, but the UI had no Compose healthcheck. A rerender timing
+issue is plausible, not established. The later matched runs used the same
+fixture, validator, pinned browser stack and loopback ports in separate projects
+and generated databases. Both passed four pages, five charts, selectors,
+fallback/recovery, refresh and JavaScript checks after API/Mongo readiness;
+passing reruns do not explain the original failures. A separate follow-up
+harness setup lacked Python Playwright despite having Chromium; correcting
+that setup did not establish a cause for the original assertions.
 
-| Historical attempt | Exact failing step and script error | Assessment |
-|---|---|---|
-| Baseline 1 | After selecting cohort, metric, method, and K and waiting for the `Recall@K at K=10` heading, the script immediately counted charts and raised `RuntimeError: evaluation page rendered only 4 charts; expected ALS, three Spark, and C8B charts`. | The browser reached the evaluation page. The immediate count could observe an unfinished rerender, but the lost trace cannot establish that as the cause. |
-| Baseline 2 | The evaluation page text check raised `RuntimeError: evaluation page omitted performance evidence section 'Recorded Spark batch durations (milliseconds)'`. | The browser reached the evaluation content checks. The original record has no timestamped UI/API health snapshot or raw traceback to distinguish incomplete rendering from a content issue. |
-| Baseline 3 | Full Chromium E2E passed. | Existing attempt record. |
-| Refactored 1 | Full Chromium E2E passed. | Existing attempt record. |
+During the historical investigation, Module 2 wrapper help started the default
+Compose project before forwarding help. This predated the style edits. The
+current shared [Compose wrapper](../scripts/compose_runner.py) handles help
+before service startup; that later correction does not resolve earlier volume
+uncertainty.
 
-These were E2E assertion failures, not recorded browser-runner startup failures. Before the original failures, the API fixture validator passed, but contemporaneous readiness cannot be proven: the API has a healthcheck, while the Streamlit UI service has no Compose healthcheck. The script waits for page headings, then performs immediate required-text/chart checks. A render timing issue is plausible but unproven, so the original failures remain genuine and unexplained. The original baseline and refactored runs used the same demo fixture, API validator, Compose/browser setup, and pinned browser image according to the saved record; raw per-attempt configuration was not retained.
+The recorded volumes were `instacart_namenode_data`, `instacart_datanode_data`
+and `instacart_mongodb_data`. Later metadata showed Spark containers Created
+with zero start times and HDFS/Mongo stopped, but no pre-incident data snapshot
+existed. No volume was deliberately reset, removed or pruned; transient writes
+cannot be ruled out. Later isolated cleanup does not prove the earlier
+persistent data was unchanged.
 
-To investigate whether the failures reproduce, one additional isolated run was performed on each revision. Both used the same demo Compose file, fixed fixture, API validator, MongoDB 7.0.16 image with tmpfs data, Playwright Python 1.63.0 and Chromium 153.0.8010.12, and the same loopback ports. Each revision had a unique Compose project and generated database; the baseline used the clean detached baseline worktree and the refactored run used the working tree. Before both browser runs, fixture publication and API validation passed, API health returned `{"status":"ok"}`, and MongoDB/API were healthy. The UI was up and logged Streamlit startup; its container has no healthcheck. Both Chromium reruns passed all four pages, five evaluation charts, controls, fallback/recovery, refresh, and JavaScript-exception checks. Rerun logs and readiness snapshots remain local and are excluded from the PR. The original assertion failures remain unexplained despite the successful matched reruns.
+## Performance and remaining verification
 
-An initial invocation in this investigation stopped before browser execution because the browser image had Chromium but lacked the Python Playwright package. After installing the pinned `playwright==1.63.0` package in the disposable runner, the baseline and refactored browser checks above completed successfully. This investigation harness setup issue is recorded separately from the historical dashboard assertions.
+| Single historical comparison | Baseline | Refactored |
+|---|---:|---:|
+| Live-Mongo pytest elapsed | 192.92 s | 191.44 s |
+| 500-event stream processed rate | about 663/s | about 570/s |
+| ALS fixture evaluation | about 102.7 s | about 102.5 s |
+| Graph fixture work | about 11.1 s | about 11.7 s |
 
-### `module2.py --help` and Compose startup
+These were short single-run sanity checks, not repeated performance experiments;
+they establish neither speedup nor throughput regression. Full ingestion/HDFS
+staging and rollback, full batch publication, the 5,000-event Module 3 workflow,
+full-data ALS/graph/Hybrid acceptance and replay remained NOT RUN.
 
-Static inspection and a mocked invocation confirmed the startup sequence without running Docker. The wrapper constructs `ArgumentParser(add_help=False)`, calls `parse_known_args()`, then invokes `docker compose up` before forwarding unknown arguments to `docker compose run`. Thus `--help` is forwarded to the Module 2 container only after the default Spark, worker, and MongoDB services are started. The current [`scripts/module2.py`](../scripts/module2.py) is byte-for-byte unchanged from baseline commit `b89e2787a4ea0faa5bbcfa36b997ec511d292d19`; the behavior predates this refactor. The mock records both Compose commands while replacing `subprocess.run`, so no container was started. The mock trace and baseline comparison are retained locally and excluded from the PR.
-
-Recommended separate fix: enable wrapper-level argparse help (or short-circuit `-h`/`--help`) before the Compose startup call, and document the wrapper's supported command/passthrough syntax. This will make help exit successfully without starting containers or mounting volumes. No CLI behavior change was made in the coding-style refactor.
-
-### Existing volumes and possible side effects
-
-Read-only Docker metadata inspection on 2026-10-15 found `instacart_namenode_data`, `instacart_datanode_data`, and `instacart_mongodb_data` still present. The Spark master and worker containers were in `Created` state with zero start timestamps; MongoDB and HDFS containers were stopped, with their current inspection metadata showing prior start/finish times and mounts to the named volumes. The volumes were not opened or modified during this follow-up. The metadata snapshot does not show the contents before the earlier accidental default-project startup, so it cannot prove whether that startup made transient writes. The original uncertainty remains: no volume was deliberately removed, reset, or pruned, but transient writes cannot be ruled out. Read-only inspection records remain local and are excluded from the PR.
-
-The additional browser checks used isolated project names and MongoDB tmpfs storage; the Parquet captures used isolated HDFS projects and exact-project cleanup. No default Compose command was run during this investigation. These scoped runs do not alter the uncertainty about the earlier incident.
-
-### Changed-module coverage and remaining gaps
-
-| Changed code | Existing comparison evidence | Remaining scope gap |
-|---|---|---|
-| `src/module1/config.py` | All 759 live-Mongo CI-selected tests; deterministic config/fixture output comparison; Module 1 source receipt and row-count checks in the cross-module smoke. | Full Module 1 HDFS staging/rollback and Kafka delivery workflow was not run. |
-| `src/module2/config.py`, `src/module2/analytics.py` | All 759 tests; distributed Spark fixture comparisons of schema, counts, report metrics, ordered rows and downstream user features; Module 1-to-2-to-4 smoke. | Full dataset analytics, HDFS feature output, and Mongo batch-serving workflow was not run. |
-| `src/module3/config.py`, `src/module3/trending.py` | All 759 tests; 500-event Kafka/Spark/Mongo smoke, process recovery, late-data behavior, and normalized trend output comparison. | The 5,000-event full Module 3 workflow was not run. |
-| No Module 4 source file changed. | Module 4 runtime, A/B fixture flow and replay, cross-module smoke, 497 API unit checks plus 26 live-Mongo API checks, 64 Streamlit tests, and matched browser E2E reruns. The four source-file hashes are now explained at byte level for the bounded fixture. | Full-data ALS/GraphFrames/Hybrid acceptance and full-data replay were not run. |
-
-The changed files have fixture/runtime coverage appropriate to their limited config/readability edits, with no logical fixture-output difference found. This is not full-data coverage. The initial fast suite and the 759-test live-Mongo suite counts above remain unchanged; no tests were added or weakened in this investigation.
-
-### Updated assessment and next actions
-
-No refactor-induced logical difference was found in the executed scope. The four Parquet receipt differences are verified serialization-only differences in bounded fixture output, and both new isolated browser runs pass. The two historical baseline browser assertions remain unexplained, the earlier default-volume startup has no before/after data snapshot, and Module 2/3/4 full-data workflows remain **NOT RUN**. The completion-gate assessment remains **NOT FULLY VERIFIED**; strict byte-for-byte Parquet equality across Spark application runs is not established or guaranteed by these fixtures.
-
-Prioritized follow-up:
-
-1. When source data and a controlled environment are available, run the canonical full-data Module 2, Module 3, and Module 4 acceptance workflows against baseline and refactored trees with isolated resources and output comparisons. Keep these explicitly **NOT RUN** until executed.
-2. In a separate test-maintenance change, make the browser wait for settled chart count and required evidence text, and preserve raw browser/service logs per attempt. Do not treat the successful reruns as proof of the original failure cause.
-3. In a separate CLI fix, add wrapper help that exits before Compose startup; retain the current style-refactor scope unchanged.
-4. If byte-reproducible Parquet fixtures are a required contract, separately investigate deterministic footer encoding-list serialization. The present evidence shows equal logical records and explains the hashes, so no algorithm or writer change is made here.
-5. Treat the default-volume state as historically indeterminate unless an independent pre-incident snapshot or backup becomes available; do not infer that no transient writes occurred.
+Remaining work is to run isolated full-data comparisons with matching source
+and output evidence, preserve browser/service traces per attempt, and decide
+whether deterministic Parquet bytes are actually required before considering a
+separate writer change. Keep logical and byte comparisons distinct. Treat
+persistent-volume state as historically indeterminate without independent
+pre-incident evidence. The recorded assessment remains NOT FULLY VERIFIED.

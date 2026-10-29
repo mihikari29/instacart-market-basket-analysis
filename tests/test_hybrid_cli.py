@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -359,6 +360,47 @@ def test_client_is_closed_when_service_fails(monkeypatch):
     assert cli.main(_argv()) == 1
 
     assert client.closed
+
+
+def test_quoted_credential_fields_are_redacted_through_exception_chain(monkeypatch, capsys):
+    cause = RuntimeError("authentication failed: {'username': 'synthetic_user', 'credentials': 'synthetic_credential with spaces'}")
+    failure = RuntimeError("serving failed")
+    failure.__cause__ = cause
+    client, _, _ = _install(monkeypatch, error=failure)
+    assert cli.main(_argv()) == 1
+    captured = capsys.readouterr()
+    assert "synthetic_user" not in captured.err
+    assert "synthetic_credential" not in captured.err
+    assert "authentication failed" in captured.err
+    assert client.closed
+
+
+@pytest.mark.parametrize("primary_failure", [False, True])
+def test_close_failure_does_not_emit_success_or_leak_credentials(monkeypatch, capsys, primary_failure):
+    client, _, _ = _install(monkeypatch, result=_result(), error=RuntimeError("synthetic primary failure") if primary_failure else None)
+
+    def close():
+        raise RuntimeError("authentication failed: credentials='synthetic_credential with spaces'")
+
+    monkeypatch.setattr(client, "close", close)
+    assert cli.main(_argv()) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "authentication failed" in captured.err
+    assert "synthetic_credential" not in captured.err
+    if primary_failure:
+        assert "synthetic primary failure" in captured.err
+
+
+def test_success_output_redacts_sensitive_namespace_metadata(monkeypatch, capsys):
+    result = _result()
+    result = replace(result, trend_source_namespace="token=synthetic_token")
+    _install(monkeypatch, result=result)
+    assert cli.main(_argv(source_namespace="token=synthetic_token")) == 0
+    captured = capsys.readouterr()
+    assert "synthetic_token" not in captured.out
+    assert json.loads(captured.out)["status"] == "published"
+    assert captured.err == ""
 
 
 def test_cli_does_not_attempt_spark_kafka_or_hdfs_imports(monkeypatch):

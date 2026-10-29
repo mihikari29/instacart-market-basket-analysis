@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any
-import yaml
+from copy import deepcopy
+
+from src.common.runtime import config_section, env_float, env_int, finite_number, positive_int, read_yaml_mapping
 
 PIPELINE_CONFIG_DEFAULT = Path(__file__).resolve().parents[2] / "config" / "pipeline.yaml"
 
@@ -92,105 +94,108 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 def load_timeouts_config(path: Path | str | None = None) -> dict[str, Any]:
-    """Load configuration from pipeline.yaml with defaults fallback."""
-    config_path = None
-    if path:
-        config_path = Path(path)
-    elif os.environ.get("IT4931_PIPELINE_CONFIG"):
-        config_path = Path(os.environ["IT4931_PIPELINE_CONFIG"])
-    elif PIPELINE_CONFIG_DEFAULT.is_file():
-        config_path = PIPELINE_CONFIG_DEFAULT
-
-    if config_path and config_path.is_file():
-        try:
-            loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                # Normalize timeouts section if nested under timeouts: steps
-                steps = loaded.get("pipeline_steps")
-                if not steps and "timeouts" in loaded and isinstance(loaded["timeouts"], dict):
-                    steps = loaded["timeouts"].get("steps")
-                return {
-                    "synthesis": {**DEFAULT_CONFIG["synthesis"], **loaded.get("synthesis", {})},
-                    "models": {**DEFAULT_CONFIG["models"], **loaded.get("models", {})},
-                    "streaming": {**DEFAULT_CONFIG["streaming"], **loaded.get("streaming", {})},
-                    "pipeline_steps": {**DEFAULT_CONFIG["pipeline_steps"], **(steps or {})},
-                    "acceptance": {**DEFAULT_CONFIG["acceptance"], **loaded.get("acceptance", {})},
-                    "infrastructure": {**DEFAULT_CONFIG["infrastructure"], **loaded.get("infrastructure", {})},
-                    "capacity_reserve": {**DEFAULT_CONFIG["capacity_reserve"], **loaded.get("capacity_reserve", {})},
-                    "execution": {**DEFAULT_CONFIG["execution"], **loaded.get("execution", {})},
-                }
-        except (OSError, UnicodeError, yaml.YAMLError):
-            pass
-    return DEFAULT_CONFIG
+    """Load the canonical YAML layout; only an absent implicit file is optional."""
+    selected = path if path is not None else os.environ.get("IT4931_PIPELINE_CONFIG")
+    config_path = Path(selected) if selected is not None else PIPELINE_CONFIG_DEFAULT
+    if selected is None and not config_path.exists():
+        return deepcopy(DEFAULT_CONFIG)
+    loaded = read_yaml_mapping(config_path)
+    if {"pipeline_steps", "acceptance", "infrastructure", "capacity_reserve"}.intersection(loaded):
+        raise ValueError("pipeline configuration must use the canonical timeouts and resources sections")
+    timeouts = config_section(loaded, "timeouts")
+    resources = config_section(loaded, "resources")
+    acceptance = dict(config_section(timeouts, "acceptance"))
+    if "default_command_timeout" in acceptance:
+        raise ValueError("timeouts.acceptance must use command_timeout")
+    if "command_timeout" in acceptance:
+        acceptance["default_command_timeout"] = acceptance.pop("command_timeout")
+    result = deepcopy(DEFAULT_CONFIG)
+    for section in ("synthesis", "streaming", "execution"):
+        result[section].update(config_section(loaded, section))
+    models = config_section(loaded, "models")
+    result["models"].update(models)
+    for model in DEFAULT_CONFIG["models"]:
+        config_section(models, model)
+    result["pipeline_steps"].update(config_section(timeouts, "steps"))
+    result["acceptance"].update(acceptance)
+    result["infrastructure"].update(config_section(timeouts, "infrastructure"))
+    result["capacity_reserve"].update(config_section(resources, "capacity_reserve"))
+    config_section(resources, "pipeline_job")  # Declared intent; Job manifests still own allocation.
+    for section in ("pipeline_steps", "acceptance", "infrastructure"):
+        for name, value in result[section].items():
+            positive_int(value, f"{section}.{name}")
+    reserve = result["capacity_reserve"]
+    if type(reserve["cpu_cores"]) is not int or reserve["cpu_cores"] < 0:
+        raise ValueError("capacity_reserve.cpu_cores must be a non-negative integer")
+    for field in ("memory_gib", "free_disk_gib"):
+        finite_number(reserve[field], f"capacity_reserve.{field}", minimum=0)
+    policy = result["execution"]["resume_policy"]
+    if not isinstance(policy, str) or policy.strip().lower() not in {"enabled", "strict", "disabled"}:
+        raise ValueError("execution.resume_policy must be enabled, strict, or disabled")
+    return result
 
 
 def get_step_timeout(step: str, mode: str = "fixture") -> int:
-    """Return the deadline in seconds for a pipeline step."""
-    env_override = os.environ.get(f"IT4931_STEP_TIMEOUT_{step.upper()}")
-    if env_override and env_override.isdigit():
-        return int(env_override)
-    config = load_timeouts_config()
-    steps = config.get("pipeline_steps", DEFAULT_CONFIG["pipeline_steps"])
+    """Return a positive deadline, with an explicit environment override first."""
+    variable = f"IT4931_STEP_TIMEOUT_{step.upper()}"
+    override = env_int(variable, None)
+    if override is not None:
+        return positive_int(override, variable)
+    steps = load_timeouts_config()["pipeline_steps"]
+    key = step
     if step == "replay":
-        return int(steps.get("replay_full" if mode == "full" else "replay_fixture", 1800))
-    return int(steps.get(step, 7200))
+        key = "replay_full" if mode == "full" else "replay_fixture"
+    return steps.get(key, 7200)
 
 
 def get_checkpoint_recovery_duration() -> int:
-    """Return the streaming probe duration for B4 checkpoint recovery validation."""
-    env_override = os.environ.get("IT4931_CHECKPOINT_RECOVERY_DURATION")
-    if env_override and env_override.isdigit():
-        return int(env_override)
-    config = load_timeouts_config()
-    acceptance = config.get("acceptance", DEFAULT_CONFIG["acceptance"])
-    return int(acceptance.get("checkpoint_recovery_duration", 35))
+    """Return the positive streaming probe duration for checkpoint recovery."""
+    variable = "IT4931_CHECKPOINT_RECOVERY_DURATION"
+    override = env_int(variable, None)
+    if override is not None:
+        return positive_int(override, variable)
+    return load_timeouts_config()["acceptance"]["checkpoint_recovery_duration"]
 
 
 def get_infrastructure_timeout(name: str) -> int:
-    """Return infrastructure command timeout (image pull, load, tag, rollout)."""
-    env_override = os.environ.get(f"IT4931_{name.upper()}")
-    if env_override and env_override.isdigit():
-        return int(env_override)
-    config = load_timeouts_config()
-    infra = config.get("infrastructure", DEFAULT_CONFIG["infrastructure"])
-    return int(infra.get(name, DEFAULT_CONFIG["infrastructure"].get(name, 900)))
+    """Return an infrastructure deadline; malformed overrides are errors."""
+    variable = f"IT4931_{name.upper()}"
+    override = env_int(variable, None)
+    if override is not None:
+        return positive_int(override, variable)
+    return load_timeouts_config()["infrastructure"].get(name, 900)
 
 
-def get_capacity_reserve() -> dict[str, int]:
-    """Return required host capacity reserve (CPU cores, RAM GiB, disk GiB)."""
-    config = load_timeouts_config()
-    reserve = dict(config.get("capacity_reserve", DEFAULT_CONFIG["capacity_reserve"]))
-    env_mem = os.environ.get("IT4931_CAPACITY_RESERVE_MEMORY_GIB")
-    if env_mem and env_mem.isdigit():
-        reserve["memory_gib"] = int(env_mem)
-    env_cpu = os.environ.get("IT4931_CAPACITY_RESERVE_CPU_CORES")
-    if env_cpu and env_cpu.isdigit():
-        reserve["cpu_cores"] = int(env_cpu)
-    env_disk = os.environ.get("IT4931_CAPACITY_RESERVE_FREE_DISK_GIB")
-    if env_disk and env_disk.isdigit():
-        reserve["free_disk_gib"] = int(env_disk)
+def get_capacity_reserve() -> dict[str, int | float]:
+    """Return host reserves without ignoring invalid environment overrides."""
+    reserve = dict(load_timeouts_config()["capacity_reserve"])
+    for field, variable, parse in (
+        ("cpu_cores", "IT4931_CAPACITY_RESERVE_CPU_CORES", env_int),
+        ("memory_gib", "IT4931_CAPACITY_RESERVE_MEMORY_GIB", env_float),
+        ("free_disk_gib", "IT4931_CAPACITY_RESERVE_FREE_DISK_GIB", env_float),
+    ):
+        override = parse(variable, None)
+        if override is not None:
+            finite_number(override, variable, minimum=0)
+            reserve[field] = override
     return reserve
 
 
 def get_synthesis_config() -> dict[str, Any]:
-    """Return dataset synthesis configuration."""
-    config = load_timeouts_config()
-    return config.get("synthesis", DEFAULT_CONFIG["synthesis"])
+    """Return the synthesis declarations consumed by the bounded runner."""
+    return load_timeouts_config()["synthesis"]
 
 
 def get_models_config() -> dict[str, Any]:
-    """Return recommendation models configuration (ALS, Graph, Hybrid)."""
-    config = load_timeouts_config()
-    return config.get("models", DEFAULT_CONFIG["models"])
+    """Return model declarations; consumers select their supported fields."""
+    return load_timeouts_config()["models"]
 
 
 def get_streaming_config() -> dict[str, Any]:
-    """Return streaming and replay configuration."""
-    config = load_timeouts_config()
-    return config.get("streaming", DEFAULT_CONFIG["streaming"])
+    """Return declarations; replay consumes rate, duration and Mongo Top-K."""
+    return load_timeouts_config()["streaming"]
 
 
 def get_execution_config() -> dict[str, Any]:
-    """Return execution and resume policy configuration."""
-    config = load_timeouts_config()
-    return config.get("execution", DEFAULT_CONFIG["execution"])
+    """Return execution declarations; resume policy is the active consumer."""
+    return load_timeouts_config()["execution"]

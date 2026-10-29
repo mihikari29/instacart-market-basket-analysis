@@ -317,13 +317,12 @@ def _analytics_summary(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _metric_record(record: Any, _cohort: str, _model: str, k: int) -> dict[str, Any]:
+def _metric_record(record: Any, k: int) -> dict[str, Any]:
     if not isinstance(record, dict) or record.get("status") != "evaluated":
         raise InvalidEvidence("evaluation metric record is malformed or unavailable")
     if _integer(record.get("k"), "evaluation.k", minimum=1, maximum=100) != k:
         raise InvalidEvidence("evaluation K key does not match its metric record")
-    if _integer(record.get("evaluated_users"), "evaluation.evaluated_users", minimum=1) <= 0:
-        raise InvalidEvidence("evaluation must record evaluated_users")
+    _integer(record.get("evaluated_users"), "evaluation.evaluated_users", minimum=1)
     metrics = {
         name: _number(record.get(name), f"evaluation.{name}", minimum=0, maximum=1)
         for name in _METRIC_KEYS
@@ -371,7 +370,7 @@ def _evaluation_group(value: Any, group_name: str) -> dict[str, Any]:
             if not isinstance(by_k, dict) or set(by_k) != {"5", "10", "20"}:
                 raise InvalidEvidence(f"{cohort_name}.{model_name} K metrics are incomplete")
             metrics_out[model_name] = {
-                str(k): _metric_record(by_k[str(k)], cohort_name, model_name, k) for k in (5, 10, 20)
+                str(k): _metric_record(by_k[str(k)], k) for k in (5, 10, 20)
             }
         result[cohort_name] = {"definition": definition, "users": users, "metrics": metrics_out}
     return result

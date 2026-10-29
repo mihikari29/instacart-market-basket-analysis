@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
-from src.module1.partition_events import partition_events, file_sha256
+from src.common.runtime import file_sha256
+from src.module1.partition_events import partition_events
 from .config import TABLES
 
 

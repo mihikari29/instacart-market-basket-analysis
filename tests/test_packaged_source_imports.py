@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize("target,imports", [
     ("ui", "import src.module4.dashboard.ui.api_client; import src.module4.dashboard.ui.pages.overview; import src.module4.dashboard.ui.pages.recommendations"),
-    ("k8s-runner", "from src.module4.dashboard.api import create_app; import scripts.k8s.api_readiness; create_app().openapi()"),
+    ("k8s-runner", "from src.module4.dashboard.api import create_app; import scripts.k8s.api_readiness; create_app().openapi(); from src.module4.tuning import tune_als; from src.module4.cli import tune_als as cli_tune_als; assert cli_tune_als is tune_als"),
 ])
 def test_packaged_python_sources_import_without_repository_mount(tmp_path, target, imports):
     stage = None

@@ -34,9 +34,7 @@ FROM spark AS api
 
 USER root
 WORKDIR /workspace
-COPY deploy/dashboard/requirements/api.txt /tmp/module4-api-requirements.txt
-RUN pip install --no-cache-dir -r /tmp/module4-api-requirements.txt \
-    && python3 -m pip check \
+RUN python3 -m pip check \
     && python3 -c "import pymongo; assert pymongo.version == '4.11.3', pymongo.version"
 
 COPY pyproject.toml /workspace/pyproject.toml

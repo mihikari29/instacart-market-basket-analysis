@@ -23,12 +23,8 @@ from .pipeline_task import RUNTIME_ROOT, TaskError, runtime_values, write_json
 from .config import get_checkpoint_recovery_duration
 
 
-def _canonical_digest(value: Any) -> str:
-    return sha256_json(value)
-
-
 def _check(name: str, evidence: Any) -> dict[str, Any]:
-    return {"name": name, "status": "passed", "evidence_sha256": _canonical_digest(evidence)}
+    return {"name": name, "status": "passed", "evidence_sha256": sha256_json(evidence)}
 
 
 def _load_step(name: str) -> dict[str, Any]:
@@ -93,7 +89,7 @@ def _check_hdfs_readback(run_id: str) -> dict[str, Any]:
             raise TaskError("HDFS curated source manifest has an invalid row count")
         if not isinstance(record.get("sha256"), str) or len(record["sha256"]) != 64:
             raise TaskError("HDFS curated source manifest has an invalid source hash")
-    return {"tables": len(payload), "manifest_sha256": _canonical_digest(payload)}
+    return {"tables": len(payload), "manifest_sha256": sha256_json(payload)}
 
 
 def check_executor_benchmark(module2_receipt: dict[str, Any]) -> dict[str, Any]:
@@ -323,7 +319,7 @@ def check_kafka_round_trip(run_id: str) -> dict[str, Any]:
         consumer.close()
     if observed != marker:
         raise TaskError("B4 Kafka marker did not round-trip through the run-scoped broker")
-    return {"topic": topic, "partition": 0, "marker_sha256": _canonical_digest(marker)}
+    return {"topic": topic, "partition": 0, "marker_sha256": sha256_json(marker)}
 
 
 def _check_checkpoint_recovery(run_id: str, config, spark) -> dict[str, Any]:
@@ -437,7 +433,7 @@ def _check_mongo_idempotent(run_id: str) -> dict[str, Any]:
         client.close()
     if count != 1 or observed != document:
         raise TaskError("MongoDB repeated publication did not converge to one run-scoped document")
-    return {"collection": "b4_acceptance_idempotency", "documents_after_repeat": count, "document_sha256": _canonical_digest(document)}
+    return {"collection": "b4_acceptance_idempotency", "documents_after_repeat": count, "document_sha256": sha256_json(document)}
 
 
 def _check_als_graph_readback(run_id: str) -> dict[str, Any]:

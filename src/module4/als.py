@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 from typing import Any
 
+from ..common.runtime import finite_number, positive_int
 
 @dataclass(frozen=True)
 class ALSParams:
@@ -16,10 +16,10 @@ class ALSParams:
     strength_col: str = "strength_raw"
 
     def __post_init__(self):
-        if self.rank < 1 or self.max_iter < 1:
-            raise ValueError("rank and max_iter must be positive")
-        if not math.isfinite(self.reg_param) or not math.isfinite(self.alpha):
-            raise ValueError("reg_param and alpha must be finite")
+        positive_int(self.rank, "rank")
+        positive_int(self.max_iter, "max_iter")
+        finite_number(self.reg_param, "reg_param")
+        finite_number(self.alpha, "alpha")
         if self.reg_param < 0 or self.alpha <= 0:
             raise ValueError("reg_param must be non-negative and alpha positive")
         if self.strength_col in {"raw", "log"}:
