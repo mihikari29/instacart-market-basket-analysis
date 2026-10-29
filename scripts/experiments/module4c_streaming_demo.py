@@ -33,14 +33,12 @@ PRODUCT_IDS = tuple(range(1, 21))
 SOURCE_SCOPE = "controlled_synthetic"
 WINDOW_LONG = timedelta(hours=2)
 WINDOW_SHORT = timedelta(minutes=30)
-WINDOW_SLIDE = timedelta(minutes=5)
 WATERMARK_DELAY = timedelta(minutes=10)
 TARGET_A_START = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
 TARGET_A_END = TARGET_A_START + WINDOW_LONG
 TARGET_B_START = datetime(2024, 1, 1, 3, 0, tzinfo=timezone.utc)
 TARGET_B_END = TARGET_B_START + WINDOW_LONG
 FIXTURE_INGESTION_MS = 1_800_000_000_000
-KAFKA_HOST = ("c8b-kafka", 9092)
 MONGODB_HOST = ("c8b-mongo", 27017)
 RESERVED_DATABASES = frozenset({"admin", "config", "instacart", "local"})
 REQUIRED_EVENT_FIELDS = (
@@ -790,10 +788,6 @@ def _invoke_cli(
     return result, duration_ms, safe_command
 
 
-def _expected_hybrid_rows(trend_rows: list[dict[str, Any]], lambda_weight: float) -> list[dict[str, Any]]:
-    return independent_hybrid_oracle(trend_rows, lambda_weight=lambda_weight)
-
-
 def _verify_hybrid_rows(actual_rows: list[dict[str, Any]], expected_rows: list[dict[str, Any]]) -> None:
     if [row.get("product_id") for row in actual_rows] != [row["product_id"] for row in expected_rows]:
         raise RuntimeError("Module 4C rank order differs from the independent hybrid oracle")
@@ -1168,7 +1162,7 @@ def run_live(args: argparse.Namespace) -> int:
                     if cli_result.get("readiness_pointer_id") != f"hybrid:{USER_ID}":
                         raise RuntimeError("CLI returned an unexpected per-user readiness pointer")
                     trend_oracle = expected_a if window_label == "A" else expected_b
-                    expected_hybrid = _expected_hybrid_rows(trend_oracle, 0.5)
+                    expected_hybrid = independent_hybrid_oracle(trend_oracle, lambda_weight=0.5)
                     _verify_hybrid_rows(rows, expected_hybrid)
                     expected_top = 1 if window_label == "A" else 2
                     if rows[0]["product_id"] != expected_top:

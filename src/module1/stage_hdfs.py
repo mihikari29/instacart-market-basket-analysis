@@ -23,7 +23,8 @@ import pyarrow.parquet as pq
 import requests
 from hdfs import InsecureClient
 
-from .partition_events import partition_events, file_sha256
+from ..common.runtime import file_sha256
+from .partition_events import partition_events
 
 DEFAULT_WEBHDFS_URL = "http://localhost:9870"
 DEFAULT_HDFS_USER = "root"

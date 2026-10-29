@@ -1,3 +1,4 @@
+import hashlib
 import json
 from unittest.mock import Mock, patch
 import pandas as pd
@@ -5,9 +6,28 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 import pytest
-from src.module1.partition_events import partition_events
+from src.module1.partition_events import file_sha256, partition_events
 from src.module1.clean import clean_orders
 from src.module1.stage_hdfs import stage_interactions
+
+
+@pytest.mark.parametrize("size", [0, 8 * 1024 * 1024 + 1])
+def test_file_hash_covers_empty_and_multiblock_files(tmp_path, size):
+    payload = b"x" * size
+    source = tmp_path / "source"
+    source.write_bytes(payload)
+    assert file_sha256(source) == hashlib.sha256(payload).hexdigest()
+
+
+@pytest.mark.parametrize("is_directory", [False, True])
+def test_file_hash_propagates_filesystem_errors(tmp_path, is_directory):
+    source = tmp_path / "source"
+    if is_directory:
+        source.mkdir()
+    error = IsADirectoryError if is_directory else FileNotFoundError
+    with pytest.raises(error) as raised:
+        file_sha256(source)
+    assert raised.value.filename == str(source)
 
 
 def test_generator_widens_narrow_time_columns():

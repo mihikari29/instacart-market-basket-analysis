@@ -338,11 +338,12 @@ def test_trend_maximum_is_calculated_before_catalog_exclusion():
     assert result.metadata.excluded_trend_product_ids == (99,)
 
 
-def test_missing_als_product_in_catalog_is_a_contract_error():
+@pytest.mark.parametrize("trends", [TrendSnapshot(available=False), available_trends([(2, 1.0)])])
+def test_missing_als_product_in_catalog_is_a_contract_error(trends):
     with pytest.raises(RankingContractError, match="ALS product 2.*catalog"):
         rank(
             als_rows([(2, 1.0)]),
-            TrendSnapshot(available=False),
+            trends,
             catalog_for(1),
         )
 

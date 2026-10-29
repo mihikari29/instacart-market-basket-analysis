@@ -18,19 +18,26 @@ from typing import Any, Mapping, Protocol
 import yaml
 
 from .common import (
-    PIPELINE_STORAGE_BUDGET,
+    PipelineError,
+    PIPELINE_STORAGE_BUDGET as PIPELINE_STORAGE_BUDGET,
     claim_names,
     demo_database,
-    expected_claim_requests,
+    expected_claim_requests as expected_claim_requests,
     pipeline_job_name,
 )
 from .ownership import IMAGE_DIGEST_PATTERN, RunIdentity, validate_version_lock
 from .runtime import containerd_image_inventory_command, kubectl
 from .config import get_step_timeout, get_capacity_reserve
+from .render import (
+    PIPELINE_MANIFESTS,
+    PIPELINE_POLICY_NAMES,
+    _load_yaml,
+    validate_pipeline_manifest_sources,
+    validate_pipeline_policy_inventory as validate_pipeline_policy_inventory,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-PIPELINE_MANIFESTS = REPOSITORY_ROOT / "deploy" / "k8s" / "pipeline"
 PIPELINE_IMAGE_ROLES = {
     "pipeline_application_image": "__PIPELINE_IMAGE__",
     "kafka": "__KAFKA_IMAGE__",
@@ -38,12 +45,6 @@ PIPELINE_IMAGE_ROLES = {
     "hdfs_datanode": "__HDFS_DATANODE_IMAGE__",
 }
 PIPELINE_COMPONENT_IMAGE_ROLES = ("kafka", "hdfs_namenode", "hdfs_datanode")
-PIPELINE_POLICY_NAMES = frozenset({
-    "allow-pipeline-egress", "allow-pipeline-to-hdfs", "allow-pipeline-to-datanode",
-    "allow-datanode-to-namenode", "allow-datanode-egress-to-namenode",
-    "allow-kafka-controller-self", "allow-pipeline-to-kafka", "allow-pipeline-to-mongo",
-    "allow-acceptance-api-egress", "allow-acceptance-to-api",
-})
 TREND_SOURCE_NAMESPACE = "instacart-k8s-demo-v1"
 PIPELINE_STEPS = ("input", "module1", "module2", "module4", "replay", "hybrid")
 FIXTURE_MAX_USERS = 50
@@ -54,10 +55,6 @@ FULL_PIPELINE_RESERVE_BYTES = 2 * 1024**3
 FULL_PIPELINE_WORKING_SET_MULTIPLIER = 3
 FULL_INPUT_MAX_BYTES = 4 * 1024**3
 _IMAGE_REFERENCE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._/:@+-]{0,254}\Z")
-
-
-class PipelineError(RuntimeError):
-    """Pipeline plan, identity, manifest, or execution failure."""
 
 
 def validate_full_data_storage_budget(input_bytes: int) -> int:
@@ -76,118 +73,6 @@ def validate_full_data_storage_budget(input_bytes: int) -> int:
             "with three working-set copies and 2 GiB reserve"
         )
     return projected
-
-
-def validate_pipeline_policy_inventory(policies: list[Mapping[str, Any]]) -> None:
-    """Require the exact narrow B3 service paths and deny all other paths."""
-    if not isinstance(policies, list) or any(not isinstance(item, Mapping) for item in policies):
-        raise PipelineError("B3 NetworkPolicy inventory must be a list of objects")
-    named = {item.get("metadata", {}).get("name"): item for item in policies}
-    if len(named) != len(policies) or set(named) != PIPELINE_POLICY_NAMES:
-        raise PipelineError("B3 NetworkPolicy inventory is incomplete or contains an unapproved policy")
-    for name, policy in named.items():
-        spec = policy.get("spec")
-        if not isinstance(spec, Mapping) or not spec.get("policyTypes"):
-            raise PipelineError(f"B3 NetworkPolicy {name} must declare its isolation direction")
-        for direction in ("ingress", "egress"):
-            rules = spec.get(direction, [])
-            if not isinstance(rules, list):
-                raise PipelineError(f"B3 NetworkPolicy {name} has malformed {direction} rules")
-            for rule in rules:
-                ports = rule.get("ports") if isinstance(rule, Mapping) else None
-                if not isinstance(ports, list) or not ports:
-                    raise PipelineError(f"B3 NetworkPolicy {name} contains a broad {direction} rule")
-                for port in ports:
-                    value = port.get("port") if isinstance(port, Mapping) else None
-                    protocol = port.get("protocol") if isinstance(port, Mapping) else None
-                    if protocol != "TCP" or type(value) is not int or not 1 <= value <= 65535:
-                        raise PipelineError(f"B3 NetworkPolicy {name} has an invalid port rule")
-
-    expected = {
-        "allow-pipeline-egress": (
-            {"it4931.instacart.edu/role": "pipeline"}, "Egress",
-            {
-                ("app.kubernetes.io/name", "hdfs-namenode", (8020, 9870)),
-                ("app.kubernetes.io/name", "hdfs-datanode", (9864, 9866)),
-                ("app.kubernetes.io/name", "kafka", (29092,)),
-                ("app.kubernetes.io/name", "module4d-mongo", (27017,)),
-            },
-        ),
-        "allow-pipeline-to-hdfs": (
-            {"app.kubernetes.io/name": "hdfs-namenode"}, "Both",
-            {
-                ("it4931.instacart.edu/role", "pipeline", (8020, 9870)),
-                ("app.kubernetes.io/name", "hdfs-namenode", (8020, 9870)),
-            },
-        ),
-        "allow-pipeline-to-datanode": (
-            {"app.kubernetes.io/name": "hdfs-datanode"}, "Ingress",
-            {("it4931.instacart.edu/role", "pipeline", (9864, 9866))},
-        ),
-        "allow-datanode-to-namenode": (
-            {"app.kubernetes.io/name": "hdfs-namenode"}, "Ingress",
-            {("app.kubernetes.io/name", "hdfs-datanode", (8020, 9870))},
-        ),
-        "allow-datanode-egress-to-namenode": (
-            {"app.kubernetes.io/name": "hdfs-datanode"}, "Egress",
-            {("app.kubernetes.io/name", "hdfs-namenode", (8020, 9870))},
-        ),
-        "allow-kafka-controller-self": (
-            {"app.kubernetes.io/name": "kafka"}, "Both",
-            {("app.kubernetes.io/name", "kafka", (9093,))},
-        ),
-        "allow-pipeline-to-kafka": (
-            {"app.kubernetes.io/name": "kafka"}, "Ingress",
-            {("it4931.instacart.edu/role", "pipeline", (29092,))},
-        ),
-        "allow-pipeline-to-mongo": (
-            {"app.kubernetes.io/name": "module4d-mongo"}, "Ingress",
-            {("it4931.instacart.edu/role", "pipeline", (27017,))},
-        ),
-        "allow-acceptance-api-egress": (
-            {"it4931.instacart.edu/role": "pipeline", "it4931.instacart.edu/step": "acceptance"},
-            "Egress",
-            {("app.kubernetes.io/name", "module4d-api", (8000,))},
-        ),
-        "allow-acceptance-to-api": (
-            {"app.kubernetes.io/name": "module4d-api"},
-            "Ingress",
-            {("it4931.instacart.edu/step", "acceptance", (8000,))},
-        ),
-    }
-    for name, (selector, direction, flows) in expected.items():
-        spec = named[name]["spec"]
-        if spec.get("podSelector", {}).get("matchLabels", {}) != selector:
-            raise PipelineError(f"B3 NetworkPolicy {name} selects the wrong Pods")
-        required_types = {"Ingress", "Egress"} if direction == "Both" else {direction}
-        if set(spec.get("policyTypes", [])) != required_types:
-            raise PipelineError(f"B3 NetworkPolicy {name} has an unexpected isolation direction")
-        actual_flows = set()
-        for traffic_direction in ("ingress", "egress"):
-            raw_rules = spec.get(traffic_direction, [])
-            if traffic_direction.title() not in required_types:
-                if raw_rules:
-                    raise PipelineError(f"B3 NetworkPolicy {name} contains an unapproved {traffic_direction} rule")
-                continue
-            endpoint_field = "from" if traffic_direction == "ingress" else "to"
-            for rule in raw_rules:
-                if not isinstance(rule, Mapping) or set(rule) != {endpoint_field, "ports"}:
-                    raise PipelineError(f"B3 NetworkPolicy {name} contains an unapproved endpoint rule")
-                endpoints = rule[endpoint_field]
-                if not isinstance(endpoints, list) or len(endpoints) != 1:
-                    raise PipelineError(f"B3 NetworkPolicy {name} must select one peer per rule")
-                peer = endpoints[0]
-                peer_selector = peer.get("podSelector") if isinstance(peer, Mapping) else None
-                if not isinstance(peer_selector, Mapping) or set(peer) != {"podSelector"}:
-                    raise PipelineError(f"B3 NetworkPolicy {name} may only select same-namespace Pods")
-                peer_labels = peer_selector.get("matchLabels", {})
-                if not isinstance(peer_labels, Mapping) or len(peer_labels) != 1:
-                    raise PipelineError(f"B3 NetworkPolicy {name} peer selector is invalid")
-                label, value = next(iter(peer_labels.items()))
-                ports = tuple(sorted(port["port"] for port in rule["ports"]))
-                actual_flows.add((label, value, ports))
-        if actual_flows != flows:
-            raise PipelineError(f"B3 NetworkPolicy {name} does not express its exact approved service flow")
 
 
 class PipelineCommandExecutor(Protocol):
@@ -563,125 +448,6 @@ def validate_pipeline_lock(lock: Mapping[str, Any]) -> None:
         or provenance.get("python_environment_sha256") != environments.get("spark_parent", "").removeprefix("sha256:")
     ):
         raise PipelineError("B3 image Python environment does not match the locked Spark parent")
-
-
-def _load_yaml(path: Path) -> list[dict[str, Any]]:
-    try:
-        value = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
-    except (OSError, UnicodeError, yaml.YAMLError) as exc:
-        raise PipelineError(f"pipeline manifest {path.name} is unavailable or invalid") from exc
-    documents = [item for item in value if item is not None]
-    if not documents or any(not isinstance(item, dict) for item in documents):
-        raise PipelineError(f"pipeline manifest {path.name} must contain Kubernetes objects")
-    return documents
-
-
-def validate_pipeline_manifest_sources(manifest_directory: Path | str = PIPELINE_MANIFESTS) -> dict[str, Any]:
-    """Static validation of checked-in B3 resources without reading kubeconfig."""
-    root = Path(manifest_directory)
-    platform = _load_yaml(root / "platform.yaml")
-    policies = _load_yaml(root / "network-policies.yaml")
-    validate_pipeline_policy_inventory(policies)
-    forbidden = {"hostPath", "hostNetwork", "hostPID", "hostIPC", "privileged"}
-    for document in platform + policies + [_load_yaml(root / "job.yaml")[0]]:
-        encoded = json.dumps(document)
-        if "/var/run/docker.sock" in encoded:
-            raise PipelineError("B3 resources must not reference host Docker sockets or Compose storage")
-        if "latest" in encoded.lower():
-            raise PipelineError("B3 resources must use immutable locked images")
-        def inspect(value):
-            if isinstance(value, Mapping):
-                for key, item in value.items():
-                    if key in forbidden and item not in (None, False):
-                        raise PipelineError(f"B3 resource uses forbidden host capability {key}")
-                    inspect(item)
-            elif isinstance(value, list):
-                for item in value:
-                    inspect(item)
-        inspect(document)
-    claims = {
-        item.get("metadata", {}).get("name")
-        for item in platform if item.get("kind") == "PersistentVolumeClaim"
-    }
-    expected_claims = {
-        *claim_names(),
-    }
-    if claims != expected_claims:
-        raise PipelineError("B3 pipeline storage claims do not match the isolated storage contract")
-    claim_requests = {
-        item.get("metadata", {}).get("name"): item.get("spec", {}).get("resources", {}).get("requests", {}).get("storage")
-        for item in platform if item.get("kind") == "PersistentVolumeClaim"
-    }
-    if claim_requests != expected_claim_requests():
-        raise PipelineError(f"B3 PVC requests do not match the {PIPELINE_STORAGE_BUDGET} run storage budget")
-    kafka = next(
-        item for item in platform
-        if item.get("kind") == "StatefulSet" and item.get("metadata", {}).get("name") == "kafka"
-    )
-    kafka_containers = kafka.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-    kafka_container = next((item for item in kafka_containers if item.get("name") == "kafka"), None)
-    kafka_env = kafka_container.get("env", []) if isinstance(kafka_container, Mapping) else None
-    if not isinstance(kafka_env, list):
-        raise PipelineError("Kafka environment must be an explicit list")
-    kafka_values = {}
-    for item in kafka_env:
-        if (
-            not isinstance(item, Mapping)
-            or not isinstance(item.get("name"), str)
-            or not isinstance(item.get("value"), str)
-            or item["name"] in kafka_values
-        ):
-            raise PipelineError("Kafka environment names and values must be unique strings")
-        kafka_values[item["name"]] = item["value"]
-    expected_kafka_values = {
-        "KAFKA_NODE_ID": "1",
-        "KAFKA_PROCESS_ROLES": "controller,broker",
-        "KAFKA_LISTENERS": "INTERNAL://:29092,CONTROLLER://:9093",
-        "KAFKA_ADVERTISED_LISTENERS": "INTERNAL://kafka:29092",
-        "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT",
-        "KAFKA_INTER_BROKER_LISTENER_NAME": "INTERNAL",
-        "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
-        "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@127.0.0.1:9093",
-        "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
-        "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
-        "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
-        "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS": "0",
-        "KAFKA_AUTO_CREATE_TOPICS_ENABLE": "true",
-        "KAFKA_LOG_DIRS": "/var/lib/kafka/data",
-        "KAFKA_LOG_RETENTION_HOURS": "24",
-        "KAFKA_LOG_RETENTION_BYTES": "1073741824",
-        "KAFKA_LOG_SEGMENT_BYTES": "134217728",
-        "KAFKA_NUM_NETWORK_THREADS": "2",
-        "KAFKA_NUM_IO_THREADS": "2",
-        "KAFKA_HEAP_OPTS": "-Xms512m -Xmx512m",
-    }
-    if kafka_values != expected_kafka_values:
-        raise PipelineError("Kafka environment does not match the one-broker KRaft contract")
-    services = {item.get("metadata", {}).get("name"): item for item in platform if item.get("kind") == "Service"}
-    expected_ports = {
-        "namenode": {"rpc": (8020, 8020), "webhdfs": (9870, 9870)},
-        "datanode": {"web": (9864, 9864), "transfer": (9866, 9866)},
-        "kafka": {"broker": (29092, 29092), "controller": (9093, 9093)},
-    }
-    if set(services) != set(expected_ports):
-        raise PipelineError("B3 services do not match the isolated HDFS/Kafka endpoints")
-    for name, ports in expected_ports.items():
-        actual = {
-            item.get("name"): (item.get("port"), item.get("targetPort"))
-            for item in services[name].get("spec", {}).get("ports", [])
-        }
-        if actual != ports:
-            raise PipelineError(f"B3 {name} service ports do not match the data-service contract")
-    statefulsets = {item.get("metadata", {}).get("name"): item for item in platform if item.get("kind") == "StatefulSet"}
-    datanode_spec = statefulsets.get("hdfs-datanode", {}).get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0]
-    if datanode_spec.get("readinessProbe", {}).get("httpGet", {}).get("port") != 9864:
-        raise PipelineError("B3 DataNode readiness must probe the DataNode WebHDFS HTTP port 9864")
-    kafka_ports = {
-        item.get("containerPort") for item in statefulsets.get("kafka", {}).get("spec", {}).get("template", {}).get("spec", {}).get("containers", [{}])[0].get("ports", [])
-    }
-    if kafka_ports != {29092, 9093}:
-        raise PipelineError("B3 Kafka broker and KRaft controller listeners are incomplete")
-    return {"status": "static-valid", "platform_objects": len(platform), "pipeline_policies": sorted(PIPELINE_POLICY_NAMES), "pipeline_claims": sorted(claims)}
 
 
 def _dump_yaml(path: Path, documents: list[dict[str, Any]]) -> None:

@@ -10,6 +10,7 @@ from dataclasses import asdict
 from pathlib import Path
 from threading import Event
 
+from ..common.runtime import safe_error_text
 from .config import Config
 from .parse import from_kafka
 from .sink_mongo import write_mongo
@@ -133,7 +134,11 @@ def run_stream(
     )
 
     def _foreach(batch_df, batch_id):
-        result = _foreach_batch(batch_df, batch_id, config, sink_log)
+        try:
+            result = _foreach_batch(batch_df, batch_id, config, sink_log)
+        except Exception as exc:
+            # Spark formats callback exceptions before the CLI can catch them.
+            raise RuntimeError(safe_error_text(exc)) from None
         if progress_publisher is not None:
             progress_publisher.record_sink_result(
                 batch_id,
@@ -209,7 +214,8 @@ def run_stream(
             while query.isActive:
                 _raise_metrics_error()
                 remaining = deadline - time.monotonic()
-                if remaining <= 0:
+                # PySpark truncates seconds to milliseconds; Spark rejects zero.
+                if remaining < 0.001:
                     break
                 query.awaitTermination(min(1.0, remaining))
             _raise_metrics_error()

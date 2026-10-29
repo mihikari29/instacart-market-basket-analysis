@@ -1,292 +1,210 @@
-# Project progress and requirements coverage
+# Project status and remaining work
 
-This report describes the current implementation in the reviewed source revision and separates it from historical measurements and runtime work still pending. The approved [Proposal](Proposal.md) remains the requirements baseline. Detailed command ownership belongs to the [Docker guide](docker.md) and [Kubernetes guide](kubernetes.md); contracts belong to the [Module 3 guide](module3-contracts.md), [Module 4 plan](module4-plan.md), and [implementation ledger](implementation-ledger.md).
+This page summarizes the implementation and its verification limits.
+[Docker operations](docker.md), [Kubernetes operations](kubernetes.md), and the
+[acceptance guide](acceptance.md) own procedures. The
+[repository proposal](Proposal.md) is retained as a requirements baseline;
+no authoritative replacement for the revised proposal is present here.
 
-## Current status
+## Status at a glance
 
-**All modules implemented, verified, and operational.** The end-to-end system covers all requirements from data ingestion (Module 1), Spark batch processing (Module 2), Kafka streaming micro-batches (Module 3), ALS matrix factorization and co-occurrence graphs (Modules 4A–4B), Hybrid recommendation model (Module 4C), FastAPI & Streamlit serving dashboard (Module 4D), through to isolated Kubernetes deployment and batch pipeline orchestration (Modules B1–B4).
+| Status | Meaning and current scope |
+|---|---|
+| **IMPLEMENTED** | Module 1–4 processing, serving, dashboard, packaging, and isolated Kubernetes orchestration exist in source. This does not close every proposal requirement or acceptance gate. |
+| **VERIFIED ON A SPECIFIC HISTORICAL SCOPE** | The retained batch, ALS, and synthetic Hybrid artifacts describe their own inputs, runtime and source provenance. Their results do not validate the current source end to end. |
+| **NOT YET VERIFIED ON THE CURRENT SOURCE** | Fresh live integration, browser, Kubernetes B2/B3/B4, full-data, checkpoint-recovery, and deployment acceptance remain required. |
+| **PLANNED / NOT IMPLEMENTED** | Bronze/Silver/Quarantine layers, distributed cleaning/ETL, and DuckDB comparisons are absent. Their requirements must be reconciled with the authoritative revised proposal. Connected Components remains optional and unimplemented. |
 
-| Area | Implemented scope | Recorded verification & test coverage | Deployment & Runtime Status |
-|---|---|---|---|
-| Module 1 | Six-file fail-closed preflight, schema validation, deterministic replay event generation, HDFS handoff and Kafka producer. | Broad offline test suite, schema coercion assertions, deterministic event ordering, 100% six-file reconciliation. | Pinned Docker Compose & Kubernetes staging verified. |
-| Module 2 | Prior-history Spark analytics, descriptive user features, Mongo publication, thread scaling and executor benchmark tooling. | Unit and integration test suites; full-data analytics verified against MongoDB metrics and HDFS Parquet storage. | Operational in container runtime with verified MongoDB collections and indexes. |
-| Module 3 | Kafka validation, event-time sliding window aggregation (30s/60s), micro-batch reconciliation, versioned checkpoints and telemetry. | Telemetry, BSON serialization, and streaming recovery tests; live Kafka-to-Spark streaming verified. | Operational streaming micro-batches with MongoDB trending windows. |
-| Modules 4A–4B | Prior-only implicit ALS matrix factorization, catalog-wide co-occurrence graph (PageRank, weighted degree) and evaluation. | 21/21 validation gates passed; offline ranking, NDCG/HitRate/Precision metrics verified. | Versioned MongoDB snapshots (`user_recommendations`, `product_graph_metrics`). |
-| Module 4C | Readiness-aware Hybrid recommender, deterministic ranking (0.6 ALS + 0.3 Graph + 0.1 Trend), prior-only evaluation tooling. | Reader/ranking/publication checks; leak-free temporal evaluation design verified. | Operational in serving tier and populated by batch pipeline. |
-| Module 4D | Read-only FastAPI REST routes, bounded Mongo readers, and four-page Streamlit interactive dashboard. | API route tests, UI client tests, AppTest smoke tests, mock and live backend verification. | 1/1 Running in Kubernetes cluster (`module4d-api`, `module4d-ui`). |
-| Kubernetes | Isolated B2 serving tier, B3 batch processing, B4 acceptance signing, private version lock, and network policy enforcement. | 116/116 unit tests passing (`tests/test_k8s_*.py`), full fake-client/static validation, Kustomize rendering. | Dedicated profile running with StatefulSet, Calico CNI, and automated demo runner. |
+Local repository and Spark fixture regressions, API read contracts, dashboard
+UI tests, offline Kubernetes rendering, and cached packaged imports have been
+checked. Service-dependent skips were recorded rather than counted as passes.
+Those checks do not demonstrate live MongoDB/Kafka behavior, a new image build,
+a hosted workflow pass, Kubernetes deployment, or full-data acceptance.
 
-The test suite covers **116/116 Kubernetes test suites passed** and **803+ non-service test suites passed**. System regression validation is clean with zero untracked leaks. All serving pods (`module4d-mongo-0`, `module4d-api`, `module4d-ui`) achieve `1/1 Running` and pass HTTP readiness probes on ports 8000 and 8501.
+## Implemented capabilities
 
-## Module 1 — ingestion and storage
+### Module 1 — ingestion and storage
 
-<a id="module-1--ingestion--storage"></a>
-<a id="22-cleaning-and-reconstruction-results"></a>
+The cleaner validates all six CSV tables, raw domains, keys, foreign keys,
+order relationships and contiguous cart positions before type conversion.
+It publishes six typed Parquet tables through a guarded single-writer directory
+replacement. Unrecognized output, symlink/path overlap, or invalid input fails
+without replacing the recognized publication.
 
-**Objective.** Admit the six related source tables as a coherent dataset, produce typed curated tables, reconstruct usable replay time, and stage input and output with enough provenance to validate later processing.
+The generator creates deterministic purchase events from prior and train
+orders. Entity-keyed randomness makes processing batch size independent of
+generated values. HDFS staging preserves source/handoff receipts; Kafka replay
+uses `user_id` keys and stable event identities. Generated event time is
+simulation, and Kafka messages omit `eval_set`. See the
+[Module 1 procedure](docker.md#module-1-ingestion-generation-staging-and-kafka-replay)
+and [data contracts](implementation-ledger.md#2-module-1--raw-contracts-cleaning-and-publication).
 
-**Flow and contracts.** `orders.csv`, `order_products__prior.csv`, `order_products__train.csv`, `products.csv`, `aisles.csv`, and `departments.csv` are required. The cleaner checks exact column sets and duplicate headers, parses rows initially as strings, then validates canonical integer spellings, ranges, evaluation-set labels, primary/foreign keys, order-level consistency, unique product/cart positions, and contiguous `1..N` cart order before coercion. Empty, unreadable, missing, malformed or inconsistent input fails with sanitized diagnostics. First-order missing inter-order gaps become zero; capped 30-day values are reconstructed to the minimum weekday-compatible value in `[30, 36]`. Product names replace nonbreaking spaces and collapse surrounding/repeated whitespace.
+### Module 2 — batch analytics
 
-The cleaner emits six typed Parquet files and `.it4931-clean-output.json`. It stages every result, then replaces only a directory bearing the expected ownership manifest and file set. Unsafe symlink/path overlap and unknown output entries fail closed. If validation or staging fails, the existing recognized publication remains. This procedure assumes one writer; it is not a multi-process transaction.
+Spark validates staged handoff counts, keys, relationships, domains and exact
+fact/event multisets, then computes prior-history product, department, user,
+weekday/hour and pivot/unpivot analytics. MongoDB collections are validated
+before individual promotion; their set is not one transaction.
 
-The event generator selects `prior` and `train` orders and excludes the official `test` set. Stable hash-derived values use the seed and entity keys for user anchor weeks, order minute/second and within-cart gaps; they do not use Python's salted hash. The 2024-01-01 Monday base aligns `order_dow` with calendar offsets. It adds cleaned inter-order gaps, recorded hour and generated within-order item intervals, then enforces strictly increasing event time along each user's order/cart sequence. `--batch-users` bounds processing memory and does not change generated values for the same source and seed. Parquet carries `order_number` and `synthetic_date`; Kafka messages do not.
+The HDFS `user_features` handoff is descriptive and marked `prior_only`; it is
+not an ALS or Hybrid ranking input. Join, pruning, cache and local-thread
+benchmarks are implemented. A separate standalone-master experiment records
+actual executor allocation. Requested resource settings alone do not establish
+an executor-layout result. See the [batch and benchmark guide](docker.md#module-2-batch-processing-and-benchmarks).
 
-HDFS staging writes `_sources.json` for the curated tables and `_handoff.json` for the partitioned interaction feed. The six-file source receipt is retained as separate input/run evidence. Curated order and dimension tables are staged separately from the interaction handoff. The producer emits one denormalized JSON message per product event, keyed by `user_id`, with stable `event_id`, order/product/basket attributes, synthetic event time and send-time ingestion time. It omits `eval_set`, so the ordinary stream combines prior and train orders and is unsuitable for official-train temporal evaluation.
+### Module 3 — event-time streaming
 
-**Inputs and outputs.** Six raw CSV tables lead to six cleaned Parquet tables; generation produces Parquet or JSONL replay files and a feed manifest; HDFS receives raw/curated data, receipts and the interactions handoff; Kafka receives the generated product-event records.
+The stream validates purchase messages, accounts for invalid records, and
+deduplicates `event_id` within watermark-bounded state. Defaults are 30-minute
+short counts within 120-minute sliding windows, a five-minute slide, ten-minute
+watermark, weights 0.7/0.3, Top-20, and a ten-second trigger.
 
-**Verification and historical findings.** A bounded synthetic fixture was included in the offline suite. The 3 October 2026 full-data record reconciled 33,819,106 events across source facts, local feed and HDFS readback, with 456 daily files/partitions and zero recorded per-user monotonicity violations. The 8 October source-preparation receipt recorded 206,209 first-order gaps filled, 369,323 capped gaps reconstructed, zero weekday mismatches and 16 normalized product names. These records remain historical and are tied to their archived inputs and runtime.
+The mutable row sink and opt-in immutable finalized-window bundles have
+separate publication contracts. Hybrid and the trends API use bundles, not the
+mutable row sink. Finite replay completion requires reconciled producer counts
+and consumed terminal offsets; it may leave an unfinalized event-time tail.
+Completed-batch telemetry pairs progress and sink receipts without silently
+dropping evidence. Ingestion-to-output latency includes watermark delay and
+unsynchronized host clocks; it is not Kafka acknowledgement or UI latency.
+See [Module 3 contracts](module3-contracts.md).
 
-**Limitations and remaining acceptance.** The generated dates describe replay only. The Kafka event schema does not preserve evaluation-set membership. Runtime HDFS/Kafka integration, fresh six-file full-data processing and identity-bound output receipts remain acceptance tasks. See the [Module 1 guide](docker.md#module-1-ingestion-generation-staging-and-kafka-replay), [generation reference](docker.md#synthetic-event-generation) and [full-data evidence](evidence/full/README.md).
+### Modules 4A–4D — recommendations and presentation
 
-## Module 2 — batch layer
+ALS fits prior interactions; the internal prior-history holdout selects
+parameters, while official train baskets are reserved for final evaluation.
+[`src/module4/tuning.py`](../src/module4/tuning.py) owns bounded pilot/full-holdout
+experiments and trial selection. The graph deduplicates basket products,
+retains isolated catalog vertices, and computes weighted degree and GraphFrames
+PageRank. PageRank uses topology rather than co-purchase weights.
 
-<a id="3-module-2--batch-layer"></a>
+Hybrid captures a ready ALS/graph generation and the newest eligible immutable
+trend bundle at an explicit cutoff. It validates sources, ranks bounded
+candidates deterministically, and promotes an immutable per-user version
+through a readiness pointer. The default serving CLI uses lambda 0.7 for ALS
+and trends. The pure ranker supports explicit PageRank weighting; the CLI does
+not activate YAML three-way weights. Prior-only evaluation uses fixed
+prior-frequency candidates and does not establish leakage-safe temporal trend
+quality.
 
-**Objective.** Produce reproducible historical aggregates and descriptive user features from curated HDFS data, then make validated outputs available to read-only consumers.
+FastAPI exposes bounded read-only Hybrid, ALS, batch, trend, telemetry and
+evidence views. Streamlit's four pages call the API and have no direct MongoDB
+client. Missing, empty, unavailable and malformed responses remain distinct.
+API liveness is not data readiness; dashboard refresh is not stream liveness.
+See [Hybrid contracts](module4-plan.md#module4c-spec) and
+[API/dashboard contracts](module4-plan.md#module4d-spec).
 
-**Flow and interfaces.** Module 2 verifies handoff receipts, row counts, nulls, keys, foreign keys, domains, relevant partition values and exact fact/event multisets before computing. Historical analytics use prior interactions. The resulting `user_features` schema has `user_id`, `order_count`, `purchase_count`, `unique_products`, `reorder_rate`, and `avg_basket_size`, with `module2_run_id`, `feature_scope=prior_only` and `generated_at_utc` metadata. The Module 4 reader checks the expected schema, bounds the lookup to a user, and detects duplicate rows; the returned features are descriptive and are not inputs to ALS fitting. The optional local source-event hash check is separate and narrower than verifying a hash for every staged input. Module 4 staged-Parquet hash checks are another independent boundary.
+### Kubernetes demonstration
 
-Spark analytics include product and department aggregates, user features, order weekday/hour distributions and department-hour pivot/unpivot totals. Mongo publication writes bounded batches to temporary collections, validates output and indexes, then promotes each collection. Each collection has a publication boundary, but a set of collections is not a cross-collection transaction. Readers must validate run identity instead of assuming every collection changed as one unit.
+B2 prepares a run-owned serving tier, B3 runs ordered input, ingestion, batch,
+model, replay and Hybrid work, and B4 checks acceptance evidence. Dedicated
+identities, private receipts, ownership checks, separate MongoDB roles,
+network policies and resource bounds are implemented. Spark runs locally inside
+Jobs, not as distributed Kubernetes executors. Manifest and policy validation
+is owned by [`scripts/k8s/render.py`](../scripts/k8s/render.py); pipeline
+orchestration imports those validators.
 
-**Optimization experiments.** The benchmark suite measures requested join plans, date-column versus partition-column filters, cached aggregate reuse and uncached recomputation. It records the cache materialization cost separately. A local `local[1]`/`local[2]` comparison tests thread configurations; a distinct standalone mode attaches to an existing Spark master and records actual executor allocation and task/shuffle data. Neither configuration knobs alone nor a local-thread comparison proves executor-layout speedup.
+The committed version lock is a template until real host, cluster, storage,
+image and toolchain identities are measured. A `runtime_pass` receipt records
+B4 completion for its declared scope, not teardown. Offline `verify` contacts
+no cluster. Resources and failure evidence remain until separately reviewed,
+identity-checked teardown. Live CNI enforcement, storage and deployed behavior
+remain unverified on the current source. See the [Kubernetes guide](kubernetes.md).
 
-**Verification and historical findings.** The 3 October full-data run verified exact fact/event reconciliation, prior-only aggregates, pivot/unpivot totals, equal outputs across join strategies and filter strategies, and Mongo publication of 49,677 product and 21 department documents. Eleven catalog products had no prior purchases. Recorded prior-only reorder rate was 58.9697%, with average basket size 10.0889. Median times included Sort-Merge Join 17.581934 s and Broadcast Hash Join 2.304046 s; all-date scan 3.497363 s, date-filtered 1.666808 s and partition-filtered 0.074906 s; uncached aggregate 2.110284 s, cache materialization 2.175583 s and cached reuse 0.088085 s. These were one-host, one-executor measurements with warm OS/HDFS caches; the all-date scan had a different scope. They do not establish cluster-scale performance.
+## Configuration and recovery boundaries
 
-**Limitations and remaining acceptance.** Current runtime Spark/HDFS execution and fresh publication checks remain pending. The standalone executor-layout experiment has tooling but no new measured result. See the [full-data report](evidence/full/README.md), [benchmark guide](docker.md#spark-executor-layout-experiment), and [Module 2 Docker procedure](docker.md#module-2-batch-processing-and-benchmarks).
+[`config/pipeline.yaml`](../config/pipeline.yaml) is not a universal runtime
+control surface. Its comments identify active consumers and declared intent.
+Standalone CLIs retain their own defaults and supported environment/argument
+precedence. Module 4 ALS tuning reads fit parameters for its first candidate;
+CLI limits still determine the standalone tuning budget. Hybrid YAML loading
+requires an explicit `HybridRankingConfig.from_pipeline_config()` call.
 
-## Module 3 — speed layer and Structured Streaming
+Kubernetes consumes operational deadlines, host reserves and selected synthesis,
+model, replay and Top-K settings. It does not forward every synthesis option,
+streaming window/trigger, graph setting or Job resource declaration. Job
+allocation remains in the manifests. Effective values must be checked at the
+consumer rather than inferred from YAML alone.
 
-<a id="module3-status"></a>
-<a id="41-final-streaming-architecture"></a>
-<a id="42-event-time-watermark-and-trending"></a>
-<a id="43-mongodb-serving-and-idempotency"></a>
-<a id="44-end-to-end-streaming-validation"></a>
-<a id="45-checkpoint-recovery"></a>
-<a id="46-late-data-and-watermark-validation"></a>
-<a id="47-throughput-measurements"></a>
-<a id="48-validation-results"></a>
-<a id="49-current-technical-status-and-known-limitations"></a>
+Task steps may reuse existing receipt/output combinations when
+`execution.resume_policy` is `enabled` or `strict`; these two policies currently
+share behavior. `disabled` bypasses that reuse. This is not proof that reused
+outputs match newly changed configuration. The coordinator still requires a
+fresh identity/output, Jobs have no automatic retries, and checkpoint reuse
+separately requires matching stream/topic/state identity. Do not describe this
+as automatic end-to-end recovery.
 
-**Objective and flow.** Module 3 consumes the keyed Kafka event feed, validates JSON schema and field domains, accounts for invalid messages and deduplicates by `event_id` while state remains within the configured watermark. One 120-minute sliding stateful aggregation produces the short 30-minute and long 120-minute windows. Windows slide every five minutes, the watermark is ten minutes, and the configured short/long weights are 0.7/0.3. After a window is complete, the full product population is normalized and deterministically ranked, then limited to Top-20.
+## Remaining requirements and acceptance
 
-**Outputs and operations.** The legacy `realtime_trending` collection stores mutable product/window rows and replaces a complete window before upserting its rows; those operations are not a transaction for readers. Optional `realtime_trending_windows` stores one complete immutable ranked document per finalized window and source namespace. Its identity combines a digest of `source_namespace` with the UTC `window_end`; the document contains schema version, window bounds, Top-K and row counts, an `items` array of ranked products, configuration and content hashes, publication time, and optional `expires_at`. An identical retry is accepted, while conflicting content under the same identity fails. Publication is atomic for one document, not across several windows. TTL expiry metadata is distinct from event-time filtering. Module 4C and the trends API consume these bundles when explicitly enabled; neither path uses the legacy mutable rows. Per-product/window latency samples describe finalized output rows and do not change the bundle's one-document-per-window granularity. No open-window leaderboard is implied.
+- **Source and scope:** confirm the latest approved proposal and course code.
+  The repository proposal says IT4931; the current coursework context says
+  IT4043E. Do not change runtime identifiers or mark revised requirements done
+  until this discrepancy is resolved.
+- **Live integration and full data:** exercise the pinned Spark/GraphFrames,
+  HDFS and MongoDB paths, publication/replay and independent readback with six
+  verified source CSVs. Distinguish fixture, compute-only and full publication
+  scopes using the [A/B acceptance checklist](module4-plan.md#acceptance-checklist).
+- **Streaming and recovery:** verify live Kafka delivery, late/invalid/duplicate
+  handling, checkpoint continuation, bundle publication and the defined latency
+  boundary. Offset drainage does not prove every window finalized.
+- **Kubernetes and UI:** build/load the selected images, finalize the measured
+  lock, exercise B2/B3/B4, storage, permissions, allowed/denied network paths,
+  API readiness and browser behavior, and retain run-bound receipts.
+- **Experiments and quality:** retain actual Kafka-partition and standalone
+  executor-layout experiments; local thread comparisons are a different scope.
+  A leakage-safe temporal Hybrid evaluation source and quality result remain
+  open. An implemented ranker is not evidence of improvement over baselines.
+- **Lifecycle and capacity:** published Hybrid versions have no retention rule;
+  retained HDFS checkpoints and uncompressed event logs need an explicit
+  retention/export policy. Historical notes report streaming heap exhaustion
+  with a two-gigabyte executor over a 456-day feed; reproduce and size that
+  workload before claiming full-feed capacity.
+- **Deliverables:** final experiment reporting and the required demonstration
+  or presentation need their own evidence. Source implementation and local
+  tests alone do not close the proposal's Definition of Done.
 
-Checkpoint continuity is bound to a versioned path such as `checkpoint/<id>/ingestion-latency-v1`. Unversioned legacy telemetry state is rejected without mutation. A checkpoint is reusable only with matching query/topic/config identity. The Kubernetes runner disables automatic resume and requires a fresh run identity.
+## Historical findings and evidence limits
 
-Finite replay completion requires successful producer delivery, consistent generated/attempted/acknowledged counts, and consumed terminal offsets across all partitions. A completed Kafka read may leave an event-time tail in checkpoint state because the pipeline does not fabricate future events. Telemetry pairs each executed Spark batch (identified by the `durationMs.addBatch` marker) with its same-batch sink receipt. Idle progress does not count as an executed batch; zero-input cleanup batches do. The bounded receipt queue applies backpressure instead of dropping records, and missing receipts or gaps fail visibly. Shutdown stops the query before signaling the progress logger to perform its final drain.
+The full `docs/evidence/` archive is absent. The five curated artifacts indexed
+in [available evidence](README.md#historical-evidence-available-here) remain
+readable with their original provenance; they are not a complete run archive.
 
-For each finalized product/window output row, the latency source is the latest contributing ingestion timestamp. The summary reports ingestion-to-output-completion delay after enabled publishers; it is constant-memory and records min/mean/max and skew status. Producer and output host clocks may be unsynchronized, values may be negative from skew, and the metric includes watermark delay. It is not acknowledgement, trigger, sink-only, Kafka lag, or dashboard latency. The metrics document is bounded and read-only at the API boundary; malformed BSON integer values fail closed.
+| Record | Observation that remains useful | Limit |
+|---|---|---|
+| [Batch benchmark receipt](../src/module4/dashboard/assets/current-hardening-2026-10-03.json) | Historical input/generation reconciliation and join, filter and cache comparisons. | One warm host and a small standalone executor; cache construction and filtered scan scope matter. No distributed speedup is established. |
+| [ALS evaluation](../src/module4/dashboard/assets/evaluation.json) | Official-train Recall@10: ALS 0.121472 versus personal frequency 0.319232. | ALS did not outperform this baseline. The plan's historical 21/21 A/B acceptance statement cannot replace its missing full run archive or current acceptance. |
+| [Hybrid responsiveness](../src/module4/dashboard/assets/c8a-receipt.json) | Top-1 changed at lambda 0 and 0.5, but not at default 0.7; Top-20 overlap stayed 20/20. | Controlled synthetic inputs; no accuracy measurement. |
+| [Streaming demonstration](../src/module4/dashboard/assets/c8b-receipt.json) | 48 planned/acknowledged/consumed events, zero invalid records and 36 finalized bundles. | No Spark checkpoint restart or A/B source-generation race. The original cleanup claim omitted three anonymous Kafka volumes. |
+| [Style regression comparison](style-regression-validation.md) | Bounded logical outputs matched; Parquet byte differences were traced to footer serialization. | Two original browser assertions remained unexplained; possible earlier persistent-volume writes and full-data equivalence remained unresolved. Its final assessment is NOT FULLY VERIFIED. |
 
-**Historical verification.** The 3 October 2026 bounded integration ran one Kafka broker with four partitions and Spark 3.5.5/Java 17/Python 3.10.12 on a two-core setup. A 5,000-event smoke acknowledged and consumed all events, reported 79,970 Mongo documents, no duplicate window/product or window/rank keys, and 374.20 processed rows/s. In a separate 50,000-event run, all 50,000 events were acknowledged and valid; observed processed rate was 3,203.90 rows/s, 35,701 finalized windows produced 580,342 documents, aggregate state reached 1,174,010 rows, and final sink batch time was 62,021.821 ms. Kafka was preloaded, so input rows/s was not meaningful; each event could fan out to as many as 24 five-minute windows.
+### Graph comparison limits
 
-The same evidence records bounded late-data and watermark behavior, two-process checkpoint continuation (three records in the first process and two new records in the second), plus throughput arms at 100/s, 500/s and bulk and a partition comparison. Two partitions performed best in that small test; this does not imply a general optimum. See the [Module 3 evidence report](evidence/module3/README.md).
+A bounded historical graph comparison found matching validation reports and
+integer graph results, but metric fingerprints differed across fresh Spark
+sessions for the medium workload: one of three independent baseline records
+differed, while the small workload's three records agreed. The cause was not
+established. Small elapsed-time gains were not reliably demonstrated, and no
+production optimization was retained. Detailed measurement files are not part
+of this checkout; this documentation change reruns none of those experiments.
+Cross-session fingerprint stability and same-version numerical replay therefore
+remain verification questions, not guarantees inferred from graph invariants.
 
-**Limitations and remaining acceptance.** Watermark deduplication is not permanent uniqueness. One broker does not demonstrate high availability. The legacy mutable snapshot can be transiently empty/partial to concurrent readers. Bounded rates do not establish production throughput, and the historic trigger/addBatch/sink durations are not the defined ingestion-to-finalized-output latency. Pinned runtime integration, checkpoint restart at runtime, full-feed execution and new latency evidence remain pending. See the [Module 3 contract](module3-contracts.md) and [streaming operations](docker.md#module-3-streaming-operations).
-
-## Modules 4A and 4B — prior-only recommendations and product graph
-
-**Objective.** Module 4A produces personalized implicit-feedback recommendations from prior history and evaluates ranking against held-out data. Module 4B produces catalog-wide co-purchase and graph metrics from prior baskets. Both publish versioned outputs with a readiness identity so downstream readers can avoid mixing incompatible generations.
-
-**Processing and data boundaries.** ALS uses prior user/product purchase counts as implicit preference input. Its internal holdout supports model checks among eligible prior-history users; official train baskets are not used to fit ALS or select its fit parameters. Evaluation reports ALS and baseline results across K values and warm-user cohorts. A separate global-popularity and personal-frequency baseline supports comparisons. Module 4B deduplicates products inside each basket, canonicalizes unordered pairs, applies declared co-purchase thresholds, preserves all catalog vertices and calculates neighbors, weighted degree and PageRank over symmetric topology. The PageRank run uses graph topology, not co-purchase weights as weighted PageRank.
-
-**Historical verification.** The 10 October 2026 acceptance report records 21/21 historical gates for its exact data and source scope. It records 4,124,180 recommendation documents for 206,209 users, 49,688 graph vertices, 3,492,837 undirected edges, 6,985,674 directed rows and 21,164 isolated catalog products. ALS Recall@10 was 0.121472 versus 0.319232 for personal frequency, so this run does not demonstrate an ALS quality improvement. Threshold-specific graph counts and failed/interrupted attempts remain in the dated report. This result predates later changes and is not fresh full-data acceptance for `a5fe500`.
-
-**Limitations and remaining acceptance.** Full-data Spark/GraphFrames/Mongo verification on the reviewed source revision remains pending. Historical quality measures describe their recorded holdout and cohort; they do not establish general recommendation quality. See the [Module 4 acceptance report](evidence/module4/acceptance-20261010/README.md) and [Module 4 plan](module4-plan.md).
-
-## Module 4C — Hybrid serving and offline evaluation
-
-<a id="progress-module4c"></a>
-
-**Objective.** Combine eligible versioned batch sources and finalized trend bundles while preserving source identity, deterministic ranking and read consistency.
-
-**Processing and inputs/outputs.** The service captures a ready ALS/graph generation, checks bounded source reads and readiness identities, selects the newest eligible immutable trend bundle at an explicit event-time cutoff, normalizes the selected ALS and trend scores, unions candidate sets, and publishes versioned per-user recommendation snapshots. The output generation is immutable; a per-user readiness pointer promotes the serving version. A/B snapshots are separate Mongo promotions and do not form one multi-collection transaction. Endpoint candidate behavior is explicit at lambda boundaries, including cold-user trend fallback, and ties use stable product identity.
-
-The prior-only evaluation command uses a fixed global-frequency Top-20 candidate source and a preregistered lambda sweep (`0`, `0.5`, `0.7`, `0.9`, `1`) at K=5/10/20. It reports all official-train and warm-user truth cohorts and records source hashes. Official train labels are used only for evaluation, not fitting, tuning, candidate creation or trend source generation. This experiment is not equivalent to chronological trend evaluation. The ordinary stream combines prior and train orders, so a leakage-safe trend evaluation needs an appropriately separated source and chronology.
-
-**Recorded checks.** The bounded C8A controlled synthetic shift changed Top-1 at lambda 0.0 and 0.5, but not at default lambda 0.7, 0.9 or 1.0; Top-20 overlap stayed 20/20, and accuracy was not measured. C8B reconciled 48 planned, acknowledged and consumed events with zero invalid records and observed 36 bundle documents; checkpoint restart was not demonstrated. These are integration observations, not quality or capacity results. See the [Module 4C archive](evidence/module4c/README.md).
-
-**Limitations and remaining acceptance.** Runtime publisher/reader integration and an evaluation source that isolates trend chronology remain to be validated. No leakage-safe Hybrid accuracy result or production capacity claim exists. See [Module 4 §19](module4-plan.md#module4c-spec).
-
-## Module 4D — API and dashboard
-
-<a id="progress-module4d"></a>
-
-**Objective and flow.** Module 4D offers a bounded read surface over versioned recommendation and graph outputs, batch metrics, order distributions, finalized trends, streaming metrics and an allowlisted set of historical evidence. Mongo indexes are provisioned by an administrator; API database credentials are read-only. FastAPI validates current readiness/source identities and uses indexed bounded queries. Streamlit calls the API and has no MongoDB client.
-
-The four UI pages cover Overview, Realtime & Batch, Hybrid recommendations, and Evaluation & Performance. ALS and Hybrid provenance remain separate. The API distinguishes unavailable, empty, malformed and error states; it does not silently turn missing values into zero. Health/liveness checks do not establish data readiness. A refresh action only re-reads a snapshot; it does not prove the streaming job is running.
-
-**Recorded checks.** API, client, AppTest and browser checks have their own dated workflow/evidence scope. The independent review's offline suite includes the read contracts and UI selection; the browser/runtime environment is not part of the 803-pass host suite unless explicitly listed in a recorded workflow. The earlier four-chart browser assertion failure remains in historical CI records; later passing runs do not explain its original cause. See the [Module 4D evidence index](evidence/module4d/README.md).
-
-**Limitations and remaining acceptance.** Pinned browser validation against live services and a fresh container build/package check remain pending. Read-only API behavior and fixture tests do not establish production authentication, scale or availability. See [Module 4 §20](module4-plan.md#module4d-spec) and [Docker API/UI operations](docker.md#run-the-api-and-dashboard-against-existing-data).
-
-## Kubernetes demonstration
-
-**Objective and flow.** The demonstration is isolated from the persistent Compose environment. A run has a generated identity, private output directory, dedicated profile/context/namespace, run-owned storage and locked image/toolchain identities. B2 starts serving services; B3 runs the input, Module 1, Module 2, Module 4 and replay pipeline; B4 verifies runtime evidence. Jobs do not retry automatically. The HDFS lifecycle creates only a fresh run root and refuses to reuse it. MongoDB admin, publisher and API-read roles are separate; API/UI access is read-only. Secrets are passed through memory/stdin. Network policy starts from deny-by-default with only declared paths enabled.
-
-The host reserves at least six physical cores, 12 GiB available RAM and 40 GiB free disk for the full workflow. Full-data input is capped at 4 GiB with an explicit storage budget; fixture input is bounded to 50 users and 5,000 events. The runtime lock is a template until actual host, cluster, storage, image and Python inventory identities are measured. Automatic resume is disabled. Success or failure retains resources and evidence; teardown is separate and rechecks ownership.
-
-**Verification and remaining work.** Offline fake-client, static, rendering and runner checks were recorded, but no container build, image load, Minikube profile, Kubernetes workload, B2/B3/B4 acceptance or teardown was run for the reviewed source revision. Source state `runtime_pass` records completion of B4 and retained runtime resources; the separate `verify` command is offline and reports `teardown_performed: false`. Acceptance still requires image/package checks and an isolated live run with fresh identity-bound receipts. See the [Kubernetes guide](kubernetes.md).
-
-## Historical synthetic-feed measurements
+### Historical synthetic-feed measurements
 
 <a id="23-synthetic-feed-configurations"></a>
 
-The following values are historical measurements from named feeds in the earlier documentation. They are not the 3 October full-data manifest described below and should not be treated as regenerated results.
+Earlier status prose recorded these feed summaries. Their original manifests
+are not present here, so retain them as historical observations, not regenerated
+results or current defaults:
 
-| Preset | Scatter window | Span | Peak events/day | Mean events/day | Peak/mean |
+| Feed | Scatter window | Span | Peak events/day | Mean events/day | Peak/mean |
 |---|---:|---:|---:|---:|---:|
 | `scatter_1w` | 1 week | 372 days | 428,965 | 90,912 | 4.72× |
-| `scatter_1m` | 1 month (4 weeks) | 393 days | 241,413 | 86,054 | 2.80× |
-| `scatter_3m` (default) | 3 months (13 weeks) | 456 days | 208,674 | 74,165 | 2.81× |
+| `scatter_1m` | 4 weeks | 393 days | 241,413 | 86,054 | 2.80× |
+| `scatter_3m` | 13 weeks | 456 days | 208,674 | 74,165 | 2.81× |
 
-The separate 3 October 2026 full-data run used seed 42, 13-week scatter and 2,000 users per batch; its tracked manifest records a 212,714-event daily peak. Older prose used a different peak value, so this report follows the receipt-backed manifest and does not merge the two scopes. The generator's current `--batch-users` default is 20,000; that runtime memory setting is not the historical 2,000 value and does not affect generated events. See [feed generation](docker.md#synthetic-event-generation) and the [full-data manifest](evidence/full/manifest.json).
-
-## Historical benchmark and acceptance findings
-
-The 3 October batch benchmark used Spark 3.5.5, Java 17.0.14 and Python 3.10.12 on one two-core standalone executor, 32 shuffle partitions, seed 42, 13-week scatter and one warm-up plus three measured repetitions. Equivalent arms were checked for plan/row/checksum conditions. The report records the measurements and their cache/scan caveats in [full-data evidence](evidence/full/README.md). These results are not cluster performance claims.
-
-The 3 October streaming report used one broker, four Kafka partitions and a two-core Spark setup. Its bounded throughput and partition measurements are detailed in [Module 3 evidence](evidence/module3/README.md); the small test's two-partition arm was fastest, without establishing a generally optimal partition count. The 10 October Module 4 acceptance report recorded 21/21 gates for its exact historical run, but its ALS metrics trailed the personal-frequency baseline and do not imply model superiority.
-
-## Full-data pipeline run
-
-The complete pipeline was executed on the full dataset on 21 October 2026
-against the reviewed source revision. The run reproduced the accepted
-10 October 2026 full-data acceptance result.
-
-| Stage | Result |
-|---|---|
-| Source | 3,421,083 orders, 32,434,489 prior facts, 1,384,617 train facts, 49,688 products; per-file digests recorded in the source receipt. |
-| Staging | 33,819,106 events across 456 daily partitions promoted atomically to HDFS. |
-| Module 2 | 49,677 product metrics and 21 department metrics published to MongoDB; pivot total equals unpivot total at 32,434,489. |
-| Module 4A | 4,124,180 recommendations for 206,209 users. |
-| Module 4B | 49,688 product-graph documents. |
-| Module 3 | 1,051,069 finalized trend rows and 67,852 immutable finalized-window bundles. |
-| Module 4C | Versioned Hybrid serving snapshot; ALS and trend candidates combined, trend window resolved. |
-| Module 4D | All read routes answered from the published collections. |
-
-The evaluation reproduces the accepted run exactly. ALS Recall@10 is
-`0.12147208248298487` against the accepted `0.121472`; Precision@10 is
-`0.09578611223315568` against `0.095786`; MAP@10 is `0.06988428671987636`
-against `0.069884`; and global-popularity Recall@10 is
-`0.06984315126267848` against `0.069843`. The recommendation and graph
-document counts match the accepted run exactly. This is a reproduction on a
-different host, a different executor layout and a Zstandard-compressed feed.
-
-Two operational limits were found and are recorded rather than hidden:
-
-- The streaming stage exhausts the two gigabyte batch executor heap on a feed
-  whose event times span the full 456 days, because the sliding-window state
-  then holds an entry per five-minute slide. The stage needs a larger executor
-  heap than the batch default, and the bounded development feed is the
-  appropriate input for a demonstration.
-- The Module 3 late-data demonstration produced the expected evidence: two
-  events accepted inside the watermark, the beyond-watermark event dropped,
-  the duplicate removed by event identifier, and the poison record counted as
-  invalid rather than aggregated.
-
-## Repository maintenance
-
-A structural audit of the source tree, the scripts, the documentation and the
-continuous integration definitions was performed against the reviewed
-revision. The audit produced a module dependency graph, a list of duplicated
-definition bodies, a list of cross-module private imports and an inventory of
-unreferenced symbols. The changes below are behaviour-preserving except where
-a measured improvement is stated.
-
-**Shared layer.** A new `src/common/` package owns the building blocks that
-every module had re-implemented: environment readers, credential redaction,
-run identity and JSON report writing, numeric and record guards, and source
-identity in `runtime.py`, and the shared Spark session contract in `spark.py`.
-The three Module 2/3/4 Spark session modules now differ only in their
-application name and their module-specific settings, and the three
-configuration modules share their path and environment handling.
-
-**File count.** The audit started at 426 tracked files and finished at 424,
-with 19 genuinely new files and 47 removed or merged. The new files are the
-shared layer (3), the Kubernetes primitives (1), the compose runner (1), the
-demo entry point (1), the test helpers (1) and the evidence index, checksum
-manifest and compact summaries (11). Everything else was merged or removed:
-
-| Change | Before | After |
-|---|---|---|
-| `src/common/` helper modules | 7 | 3 |
-| Kubernetes primitives | 2 | 1 |
-| Test helper modules | 2 | 1 |
-| Module 3 smoke scripts | 3 | 1 |
-| Module 4 smoke scripts | 3 | 1 |
-| Dashboard demo tools | 8 | 7 |
-| Top-level documents | 18 | 11 |
-| Legacy-named test files | 25 | 0 |
-| Raw evidence dumps | 8 | 0 |
-| Tracked files | 426 | 424 |
-
-**Dependency direction.** Every implementation-to-implementation private
-import was removed. The helpers that cross module boundaries are now public
-(`locked_image`, `validate_pipeline_lock`, `checked`, `json_output`,
-`read_receipt`, `build_document`, `hdfs_sha256`, `snapshot_validation`,
-`readiness_identity` and the rest). The only remaining private cross-module
-references are test-to-implementation ones, which is the normal shape of a
-white-box test.
-
-**Duplication.** Nine duplicated definition bodies were unified: the positive
-integer, stored-UTC and BSON-millisecond guards, the canonical JSON writer,
-the environment boolean parser, the bound-PV capacity reader, the required
-environment reader, the JSON report writer, and the five Module 3 Compose
-harness helpers, which now live in `scripts/module3_harness.py`. Four
-unreferenced functions were deleted.
-
-**Layout.** `scripts/module4/` mixed the live Module 4D dashboard tools with
-the archived Module 4C experiment harnesses; the tools are now `scripts/dashboard/`
-and the harnesses `scripts/experiments/`. `deploy/module4/` is now
-`deploy/dashboard/`. The Kubernetes package gained `scripts/k8s/io.py` for
-hashing, atomic receipt writing, redaction and `kubectl` JSON access, and
-`scripts/k8s/constants.py` for the ports, claim sizes and name builders that
-were previously written out in five places.
-
-**Documentation.** The eighteen top-level documents were reduced to twelve by
-merging the Kubernetes runbook into the Kubernetes guide, the external
-acceptance handoff into the acceptance tutorial, the synthetic-generation and
-executor-benchmark guides into the Docker guide, and the repository layout
-guide into the root README. The evidence archive keeps every original byte
-and gained a Module 4 run-directory index, compact summaries of the largest
-raw artifacts, a checksum manifest and an explicit list of the five files that
-live code registers. Every local markdown link resolves.
-
-**Build context.** The `.dockerignore` allow-list carried twenty-five
-per-file entries that a single directory rule already admitted; the redundant
-lines were removed and the resulting build context was verified to be
-unchanged. The tests now assert the admission outcome rather than the
-spelling of an allow-list line.
-
-**Measured improvements.**
-
-| Change | Measurement |
-|---|---|
-| Zstandard Parquet for the generated feed, cleaned tables and staged interactions | 40% smaller than Snappy on the 33.8M event feed, at roughly the same write cost |
-| Popularity baselines computed once per run instead of once per cohort | Removes about seven full aggregations of the 32.4M-row interaction table from a Module 4 evaluation |
-| Spark task counters accumulated instead of retained | The event-log parser no longer holds every task event in driver memory |
-| Kafka log retention configured | The topic no longer keeps every replayed event for the default seven days |
-| The build-context allow-list and the CI branch triggers | Dead rules and triggers on branches that no longer exist were removed, and the CI workflows no longer repeat each other's selections |
-
-**Still open.** The `final_recommendations` collection grows by a new
-serving version per publication and has no retention rule. The Module 4 HDFS
-checkpoint directory is declared as retained for audit and is never cleaned.
-The Spark event log is still written uncompressed: Spark emits a compressed
-log as a sequence of independent zstd frames and the only decoder available
-to the project reads a single frame, so a compressed log cannot be parsed
-back into the published benchmark metrics. The Kafka partition and
-executor-layout experiments still have to run in the owner environment. These
-are recorded rather than changed, because each one alters a published
-contract or a recorded acceptance gate.
-
-## Reproduction and operator references
-
-<a id="d3-local-integration-and-release-validation"></a>
-
-- Persistent services, isolated dashboard demo, Module 1–4 operating procedures and current validation command ownership: [Docker guide](docker.md).
-- Kubernetes prerequisites, run stages, recovery, evidence capture and separately gated teardown: [Kubernetes guide](kubernetes.md).
-- Exact offline test selection, exclusions and runtime work still required: [external acceptance handoff](acceptance.md#delivered-scope-and-evidence-boundaries).
-- Contract and algorithm detail: [implementation ledger](implementation-ledger.md), [Module 3 guide](module3-contracts.md), and [Module 4 plan](module4-plan.md).
-
-This page preserves the former reproduction anchors for existing links. It does not duplicate the detailed runbook commands.
+The retained batch receipt separately records a 210,195-event peak for its
+13-week run; older prose also cited 212,714. Without matching manifests these
+figures cannot be combined or described as a reproduction. Its processing
+batch size was 2,000 users, while the generator's current default is 20,000;
+batch size bounds memory and does not change seeded event values. See
+[synthetic generation](docker.md#synthetic-event-generation) for the algorithm.

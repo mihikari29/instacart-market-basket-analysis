@@ -33,10 +33,6 @@ METRIC_LABELS = {
 }
 
 
-def _read(st: Any, client: Any, method: str, *args: Any, refresh: bool):
-    return fetch(st.session_state, client, method, *args, refresh=refresh)
-
-
 def _cached_caption(st: Any, cached: bool, payload: dict[str, Any]) -> None:
     show_cached(st, cached)
     observed = payload.get("observed_at")
@@ -51,7 +47,7 @@ def _load_page_sources(st: Any, client: Any, refresh: bool) -> dict[str, tuple[d
     ]
     results = {}
     for key, method, args in requests:
-        results[key] = _read(st, client, method, *args, refresh=refresh)
+        results[key] = fetch(st.session_state, client, method, *args, refresh=refresh)
     return results
 
 

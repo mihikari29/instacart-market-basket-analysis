@@ -44,10 +44,6 @@ class TaskError(RuntimeError):
     """A container step failed without exposing command secrets."""
 
 
-def _safe(value: str) -> str:
-    return redact_secrets(value)
-
-
 def _is_resume_allowed() -> bool:
     policy = str(get_execution_config().get("resume_policy", "enabled")).strip().lower()
     return policy != "disabled"
@@ -88,7 +84,7 @@ def _subprocess(command: list[str], *, env: dict[str, str], log_path: Path, time
         def copy_sanitized_output() -> None:
             assert process.stdout is not None
             for line in process.stdout:
-                clean = _safe(line.rstrip("\n"))
+                clean = redact_secrets(line.rstrip("\n"))
                 log.write(clean + "\n")
                 log.flush()
                 print(clean, flush=True)
@@ -650,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(step_receipt, default=str, sort_keys=True))
         return 0
     except TaskError as exc:
-        print(f"pipeline step failed: {_safe(str(exc))}", file=sys.stderr, flush=True)
+        print(f"pipeline step failed: {redact_secrets(str(exc))}", file=sys.stderr, flush=True)
         return 2
     except Exception as exc:
         print(f"pipeline step failed ({type(exc).__name__}); sensitive details redacted", file=sys.stderr, flush=True)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
@@ -16,10 +15,19 @@ import subprocess
 import time
 import traceback
 import uuid
-from urllib.parse import urlsplit, urlunsplit
 
-from ..common.runtime import new_run_id, save_json
+from ..common.runtime import new_run_id, save_redacted_json
 from ..common.runtime import REPOSITORY_ROOT
+from ..common.runtime import (
+    SensitiveArgumentParser,
+    redact_arguments,
+    redact_sensitive_text,
+    redact_sensitive_values,
+    redact_uri,
+    safe_error_text,
+    config_section as config_section,
+    read_yaml_mapping as read_yaml_mapping,
+)
 from .als import (
     ALSParams,
     fit_model,
@@ -48,7 +56,7 @@ from .evaluation import (
     prior_frequency_trend_products,
     prior_only_hybrid_evaluation_provenance,
     prior_trend_only_recommendations,
-    ranking_metrics,
+    ranking_metrics as ranking_metrics,
     split_truth_by_history,
 )
 from .graph import (
@@ -69,17 +77,23 @@ from .sink_mongo import (
 from .split import make_internal_holdout
 from ..common.spark import clear_job_group
 from .config import session
+from .tuning import (
+    _metric_summary as _metric_summary,
+    _sample_users as _sample_users,
+    _trial_grid,
+    _trial_order as _trial_order,
+    _unpersist_model,
+    tune_als,
+)
 
 
 REPO_ROOT = REPOSITORY_ROOT
 EVALUATION_KS = (5, 10, 20)
-_MONGODB_URI = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
-_SECRET_ASSIGNMENT = re.compile(r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)")
 
 
 def _log(msg: str) -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{now} UTC] {msg}", flush=True)
+    print(f"[{now} UTC] {redact_sensitive_text(msg)}", flush=True)
 
 
 
@@ -114,334 +128,16 @@ def source_digest() -> str:
     return digest.hexdigest()
 
 
-def _redact_uri(uri: str) -> str:
-    parsed = urlsplit(uri)
-    if not parsed.scheme:
-        return "<redacted>"
-    hostname = parsed.hostname or ""
-    if ":" in hostname and not hostname.startswith("["):
-        hostname = f"[{hostname}]"
-    if parsed.port:
-        hostname = f"{hostname}:{parsed.port}"
-    netloc = f"***@{hostname}" if parsed.username or parsed.password else hostname
-    return urlunsplit((parsed.scheme, netloc, parsed.path, "<redacted>" if parsed.query else "", ""))
-
-
-def _redact_sensitive_text(value: str) -> str:
-    redacted = _MONGODB_URI.sub(lambda match: _redact_uri(match.group(0)), value)
-    return _SECRET_ASSIGNMENT.sub(r"\1\2<redacted>", redacted)
-
-
 def _safe_config(config: Config) -> dict:
     values = asdict(config)
-    values["mongodb_uri"] = _redact_uri(config.mongodb_uri)
-    return values
+    values["mongodb_uri"] = redact_uri(config.mongodb_uri)
+    return redact_sensitive_values(values)
 
 
 def _valid_version(value: str, label: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}", value) or ".." in value:
         raise ValueError(f"{label} must be a 1–80 character path-safe version identifier")
     return value
-
-
-def _sample_users(frame, limit: int | None, seed: int):
-    if limit is None or limit <= 0:
-        return frame.select("user_id").distinct()
-    from pyspark.sql import functions as F
-
-    users = frame.select("user_id").distinct().withColumn(
-        "stable_hash", F.xxhash64("user_id", F.lit(int(seed)))
-    )
-    return users.orderBy("stable_hash", "user_id").limit(limit).drop("stable_hash")
-
-
-def _trial_grid(max_trials: int = 12) -> list[ALSParams]:
-    if not 1 <= max_trials <= 12:
-        raise ValueError("max_trials must be between 1 and 12")
-    custom_params = None
-    try:
-        from pathlib import Path
-        import yaml
-
-        pipeline_cfg = Path("config/pipeline.yaml")
-        if pipeline_cfg.is_file():
-            loaded = yaml.safe_load(pipeline_cfg.read_text(encoding="utf-8")) or {}
-            als_cfg = loaded.get("models", {}).get("als", {})
-            if als_cfg:
-                custom_params = ALSParams(
-                    rank=int(als_cfg.get("rank", 32)),
-                    max_iter=int(als_cfg.get("max_iter", 10)),
-                    reg_param=float(als_cfg.get("reg_param", 0.1)),
-                    alpha=float(als_cfg.get("alpha", 10.0)),
-                    strength_col=str(als_cfg.get("strength_col", "strength_raw")),
-                )
-    except Exception:
-        pass
-
-    candidates = [
-        custom_params or ALSParams(),
-        ALSParams(rank=16, reg_param=0.01, alpha=10.0, max_iter=5, strength_col="strength_raw"),
-        ALSParams(rank=16, reg_param=0.05, alpha=10.0, max_iter=10),
-        ALSParams(rank=32, reg_param=0.05, alpha=10.0, max_iter=10),
-        ALSParams(rank=32, reg_param=0.1, alpha=40.0, max_iter=10),
-        ALSParams(rank=64, reg_param=0.1, alpha=10.0, max_iter=10),
-        ALSParams(rank=16, reg_param=0.1, alpha=10.0, max_iter=15, strength_col="strength_log"),
-        ALSParams(rank=32, reg_param=0.05, alpha=40.0, max_iter=10, strength_col="strength_log"),
-        ALSParams(rank=64, reg_param=0.1, alpha=40.0, max_iter=10, strength_col="strength_log"),
-        ALSParams(rank=16, reg_param=0.01, alpha=40.0, max_iter=10, strength_col="strength_log"),
-        ALSParams(rank=32, reg_param=0.1, alpha=10.0, max_iter=5, strength_col="strength_raw"),
-        ALSParams(rank=64, reg_param=0.05, alpha=10.0, max_iter=5, strength_col="strength_raw"),
-    ]
-    unique = {}
-    for params in candidates:
-        unique.setdefault(tuple(sorted(asdict(params).items())), params)
-    return list(unique.values())[:max_trials]
-
-
-def _metric_summary(recommendations, truth):
-    return ranking_metrics(recommendations, truth, 10)
-
-
-def _trial_order(trial):
-    metrics = trial.get("metrics") or {}
-    return (
-        metrics.get("recall_at_k") if metrics.get("recall_at_k") is not None else -1.0,
-        metrics.get("precision_at_k") if metrics.get("precision_at_k") is not None else -1.0,
-        -trial.get("total_runtime_ms", float("inf")),
-    )
-
-
-def _unpersist_model(model):
-    for name in ("userFactors", "itemFactors"):
-        frame = getattr(model, name, None)
-        if frame is not None:
-            frame.unpersist(blocking=False)
-
-
-def tune_als(
-    split,
-    config: Config,
-    pilot_users: int = 5000,
-    max_trials: int = 12,
-    evidence_path: Path | None = None,
-) -> dict:
-    """Run seeded pilot trials, then validate its best three on full internal holdout."""
-    from pyspark import StorageLevel
-
-    if pilot_users < 1:
-        raise ValueError("pilot_users must be positive")
-    if not 1 <= max_trials <= 12:
-        raise ValueError("max_trials must be between 1 and 12")
-    started = time.perf_counter()
-    full_training = build_prior_interactions(split["training"]).persist(StorageLevel.MEMORY_AND_DISK)
-    full_training_rows = full_training.count()
-    full_truth = split["validation_truth"].cache()
-    full_truth.count()
-    users = _sample_users(full_truth, pilot_users, config.seed).cache()
-    pilot_training = full_training.join(users, "user_id", "inner").cache()
-    pilot_truth = full_truth.join(users, "user_id", "inner").cache()
-    state = {
-        "status": "running",
-        "seed": config.seed,
-        "pilot_sampling": {"method": "xxhash64(user_id, seed), then user_id", "seed": config.seed},
-        "pilot_users_requested": pilot_users,
-        "pilot_users_actual": users.count(),
-        "internal_training_interactions": full_training_rows,
-        "pilot_training_interactions": pilot_training.count(),
-        "max_pilot_trials": max_trials,
-        "pilot_trials": [],
-        "full_validation_trials": [],
-        "official_train_used": False,
-        "executor_shuffle_config": {
-            "spark_master": config.master,
-            "shuffle_partitions": config.shuffle_partitions,
-        },
-    }
-
-    def checkpoint():
-        if evidence_path is not None:
-            save_json(evidence_path, state)
-
-    try:
-        checkpoint()
-        if state["pilot_users_actual"] == 0:
-            state.update(
-                status="not_performed",
-                reason="no user has at least two prior orders; internal holdout is empty",
-                selected_params=None,
-            )
-            checkpoint()
-            return state
-
-        spark_context = pilot_training.sparkSession.sparkContext
-        spark_context.setJobGroup("module4.als.pilot_baseline", "Module 4 pilot baselines", True)
-        try:
-            baseline_frames = {
-                "global_popularity": global_popularity(pilot_training, users, 10),
-                "personal_frequency": personal_frequency(pilot_training, users, 10),
-            }
-            state["pilot_baselines"] = {
-                name: _metric_summary(frame, pilot_truth) for name, frame in baseline_frames.items()
-            }
-        finally:
-            clear_job_group(spark_context)
-        for trial_id, params in enumerate(_trial_grid(max_trials), 1):
-            trial = {
-                "trial_id": trial_id,
-                "phase": "pilot",
-                "params": asdict(params),
-                "seed": config.seed,
-                "input_interactions": state["pilot_training_interactions"],
-                "input_users": users.count(),
-                "input_products": pilot_training.select("product_id").distinct().count(),
-                "status": "failed",
-            }
-            total_started = time.perf_counter()
-            model = None
-            recommendations = None
-            spark_context.setJobGroup(
-                f"module4.als.pilot.{trial_id}", f"Module 4 ALS pilot trial {trial_id}", True
-            )
-            try:
-                fit_started = time.perf_counter()
-                model = fit_model(pilot_training, params, config.seed, config.als_blocks)
-                trial["fit_runtime_ms"] = round((time.perf_counter() - fit_started) * 1000, 3)
-                trial["user_factors"] = model.userFactors.count()
-                trial["item_factors"] = model.itemFactors.count()
-                recommend_started = time.perf_counter()
-                recommendations = recommend_top_k(model, users, 10)
-                recommendations.count()
-                trial["recommendation_runtime_ms"] = round(
-                    (time.perf_counter() - recommend_started) * 1000, 3
-                )
-                evaluation_started = time.perf_counter()
-                trial["metrics"] = _metric_summary(recommendations, pilot_truth)
-                trial["evaluation_runtime_ms"] = round(
-                    (time.perf_counter() - evaluation_started) * 1000, 3
-                )
-                trial["status"] = "passed"
-            except Exception as exc:
-                trial["error"] = f"{type(exc).__name__}: {exc}"
-                trial["traceback"] = traceback.format_exc()
-            finally:
-                clear_job_group(spark_context)
-                if recommendations is not None:
-                    recommendations.unpersist(blocking=False)
-                if model is not None:
-                    _unpersist_model(model)
-            trial["total_runtime_ms"] = round((time.perf_counter() - total_started) * 1000, 3)
-            state["pilot_trials"].append(trial)
-            checkpoint()
-
-        pilot_passed = [trial for trial in state["pilot_trials"] if trial["status"] == "passed"]
-        if not pilot_passed:
-            state.update(status="failed", reason="all pilot ALS trials failed", selected_params=None)
-            checkpoint()
-            return state
-
-        shortlist = sorted(pilot_passed, key=_trial_order, reverse=True)[:3]
-        state["shortlist_trial_ids"] = [trial["trial_id"] for trial in shortlist]
-        full_users = full_truth.select("user_id").distinct().cache()
-        spark_context.setJobGroup("module4.als.full_baseline", "Module 4 full internal baselines", True)
-        try:
-            full_baselines = {
-                "global_popularity": global_popularity(full_training, full_users, 10),
-                "personal_frequency": personal_frequency(full_training, full_users, 10),
-            }
-            state["full_validation_baselines"] = {
-                name: _metric_summary(frame, full_truth) for name, frame in full_baselines.items()
-            }
-        finally:
-            clear_job_group(spark_context)
-        for full_id, pilot_trial in enumerate(shortlist, 1):
-            params = ALSParams(**pilot_trial["params"])
-            trial = {
-                "trial_id": full_id,
-                "pilot_trial_id": pilot_trial["trial_id"],
-                "phase": "full_internal_validation",
-                "params": asdict(params),
-                "seed": config.seed,
-                "input_interactions": full_training_rows,
-                "input_users": full_users.count(),
-                "input_products": full_training.select("product_id").distinct().count(),
-                "status": "failed",
-            }
-            total_started = time.perf_counter()
-            model = None
-            recommendations = None
-            spark_context.setJobGroup(
-                f"module4.als.full_validation.{full_id}",
-                f"Module 4 ALS full validation trial {full_id}",
-                True,
-            )
-            try:
-                fit_started = time.perf_counter()
-                model = fit_model(full_training, params, config.seed, config.als_blocks)
-                trial["fit_runtime_ms"] = round((time.perf_counter() - fit_started) * 1000, 3)
-                trial["user_factors"] = model.userFactors.count()
-                trial["item_factors"] = model.itemFactors.count()
-                recommend_started = time.perf_counter()
-                recommendations = recommend_top_k(model, full_users, 10)
-                recommendations.count()
-                trial["recommendation_runtime_ms"] = round(
-                    (time.perf_counter() - recommend_started) * 1000, 3
-                )
-                evaluation_started = time.perf_counter()
-                trial["metrics"] = _metric_summary(recommendations, full_truth)
-                trial["evaluation_runtime_ms"] = round(
-                    (time.perf_counter() - evaluation_started) * 1000, 3
-                )
-                trial["status"] = "passed"
-            except Exception as exc:
-                trial["error"] = f"{type(exc).__name__}: {exc}"
-                trial["traceback"] = traceback.format_exc()
-            finally:
-                clear_job_group(spark_context)
-                if recommendations is not None:
-                    recommendations.unpersist(blocking=False)
-                if model is not None:
-                    _unpersist_model(model)
-            trial["total_runtime_ms"] = round((time.perf_counter() - total_started) * 1000, 3)
-            state["full_validation_trials"].append(trial)
-            checkpoint()
-        full_passed = [trial for trial in state["full_validation_trials"] if trial["status"] == "passed"]
-        if not full_passed:
-            state.update(
-                status="failed",
-                reason="all full-size internal validation trials failed",
-                selected_params=None,
-            )
-            checkpoint()
-            return state
-        selected = max(full_passed, key=_trial_order)
-        state.update(
-            status="passed" if len(full_passed) == len(shortlist) else "incomplete",
-            selected_trial_id=selected["trial_id"],
-            selected_pilot_trial_id=selected["pilot_trial_id"],
-            selected_params=selected["params"],
-            selection_metric="full internal Recall@10, then Precision@10, then runtime",
-            shortlist_requested=len(shortlist),
-            shortlist_passed=len(full_passed),
-            total_runtime_ms=round((time.perf_counter() - started) * 1000, 3),
-        )
-        checkpoint()
-        return state
-    except Exception as exc:
-        state.update(
-            status="failed",
-            reason=f"{type(exc).__name__}: {exc}",
-            traceback=traceback.format_exc(),
-        )
-        checkpoint()
-        raise
-    finally:
-        if "full_users" in locals():
-            full_users.unpersist(blocking=False)
-        users.unpersist(blocking=False)
-        pilot_training.unpersist(blocking=False)
-        pilot_truth.unpersist(blocking=False)
-        full_truth.unpersist(blocking=False)
-        full_training.unpersist(blocking=False)
 
 
 def _hdfs_exists(spark, path: str) -> bool:
@@ -704,7 +400,7 @@ def run_als(
     try:
         official_train_orders = tables["orders"].where("eval_set = 'train'").select("order_id")
         split = make_internal_holdout(prior, official_train_orders)
-        save_json(output / "split_summary.json", split["summary"])
+        save_redacted_json(output / "split_summary.json", split["summary"])
         _log(f"[MODULE 4][PHASE 2/7] Tuning ALS hyperparameters ({pilot_users} pilot users, max {max_trials} trials)...")
         tuning = tune_als(
             split,
@@ -797,7 +493,7 @@ def run_als(
                 ).getContentSummary(spark._jvm.org.apache.hadoop.fs.Path(model_path)).getLength()),
             }
         )
-        save_json(output / "als_model.json", model_report)
+        save_redacted_json(output / "als_model.json", model_report)
 
         factor_users = model.userFactors.select(F.col("id").alias("user_id")).distinct().cache()
         factor_items = model.itemFactors.select(F.col("id").alias("product_id")).distinct().cache()
@@ -953,7 +649,7 @@ def run_als(
             source_code_sha256=code_hash,
             als_params=selected,
         )
-        save_json(output / "hybrid_evaluation.json", hybrid_evaluation)
+        save_redacted_json(output / "hybrid_evaluation.json", hybrid_evaluation)
         if config.recommendation_k < max(EVALUATION_KS):
             evaluation["publication_k"] = config.recommendation_k
             evaluation["evaluation_k"] = evaluation_k
@@ -1195,7 +891,8 @@ def _mongo_preflight(config, run_id):
 def _save_run_artifacts(output: Path, report: dict):
     finished = datetime.now(timezone.utc).isoformat()
     report["finished_at_utc"] = finished
-    save_json(output / "summary.json", report)
+    report = redact_sensitive_values(report)
+    save_redacted_json(output / "summary.json", report)
     manifest = {
         **report.get("environment", {}),
         "run_id": report.get("run_id"),
@@ -1211,8 +908,8 @@ def _save_run_artifacts(output: Path, report: dict):
         "started_at_utc": report.get("started_at_utc"),
         "finished_at_utc": finished,
     }
-    save_json(output / "manifest.json", manifest)
-    save_json(
+    save_redacted_json(output / "manifest.json", manifest)
+    save_redacted_json(
         output / "mongo_validation.json",
         {
             "recommendations": report.get("als", {}).get("mongo", {}),
@@ -1220,7 +917,7 @@ def _save_run_artifacts(output: Path, report: dict):
             "pair_readiness": report.get("pair_readiness"),
         },
     )
-    save_json(
+    save_redacted_json(
         output / "performance.json",
         {
             "stages": report.get("stage_timings_ms", {}),
@@ -1248,7 +945,7 @@ def _save_run_artifacts(output: Path, report: dict):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = SensitiveArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["validate", "als", "graph", "all", "user-features"])
     parser.add_argument("--root")
     parser.add_argument("--master")
@@ -1304,6 +1001,8 @@ def main(argv=None):
         raise ValueError("pilot_users must be positive")
     if not 1 <= args.max_trials <= 12:
         raise ValueError("max_trials must be between 1 and 12")
+    if args.command in {"als", "all"}:
+        _trial_grid(args.max_trials)
     if args.command == "user-features":
         if args.user_id is None or args.user_id <= 0:
             raise ValueError("user-features requires a positive --user-id")
@@ -1315,6 +1014,8 @@ def main(argv=None):
         output.mkdir(parents=True, exist_ok=False)
         started_at = datetime.now(timezone.utc).isoformat()
         spark = None
+        exit_code = 0
+        report = {"inspection_id": inspection_id, "status": "failed", "observed_at_utc": started_at}
         try:
             spark = session(config, output / "eventlog")
             result = read_user_features(spark, config, args.user_id)
@@ -1330,12 +1031,23 @@ def main(argv=None):
                 "module4_source_code_sha256": source_digest(),
                 "command": ["module4", "user-features", "--user-id", str(args.user_id)],
             }
-            save_json(output / "user_features.json", report)
-            print(f"[USER FEATURES] {output.resolve()}", flush=True)
-            return 0
+        except Exception as exc:
+            exit_code = 1
+            report.update(status="failed", error=safe_error_text(exc))
+            print(f"[FAILED] user-features: {report['error']}", flush=True)
         finally:
             if spark is not None:
-                spark.stop()
+                try:
+                    spark.stop()
+                except Exception as exc:
+                    exit_code = 1
+                    error = safe_error_text(exc)
+                    report.setdefault("cleanup_errors", []).append(f"Spark stop: {error}")
+                    report.update(status="failed")
+                    print(f"[FAILED] Spark stop: {error}", flush=True)
+            save_redacted_json(output / "user_features.json", redact_sensitive_values(report))
+        print(redact_sensitive_text(f"[USER FEATURES] {output.resolve()}"), flush=True)
+        return exit_code
     run_id = _valid_version(args.run_id or new_run_id(), "run_id")
     model_version = _valid_version(args.model_version or f"als-{run_id}", "model_version")
     graph_version = _valid_version(args.graph_version or f"graph-{run_id}", "graph_version")
@@ -1360,10 +1072,10 @@ def main(argv=None):
             "config": _safe_config(config),
             "model_version": model_version,
             "graph_version": graph_version,
-            "command": ["module4", *(argv if argv is not None else os.sys.argv[1:])],
+            "command": redact_arguments(["module4", *(argv if argv is not None else os.sys.argv[1:])]),
         },
     }
-    save_json(output / "manifest.json", report["environment"] | {"run_id": run_id, "status": "running"})
+    save_redacted_json(output / "manifest.json", report["environment"] | {"run_id": run_id, "status": "running"})
     spark = None
     als_result = None
     graph_result = None
@@ -1408,7 +1120,7 @@ def main(argv=None):
         report["stage_timings_ms"]["input_validation"] = round(
             (time.perf_counter() - input_started) * 1000, 3
         )
-        save_json(output / "data_validation.json", validation)
+        save_redacted_json(output / "data_validation.json", validation)
         if args.command == "validate":
             report.update(
                 status="passed",
@@ -1445,11 +1157,11 @@ def main(argv=None):
                 report["stage_timings_ms"]["als_compute"] = round(
                     (time.perf_counter() - stage_started) * 1000, 3
                 )
-                save_json(output / "split_summary.json", als_result["split_summary"])
-                save_json(output / "als_trials.json", als_result["tuning"])
-                save_json(output / "evaluation.json", als_result["evaluation"])
-                save_json(output / "als_model.json", als_result["model"])
-                save_json(
+                save_redacted_json(output / "split_summary.json", als_result["split_summary"])
+                save_redacted_json(output / "als_trials.json", als_result["tuning"])
+                save_redacted_json(output / "evaluation.json", als_result["evaluation"])
+                save_redacted_json(output / "als_model.json", als_result["model"])
+                save_redacted_json(
                     output / "recommendation_validation.json", als_result["recommendation_validation"]
                 )
             if args.command in {"graph", "all"}:
@@ -1463,9 +1175,9 @@ def main(argv=None):
                 report["stage_timings_ms"]["graph_compute"] = round(
                     (time.perf_counter() - stage_started) * 1000, 3
                 )
-                save_json(output / "graph_trials.json", graph_result["trials"])
-                save_json(output / "graph_validation.json", graph_result["validation"])
-                save_json(
+                save_redacted_json(output / "graph_trials.json", graph_result["trials"])
+                save_redacted_json(output / "graph_validation.json", graph_result["validation"])
+                save_redacted_json(
                     output / "graph_metrics.json",
                     {"validation": graph_result["validation"], "top20": graph_result["top20"]},
                 )
@@ -1566,7 +1278,7 @@ def main(argv=None):
                             "failed",
                             recommendation_published,
                             graph_published,
-                            f"{type(publication_error).__name__}: {publication_error}",
+                            safe_error_text(publication_error),
                         )
                         report["pair_readiness"] = {
                             "ready": False,
@@ -1613,15 +1325,15 @@ def main(argv=None):
                         else "run_passed_full_data_acceptance_not_claimed"
                     ),
                 )
-        save_json(output / "summary.json", report)
+        save_redacted_json(output / "summary.json", report)
         print(f"[ARTIFACTS] {output.resolve()}", flush=True)
     except Exception as exc:
         exit_code = 1
         report.update(
             status="failed",
             failed_stage=current_stage,
-            error=f"{type(exc).__name__}: {_redact_sensitive_text(str(exc))}",
-            traceback=_redact_sensitive_text(traceback.format_exc()),
+            error=safe_error_text(exc),
+            traceback=redact_sensitive_text(traceback.format_exc()),
         )
         report["stages"][current_stage] = "failed"
         if als_result is not None and als_result.get("mongo", {}).get("published"):
@@ -1635,14 +1347,14 @@ def main(argv=None):
             ),
             "graph_published": bool(graph_result and graph_result.get("mongo", {}).get("published")),
         }
-        print(f"[FAILED] {current_stage}: {type(exc).__name__}: {_redact_sensitive_text(str(exc))}", flush=True)
+        print(f"[FAILED] {current_stage}: {safe_error_text(exc)}", flush=True)
     finally:
         if "prior" in locals():
             try:
                 prior.unpersist(blocking=False)
             except Exception as cleanup_error:
                 report.setdefault("cleanup_errors", []).append(
-                    f"prior: {type(cleanup_error).__name__}: {cleanup_error}"
+                    f"prior: {safe_error_text(cleanup_error)}"
                 )
         for result, name in ((als_result, "recommendations"), (graph_result, "metrics")):
             if result and result.get(name) is not None:
@@ -1650,14 +1362,14 @@ def main(argv=None):
                     result[name].unpersist(blocking=False)
                 except Exception as cleanup_error:
                     report.setdefault("cleanup_errors", []).append(
-                        f"{name}: {type(cleanup_error).__name__}: {cleanup_error}"
+                        f"{name}: {safe_error_text(cleanup_error)}"
                     )
         if spark is not None:
             try:
                 spark.stop()
             except Exception as stop_error:
                 report.setdefault("cleanup_errors", []).append(
-                    f"Spark stop: {type(stop_error).__name__}: {stop_error}"
+                    f"Spark stop: {safe_error_text(stop_error)}"
                 )
                 if report.get("status") != "failed":
                     report.update(status="failed", error="Spark session failed to stop cleanly")
@@ -1674,15 +1386,15 @@ def main(argv=None):
                         "directory": str(eventlog_directory.resolve()),
                         "groups": sorted(event_metrics),
                     }
-                    save_json(output / "spark_event_metrics.json", event_metrics)
+                    save_redacted_json(output / "spark_event_metrics.json", event_metrics)
                 except Exception as event_error:
                     report["eventlog"] = {
                         "status": "parse_failed",
                         "directory": str(eventlog_directory.resolve()),
-                        "error": f"{type(event_error).__name__}: {event_error}",
+                        "error": safe_error_text(event_error),
                     }
                     report.setdefault("evidence_warnings", []).append(
-                        f"Spark event log metrics could not be parsed: {event_error}"
+                        f"Spark event log metrics could not be parsed: {safe_error_text(event_error)}"
                     )
                     if report.get("status") in {"passed", "compute_passed"}:
                         report.update(status="failed", failed_stage="event_log_validation")

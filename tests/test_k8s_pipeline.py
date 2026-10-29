@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import types
 import unittest
@@ -394,6 +395,26 @@ class PipelinePlannerTests(unittest.TestCase):
                 self.assertEqual(pipeline_task.main(["offline"]), 1)
             self.assertNotIn("plaintext-password", error_output.getvalue())
             self.assertIn("sensitive details redacted", error_output.getvalue())
+
+    def test_subprocess_preserves_redacted_output_and_failure_status(self):
+        expected = "status=ready token=<redacted>\nmongodb://<redacted>\n"
+        for status in (0, 7):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as temporary:
+                log = Path(temporary) / "step.log"
+                captured = io.StringIO()
+                command = [sys.executable, "-c", (
+                    "import sys; print('status=ready token=synthetic-token'); "
+                    "print('mongodb://user:synthetic-password@mongo.invalid/db'); "
+                    f"sys.exit({status})"
+                )]
+                with patch.object(pipeline_task, "WORKSPACE", Path(temporary)), redirect_stdout(captured):
+                    if status:
+                        with self.assertRaisesRegex(pipeline_task.TaskError, "exited with status 7"):
+                            pipeline_task._subprocess(command, env=dict(os.environ), log_path=log, timeout=10)
+                    else:
+                        pipeline_task._subprocess(command, env=dict(os.environ), log_path=log, timeout=10)
+                self.assertEqual(log.read_text(encoding="utf-8"), expected)
+                self.assertEqual(captured.getvalue(), expected)
 
     def test_rendered_fixture_assets_pin_images_and_isolate_checkpoints(self):
         with tempfile.TemporaryDirectory() as temporary:

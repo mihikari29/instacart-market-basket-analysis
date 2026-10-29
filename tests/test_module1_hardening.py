@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pyarrow as pa
@@ -11,6 +11,7 @@ from src.module1 import clean as raw_clean
 from src.module1.event_reader import SCHEMA_FIELDS, event_sort_key, iter_ordered_events
 from src.module1.generate import expand_events, finalize, prepare_orders
 from src.module1.producer import main as producer_main, publish_rows
+from src.module1 import producer as replay
 
 
 class _ParquetFixture:
@@ -219,6 +220,50 @@ def test_raw_preflight_rejects_lossy_reordered_flag_before_writing_outputs(tmp_p
     error = capsys.readouterr().err
     assert "order_products__prior.csv row 2: reordered must be an integer in [0, 1]" in error
     assert not output.exists()
+
+
+@pytest.mark.parametrize("table,column,value,diagnostic", [
+    ("orders", "days_since_prior_order", "", "valid only for order_number 1"),
+    ("orders", "days_since_prior_order", "synthetic_source_value", "finite number in [0, 30]"),
+    ("orders", "order_id", "2147483648", "order_id must be an integer"),
+    ("order_products__train", "reordered", "2", "reordered must be an integer in [0, 1]"),
+    ("order_products__prior", "reordered", "synthetic_source_value", "reordered must be an integer in [0, 1]"),
+    ("order_products__train", "order_id", "11", "does not belong to eval_set train"),
+    ("products", "aisle_id", "999", "aisle_id does not exist"),
+])
+def test_invalid_raw_pipeline_preserves_published_output(
+    tmp_path, monkeypatch, capsys, table, column, value, diagnostic
+):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    output = tmp_path / "clean"
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir), "--output-dir", str(output)])
+    assert raw_clean.main() == 0
+    previous = {path.name: path.read_bytes() for path in output.iterdir()}
+    source = data_dir / "raw" / f"{table}.csv"
+    frame = pd.read_csv(source, dtype="string", keep_default_na=False)
+    frame.loc[1 if table == "orders" else 0, column] = value
+    frame.to_csv(source, index=False)
+    capsys.readouterr()
+    assert raw_clean.main() == 2
+    captured = capsys.readouterr()
+    assert diagnostic in captured.err
+    assert "synthetic_source_value" not in captured.err + captured.out
+    assert {path.name: path.read_bytes() for path in output.iterdir()} == previous
+
+
+def test_valid_raw_pipeline_preserves_first_order_gap_and_boolean_contract(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    _write_raw_fixture(data_dir / "raw")
+    monkeypatch.setattr("sys.argv", ["clean", "--data-dir", str(data_dir)])
+    assert raw_clean.main() == 0
+    orders = pd.read_parquet(data_dir / "clean" / "orders.parquet")
+    assert orders.days_since_prior_order.tolist() == [0.0, 2.0, 0.0]
+    assert orders.dspo_raw.isna().tolist() == [True, False, True]
+    for table, expected in (("prior", [False]), ("train", [True])):
+        frame = pd.read_parquet(data_dir / "clean" / f"order_products__{table}.parquet")
+        assert frame.reordered.tolist() == expected
+        assert str(frame.reordered.dtype) == "bool"
 
 
 def test_raw_preflight_rejects_order_hour_above_documented_domain(tmp_path, monkeypatch, capsys):
@@ -684,3 +729,129 @@ def test_producer_returns_nonzero_and_writes_receipt_on_delivery_failure(tmp_pat
     payload = __import__("json").loads(receipt.read_text())
     assert payload["attempted_events"] == payload["failed_events"] == 1
     assert payload["acked_events"] == 0
+
+
+class _LifecycleProducer(_Producer):
+    def __init__(self, *, flush_error=False, close_error=False, pending=False):
+        super().__init__()
+        self.flush_error = flush_error
+        self.close_error = close_error
+        self.pending = pending
+        self.flush_calls = 0
+        self.close_calls = 0
+        self.acknowledge = None
+
+    def send(self, topic, key, value):
+        if not self.pending:
+            return super().send(topic, key, value)
+        self.sent.append((topic, key, value))
+        future = MagicMock()
+        future.add_callback.side_effect = lambda callback: setattr(self, "acknowledge", callback)
+        return future
+
+    def flush(self, timeout):
+        super().flush(timeout)
+        self.flush_calls += 1
+        if self.flush_error:
+            raise RuntimeError("synthetic flush failure")
+
+    def close(self, timeout):
+        super().close(timeout)
+        self.close_calls += 1
+        if self.close_error:
+            raise RuntimeError("synthetic close failure")
+
+
+def _publish(producer, rows, **overrides):
+    options = dict(topic="events", replay_speed=0, target_events_per_second=0,
+                   start_delay_seconds=0, injections={})
+    return publish_rows(producer, rows, **(options | overrides))
+
+
+@pytest.mark.parametrize("published", [0, 2])
+@pytest.mark.parametrize("cleanup_failure", [False, True])
+def test_iterator_failure_always_cleans_producer_and_preserves_primary_error(
+    monkeypatch, capsys, published, cleanup_failure
+):
+    accounting = replay.DeliveryAccounting()
+    monkeypatch.setattr(replay, "DeliveryAccounting", lambda: accounting)
+    producer = _LifecycleProducer(flush_error=cleanup_failure, close_error=cleanup_failure)
+    primary = ValueError("synthetic iterator failure")
+
+    def rows():
+        yield from _event_rows()[:published]
+        raise primary
+
+    with pytest.raises(ValueError) as raised:
+        _publish(producer, rows())
+    assert raised.value is primary
+    assert producer.flush_calls == producer.close_calls == 1
+    assert accounting.attempted_events == accounting.acked_events == published
+    assert accounting.failed_events == 0
+    if cleanup_failure:
+        error = capsys.readouterr().err
+        assert "synthetic flush failure" in error
+        assert "synthetic close failure" in error
+
+
+@pytest.mark.parametrize("failure", ["message", "throttle", "start_delay", "publication"])
+def test_other_replay_failures_always_clean_resources(monkeypatch, failure):
+    producer = _LifecycleProducer()
+    options = {}
+    if failure == "message":
+        monkeypatch.setattr(replay, "build_message", MagicMock(side_effect=ValueError("synthetic failure")))
+    elif failure == "publication":
+        monkeypatch.setattr(replay, "send_tracked", MagicMock(side_effect=ValueError("synthetic failure")))
+    else:
+        monkeypatch.setattr(replay.time, "sleep", MagicMock(side_effect=ValueError("synthetic failure")))
+        options = {"start_delay_seconds": 1} if failure == "start_delay" else {"target_events_per_second": 0.001}
+    with pytest.raises(ValueError, match="synthetic failure"):
+        _publish(producer, _event_rows()[:2], **options)
+    assert producer.flush_calls == producer.close_calls == 1
+
+
+@pytest.mark.parametrize("flush_error,close_error,pending", [
+    (False, False, False), (True, False, False), (False, True, False),
+    (True, True, True), (False, False, True),
+])
+def test_cleanup_accounting_and_cli_exit_status(tmp_path, monkeypatch, flush_error, close_error, pending):
+    producer = _LifecycleProducer(flush_error=flush_error, close_error=close_error, pending=pending)
+    monkeypatch.setattr(replay, "iter_ordered_events", lambda *_, **__: iter(_event_rows()[:1]))
+    monkeypatch.setattr(replay, "build_producer", lambda _: producer)
+    path = tmp_path / "receipt.json"
+    code = producer_main(["--feed", str(tmp_path), "--receipt", str(path), "--replay-speed", "0"])
+    assert code == int(flush_error or close_error or pending)
+    receipt = __import__("json").loads(path.read_text())
+    assert receipt["attempted_events"] == receipt["acked_events"] + receipt["failed_events"] == 1
+    assert receipt["acked_events"] == int(not pending)
+    assert receipt["failed_events"] == int(pending)
+    assert len(receipt["lifecycle_errors"]) == int(flush_error) + int(close_error)
+    assert producer.flush_calls == producer.close_calls == 1
+
+
+def test_unresolved_delivery_is_not_counted_twice_after_cleanup_failure(monkeypatch):
+    accounting = replay.DeliveryAccounting()
+    monkeypatch.setattr(replay, "DeliveryAccounting", lambda: accounting)
+    producer = _LifecycleProducer(flush_error=True, close_error=True, pending=True)
+    receipt, _ = _publish(producer, _event_rows()[:1])
+    producer.acknowledge(object())
+    assert accounting.attempted_events == accounting.acked_events + accounting.failed_events == 1
+    assert receipt["acked_events"] == accounting.acked_events == 0
+
+
+def test_iterator_failure_returns_nonzero_without_success_receipt(tmp_path, monkeypatch, capsys):
+    producer = _LifecycleProducer()
+
+    def rows(*_, **__):
+        yield _event_rows()[0]
+        raise ValueError("synthetic iterator failure")
+
+    monkeypatch.setattr(replay, "iter_ordered_events", rows)
+    monkeypatch.setattr(replay, "build_producer", lambda _: producer)
+    receipt = tmp_path / "receipt.json"
+    assert producer_main(["--feed", str(tmp_path), "--receipt", str(receipt), "--replay-speed", "0"]) == 1
+    assert producer.flush_calls == producer.close_calls == 1
+    assert not receipt.exists()
+    output = capsys.readouterr().out
+    assert "synthetic iterator failure" in output
+    assert "[done ]" not in output

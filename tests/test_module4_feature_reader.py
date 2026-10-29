@@ -27,10 +27,22 @@ def _feature_row(**overrides):
 
 def test_user_feature_contract_is_exact_and_prior_only():
     validate_user_feature_columns(sorted(USER_FEATURE_COLUMNS))
-    with pytest.raises(ValueError, match="unexpected fields.*train_label"):
-        validate_user_feature_columns([*USER_FEATURE_COLUMNS, "train_label"])
-    with pytest.raises(ValueError, match="missing fields.*module2_run_id"):
-        validate_user_feature_columns(sorted(USER_FEATURE_COLUMNS - {"module2_run_id"}))
+    validate_user_feature_columns([*sorted(USER_FEATURE_COLUMNS), "user_id"])
+
+
+@pytest.mark.parametrize("missing,extra,detail", [
+    (set(), ["train_label"], "unexpected fields train_label"),
+    ({"module2_run_id"}, [], "missing fields module2_run_id"),
+    (
+        {"module2_run_id", "feature_scope"}, ["train_label", "future_label"],
+        "missing fields feature_scope, module2_run_id; unexpected fields future_label, train_label",
+    ),
+])
+def test_user_feature_schema_errors_preserve_sorted_diagnostics(missing, extra, detail):
+    columns = [*sorted(USER_FEATURE_COLUMNS - missing), *extra]
+    with pytest.raises(ValueError) as raised:
+        validate_user_feature_columns(columns)
+    assert str(raised.value) == "Module 2 user_features schema mismatch: " + detail
 
 
 def test_descriptive_reader_returns_lineage_without_creating_model_input():

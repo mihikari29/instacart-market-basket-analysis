@@ -10,7 +10,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
-import json
 import math
 from numbers import Real
 import time
@@ -20,6 +19,7 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 from .config import Config
+from ..common.runtime import strict_canonical_json
 
 
 BUNDLE_COLLECTION_NAME = "realtime_trending_windows"
@@ -91,18 +91,8 @@ class _Counters:
         )
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-
-
 def _sha256(value: Any) -> str:
-    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+    return hashlib.sha256(strict_canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def validate_namespace(value: Any, field: str, *, maximum: int) -> str:
@@ -360,7 +350,7 @@ def _existing_metadata_error(expected: dict[str, Any], stored: Any) -> str | Non
         "config_hash",
     ):
         try:
-            if _canonical_json(stored.get(field)) != _canonical_json(expected[field]):
+            if strict_canonical_json(stored.get(field)) != strict_canonical_json(expected[field]):
                 return f"stored bundle {field} does not match the expected publication"
         except (TypeError, ValueError):
             return f"stored bundle {field} is malformed"

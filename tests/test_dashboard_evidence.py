@@ -89,6 +89,23 @@ def test_als_evaluation_preserves_nested_cohorts_k_metrics_and_baseline_values()
     assert result["evaluation_method"]["als_training_method"].startswith("not recorded")
 
 
+@pytest.mark.parametrize("value,detail", [
+    (0, "is outside its allowed range"),
+    (-1, "is outside its allowed range"),
+    (True, "must be an integer"),
+    (1.5, "must be an integer"),
+    (None, "must be an integer"),
+])
+def test_als_evidence_rejects_invalid_evaluated_users_with_existing_diagnostic(tmp_path, value, detail):
+    target = copy_artifact(tmp_path, "module4a-full-als-evaluation")
+    document = json.loads(target.read_text())
+    document["cohorts"]["all_official_train_users"]["metrics"]["als"]["5"]["evaluated_users"] = value
+    target.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(InvalidEvidence) as error:
+        read_als_evaluation(tmp_path)
+    assert str(error.value) == "evaluation.evaluated_users " + detail
+
+
 def test_benchmark_evidence_separates_join_pruning_cache_and_unavailable_shuffle():
     result = read_evidence(REPOSITORY_ROOT, "module2-full-hardening-benchmarks")["data"]
     assert result["metrics"]["join_strategy_medians_seconds"] == {

@@ -66,7 +66,6 @@ jobs:
           path: |
             module4-runtime-smoke.log
             module4-pytest.log
-            module4d-api-validation.log
             module4-flow-smoke.log
             module4-cross-module-smoke.log
             module4-services.log
@@ -77,7 +76,4 @@ jobs:
 
       - name: Stop validation services
         if: always()
-        run: |
-          docker compose down
-          docker image rm --force "instacart-module4d-ui-dev:module4-${GITHUB_RUN_ID}" \
-            >/dev/null 2>&1 || true
+        run: docker compose down

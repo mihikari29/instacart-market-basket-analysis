@@ -60,10 +60,6 @@ class AcceptanceExecutor(Protocol):
     def run(self, argv: list[str], *, timeout: int, input_text: str | None = None): ...
 
 
-def _safe_text(value: str) -> str:
-    return redact_secrets(value)
-
-
 def classify_acceptance(scope: str, checks: list[Mapping[str, Any]], *, runtime_identity_complete: bool) -> str:
     """Keep offline, fixture-runtime, and full-data-runtime results distinct."""
     if scope not in SCOPE_VALUES:
@@ -195,7 +191,7 @@ def read_receipt(source: Path | str | Mapping[str, Any], description: str) -> tu
     return value, sha256_bytes(encoded)
 
 
-def _get_json(executor: AcceptanceExecutor, _identity: RunIdentity, command: list[str], description: str) -> dict[str, Any]:
+def _get_json(executor: AcceptanceExecutor, command: list[str], description: str) -> dict[str, Any]:
     try:
         result = checked(executor, command)
         value = json_output(result, description)
@@ -215,7 +211,7 @@ def _checked_acceptance_command(
         raise AcceptanceError(f"{description} failed ({type(exc).__name__})") from exc
     if result.returncode != 0:
         raise AcceptanceError(f"{description} failed with exit status {result.returncode}")
-    return _safe_text(result.stdout or "")
+    return redact_secrets(result.stdout or "")
 
 
 def _probe_api_ui(executor: AcceptanceExecutor, identity: RunIdentity) -> str:
@@ -348,7 +344,7 @@ def run_acceptance(
         raise AcceptanceError("B4 evidence output already exists for this run")
     try:
         jobs = _get_json(
-            executor, identity,
+            executor,
             kubectl(identity, "--namespace", identity.namespace, "get", "jobs", "-o", "json"),
             "run Job inventory",
         ).get("items")
@@ -362,8 +358,8 @@ def run_acceptance(
             kubectl(identity, "--namespace", identity.namespace, "wait", "--for=condition=complete", f"job/{job_name}", "--timeout=1500s"),
             "B4 scenario Job completion", 1530,
         )
-        job_doc = _get_json(executor, identity, kubectl(identity, "--namespace", identity.namespace, "get", "job", job_name, "-o", "json"), "B4 Job identity")
-        pod_payload = _get_json(executor, identity, kubectl(identity, "--namespace", identity.namespace, "get", "pods", "-l", f"job-name={job_name}", "-o", "json"), "B4 Job Pod identity")
+        job_doc = _get_json(executor, kubectl(identity, "--namespace", identity.namespace, "get", "job", job_name, "-o", "json"), "B4 Job identity")
+        pod_payload = _get_json(executor, kubectl(identity, "--namespace", identity.namespace, "get", "pods", "-l", f"job-name={job_name}", "-o", "json"), "B4 Job Pod identity")
         pods = pod_payload.get("items")
         if not isinstance(pods, list) or len(pods) != 1:
             raise AcceptanceError("B4 Job must own exactly one Pod")
@@ -507,8 +503,8 @@ def collect_failure_evidence(
     for name, command in queries.items():
         try:
             result = executor.run(command, timeout=60)
-            stdout = _safe_text(result.stdout or "")
-            stderr = _safe_text(result.stderr or "")
+            stdout = redact_secrets(result.stdout or "")
+            stderr = redact_secrets(result.stderr or "")
             evidence["commands"][name] = {"exit_code": result.returncode, "stdout": stdout, "stderr": stderr}
             if name == "pods" and result.returncode == 0:
                 payload = json.loads(stdout)
@@ -530,8 +526,8 @@ def collect_failure_evidence(
                 result = executor.run(command, timeout=90)
                 details[key] = {
                     "exit_code": result.returncode,
-                    "stdout": _safe_text(result.stdout or ""),
-                    "stderr": _safe_text(result.stderr or ""),
+                    "stdout": redact_secrets(result.stdout or ""),
+                    "stderr": redact_secrets(result.stderr or ""),
                 }
             except Exception as exc:
                 details[key] = {"exit_code": None, "error_type": type(exc).__name__}

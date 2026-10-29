@@ -1,7 +1,7 @@
 """Shared primitives and constants for the Kubernetes coordinator.
 
-Hashing, atomic receipt writing, redaction, `kubectl` JSON access, and
-the ports, claim sizes and name builders that every phase agrees on.
+Hashing, atomic receipt writing, redaction, claim sizes and name builders
+that every phase agrees on.
 """
 
 from __future__ import annotations
@@ -16,6 +16,10 @@ from typing import Any, Mapping
 
 
 from src.common.runtime import canonical_json
+
+
+class PipelineError(RuntimeError):
+    """Pipeline plan, identity, manifest, or execution failure."""
 
 #: A MongoDB connection string anywhere in free text.
 MONGO_URI_PATTERN = re.compile(r"(?i)mongodb(?:\+srv)?://[^\s\"'<>]+")
@@ -102,17 +106,6 @@ def read_json_object(path: Path) -> dict[str, Any]:
     return value
 
 
-#: Kubernetes service ports used by the pipeline and the serving layer.
-HDFS_NAMENODE_PORT = 8020
-HDFS_NAMENODE_HTTP_PORT = 9870
-HDFS_DATANODE_PORT = 9864
-HDFS_DATANODE_TRANSFER_PORT = 9866
-KAFKA_BOOTSTRAP_PORT = 29092
-KAFKA_CONTROLLER_PORT = 9093
-MONGO_PORT = 27017
-API_PORT = 8000
-STREAMLIT_PORT = 8501
-
 #: Persistent volume claims the B3 pipeline creates, with their requested size.
 PIPELINE_CLAIMS: dict[str, str] = {
     "it4931-hdfs-namenode": "1Gi",
@@ -124,14 +117,6 @@ PIPELINE_CLAIMS: dict[str, str] = {
 
 #: Total storage the pipeline run is allowed to request.
 PIPELINE_STORAGE_BUDGET = "39Gi"
-
-#: Objects every namespace receives from the cluster's own controllers.
-SYSTEM_NAMESPACE_OBJECTS: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("ServiceAccount", "default"),
-        ("ConfigMap", "kube-root-ca.crt"),
-    }
-)
 
 #: The MongoDB database the demo run publishes into.
 DEMO_DATABASE_PREFIX = "module4d_demo_"

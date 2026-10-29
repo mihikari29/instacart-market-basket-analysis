@@ -27,6 +27,7 @@ from .runtime import (
     save_json,
     sha256_hex,
     stored_utc,
+    strict_canonical_json,
     validate_run_id,
     REPOSITORY_ROOT,
 )
@@ -57,5 +58,6 @@ __all__ = [
     "save_json",
     "sha256_hex",
     "stored_utc",
+    "strict_canonical_json",
     "validate_run_id",
 ]

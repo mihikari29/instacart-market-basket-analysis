@@ -106,6 +106,18 @@ def test_als_fixture_fit_and_recommend(spark, tables):
     assert recommendations.where("als_rank < 1 OR product_id IS NULL").count() == 0
 
 
+def test_pilot_sampling_preserves_seeded_order_distinct_users_and_schema(spark):
+    from src.module4.tuning import _sample_users
+
+    users = spark.createDataFrame([(5,), (1,), (3,), (2,), (4,), (1,)], "user_id int")
+    for seed, expected in ((7, [4, 2, 1]), (42, [4, 3, 5])):
+        selected = _sample_users(users, 3, seed)
+        assert selected.schema == users.schema
+        assert [row.user_id for row in selected.collect()] == expected
+    assert {row.user_id for row in _sample_users(users, None, 7).collect()} == {1, 2, 3, 4, 5}
+    assert users.count() == 6
+
+
 def test_recommend_top_k_resolves_score_ties_before_cutting_membership(spark):
     class EqualScoreModel:
         itemFactors = spark.createDataFrame([(1, [0.0]), (2, [0.0]), (3, [0.0]), (4, [0.0])], "id int, features array<float>")

@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 
+from ..common.runtime import positive_int
 TABLES = {
     "orders": "orders",
     "prior": "order_products_prior",
@@ -30,10 +31,14 @@ class Config:
     total_cores: int = 2
 
     def __post_init__(self) -> None:
-        if self.shuffle_partitions < 1 or self.repetitions < 3 or self.warmups < 1:
+        for name, value in (("shuffle_partitions", self.shuffle_partitions), ("repetitions", self.repetitions), ("warmups", self.warmups)):
+            positive_int(value, name)
+        if self.repetitions < 3:
             raise ValueError("Require positive partitions, >=3 measured runs and >=1 warm-up")
-        if not self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
+        if not isinstance(self.root, str) or not self.root.strip() or "\x00" in self.root or self.root.rstrip("/") in ("", "hdfs:", "file:"):
             raise ValueError("An explicit dataset root is required")
+        if not isinstance(self.master, str) or not self.master.strip() or "\x00" in self.master:
+            raise ValueError("Spark master must not be empty or contain NUL")
         if not isinstance(self.executor_memory, str) or not re.fullmatch(r"[1-9][0-9]*[mg]", self.executor_memory):
             raise ValueError("executor_memory must be a positive Spark m/g quantity")
         if any(type(value) is not int or value < 1 for value in (self.executor_cores, self.total_cores)):
@@ -52,11 +57,9 @@ class Config:
     @classmethod
     def environment(cls, **overrides) -> "Config":
         """Read root/master from the environment and accept explicit run options."""
-        return cls(
-            root=os.environ.get("MODULE2_ROOT", cls.root),
-            master=os.environ.get("SPARK_MASTER", cls.master),
-            **overrides,
-        )
+        values = {"root": os.environ.get("MODULE2_ROOT", cls.root), "master": os.environ.get("SPARK_MASTER", cls.master)}
+        values.update(overrides)
+        return cls(**values)
 
 
 def session(config: Config, event_dir: Path | None = None):

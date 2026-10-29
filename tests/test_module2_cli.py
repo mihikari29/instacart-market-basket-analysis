@@ -5,8 +5,10 @@
 from dataclasses import asdict
 from datetime import datetime
 import json
+from pathlib import Path
 import re
 import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -113,23 +115,62 @@ def test_validate_uses_module2_commit_without_git(tmp_path, monkeypatch, cli_run
 
 
 @pytest.mark.parametrize("stage", ["session", "validate"])
-def test_later_failure_reports_and_propagates(tmp_path, monkeypatch, cli_runtime, stage):
-    failure = RuntimeError("later stage failed")
+def test_later_failure_reports_and_returns_nonzero(tmp_path, monkeypatch, cli_runtime, capsys, stage):
+    failure = RuntimeError("later stage failed: mongodb://failure-user:failure-secret@db:27017/fixture")
     monkeypatch.setattr(cli, stage, Mock(side_effect=failure))
 
-    with pytest.raises(RuntimeError, match="later stage failed") as caught:
-        cli.main(["validate", "--output", str(tmp_path), "--run-id", "failed-test"])
+    assert cli.main(["validate", "--output", str(tmp_path), "--run-id", "failed-test"]) == 1
 
-    assert caught.value is failure
-    report = json.loads((tmp_path / "failed-test" / "summary.json").read_text())
+    serialized = (tmp_path / "failed-test" / "summary.json").read_text()
+    report = json.loads(serialized)
     assert report["run_id"] == "failed-test"
     assert report["status"] == "failed"
-    assert report["error"] == "RuntimeError: later stage failed"
+    assert report["error"].startswith("RuntimeError: later stage failed:")
+    assert "db:27017/fixture" in report["error"]
     assert {"commit", "dirty", "source_code_sha256"} <= report["environment"].keys()
+    captured = capsys.readouterr()
+    assert f"[FAILED] {report['error']}" in captured.out
+    assert "[HANDOFF VALIDATION]" not in captured.out
+    assert "passed" not in captured.out
+    assert "Traceback" not in captured.err
+    for secret in ("failure-user", "failure-secret"):
+        assert secret not in serialized + captured.out + captured.err
     if stage == "session":
         cli_runtime.stop.assert_not_called()
     else:
         cli_runtime.stop.assert_called_once_with()
+
+
+def test_runtime_failure_exits_nonzero_in_subprocess(tmp_path):
+    # Exercise the actual __main__ boundary while failing before Spark starts.
+    script = """
+import runpy
+from src.module2 import config
+
+def fail_session(*args, **kwargs):
+    raise RuntimeError('session unavailable: mongodb://failure-user:failure-secret@db:27017/fixture')
+
+config.session = fail_session
+runpy.run_module('src.module2.cli', run_name='__main__')
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, "validate", "--output", str(tmp_path), "--run-id", "process-failure"],
+        cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True, timeout=30,
+    )
+
+    assert result.returncode == 1
+    serialized = (tmp_path / "process-failure" / "summary.json").read_text()
+    report = json.loads(serialized)
+    assert report["run_id"] == "process-failure"
+    assert report["status"] == "failed"
+    assert report["error"].startswith("RuntimeError: session unavailable:")
+    assert "db:27017/fixture" in report["error"]
+    assert f"[FAILED] {report['error']}" in result.stdout
+    assert "[HANDOFF VALIDATION]" not in result.stdout
+    assert "passed" not in result.stdout
+    assert "Traceback" not in result.stderr
+    for secret in ("failure-user", "failure-secret"):
+        assert secret not in serialized + result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("run_id", ["../escape", "a" * 81])

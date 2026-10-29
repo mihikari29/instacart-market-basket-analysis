@@ -12,16 +12,11 @@ from typing import Sequence
 
 from pymongo import MongoClient
 
+from src.common.runtime import MONGODB_URI_PATTERN, SensitiveArgumentParser, redact_sensitive_text, redact_sensitive_values
 from src.module4.config import Config as Module4Config
 
 from .config import HybridRankingConfig
 from .service import HybridServingResult, serve_hybrid_user
-
-
-_MONGODB_URI_PATTERN = re.compile(r"mongodb(?:\+srv)?://[^\s\"'<>]+", re.IGNORECASE)
-_SECRET_PATTERN = re.compile(
-    r"(?i)\b(password|passwd|pwd|token|secret)(\s*[:=]\s*)([^\s,;&]+)"
-)
 
 
 def _parse_user_id(value: str) -> int:
@@ -82,7 +77,7 @@ def _parse_max_event_age_seconds(value: str) -> timedelta:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python3 -m src.module4.hybrid.cli")
+    parser = SensitiveArgumentParser(prog="python3 -m src.module4.hybrid.cli")
     commands = parser.add_subparsers(dest="command", required=True)
     serve = commands.add_parser("serve-user", help="serve recommendations for one user")
     serve.add_argument("--user-id", required=True, type=_parse_user_id)
@@ -133,8 +128,8 @@ def _sanitize_error(error: BaseException) -> str:
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         message = str(current) or "operation failed"
-        message = _MONGODB_URI_PATTERN.sub("mongodb://<redacted>", message)
-        message = _SECRET_PATTERN.sub(r"\1\2<redacted>", message)
+        message = MONGODB_URI_PATTERN.sub("mongodb://<redacted>", message)
+        message = redact_sensitive_text(message)
         messages.append(f"{type(current).__name__}: {message}")
         current = current.__cause__ or current.__context__
     return " <- caused by ".join(messages)
@@ -142,6 +137,8 @@ def _sanitize_error(error: BaseException) -> str:
 
 def _serve_user(arguments: argparse.Namespace) -> int:
     client = None
+    output = None
+    exit_code = 0
     try:
         config = Module4Config(
             mongodb_uri=arguments.mongodb_uri,
@@ -158,15 +155,20 @@ def _serve_user(arguments: argparse.Namespace) -> int:
             max_event_age=arguments.max_event_age_seconds,
             client=client,
         )
-        output = json.dumps(_success_document(result), separators=(",", ":"), ensure_ascii=False)
-        print(output)
-        return 0
+        output = json.dumps(redact_sensitive_values(_success_document(result)), separators=(",", ":"), ensure_ascii=False)
     except Exception as exc:
         print(f"module4c serve-user failed: {_sanitize_error(exc)}", file=sys.stderr)
-        return 1
+        exit_code = 1
     finally:
         if client is not None:
-            client.close()
+            try:
+                client.close()
+            except Exception as exc:
+                exit_code = 1
+                print(f"module4c client close failed: {_sanitize_error(exc)}", file=sys.stderr)
+    if exit_code == 0:
+        print(output)
+    return exit_code
 
 
 def main(argv: Sequence[str] | None = None) -> int:

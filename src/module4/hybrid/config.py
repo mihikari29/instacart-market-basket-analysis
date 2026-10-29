@@ -6,6 +6,9 @@ from dataclasses import dataclass
 import math
 from typing import Any, Mapping
 
+from pathlib import Path
+
+from ...common.runtime import config_section, finite_number, read_yaml_mapping
 
 @dataclass(frozen=True, slots=True)
 class HybridRankingConfig:
@@ -38,6 +41,13 @@ class HybridRankingConfig:
         if not math.isfinite(lambda_weight) or not 0.0 <= lambda_weight <= 1.0:
             raise ValueError("lambda_weight must be a finite number between 0 and 1")
 
+        for name, value in (("alpha", self.alpha), ("beta", self.beta), ("gamma", self.gamma)):
+            weight = finite_number(value, name)
+            if not 0.0 <= weight <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
+        if self.beta > 0 and abs(self.alpha + self.beta + self.gamma - 1.0) > 1e-9:
+            raise ValueError("active alpha, beta and gamma weights must sum to 1")
+
         if isinstance(self.epsilon, bool) or not isinstance(self.epsilon, (int, float)):
             raise ValueError("epsilon must be finite and strictly positive")
         try:
@@ -52,23 +62,30 @@ class HybridRankingConfig:
 
     @classmethod
     def from_pipeline_config(cls, path: Any = None) -> "HybridRankingConfig":
+        cfg_path = Path(path) if path is not None else Path("config/pipeline.yaml")
+        if path is None and not cfg_path.exists():
+            return cls()
+        hybrid_cfg = config_section(read_yaml_mapping(cfg_path), "models", "hybrid")
+        if set(hybrid_cfg) - {"alpha", "beta", "gamma", "output_top_k", "window_minutes"}:
+            raise ValueError("models.hybrid contains unsupported settings")
+        defaults = cls()
+        weights = {}
+        for name, default in (("alpha", defaults.alpha), ("beta", defaults.beta), ("gamma", defaults.gamma)):
+            value = hybrid_cfg.get(name, default)
+            if isinstance(value, bool):
+                raise ValueError(f"models.hybrid.{name} must be a finite number")
+            try:
+                weights[name] = float(value)
+            except (TypeError, ValueError, OverflowError):
+                raise ValueError(f"models.hybrid.{name} must be a finite number") from None
+        count = hybrid_cfg.get("output_top_k", defaults.output_top_k)
+        if isinstance(count, bool) or isinstance(count, float) and not count.is_integer():
+            raise ValueError("models.hybrid.output_top_k must be an integer")
         try:
-            from pathlib import Path
-            import yaml
-
-            cfg_path = Path(path) if path else Path("config/pipeline.yaml")
-            if cfg_path.is_file():
-                loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
-                hybrid_cfg = loaded.get("models", {}).get("hybrid", {})
-                return cls(
-                    alpha=float(hybrid_cfg.get("alpha", 0.5)),
-                    beta=float(hybrid_cfg.get("beta", 0.0)),
-                    gamma=float(hybrid_cfg.get("gamma", 0.5)),
-                    output_top_k=int(hybrid_cfg.get("output_top_k", 20)),
-                )
-        except Exception:
-            pass
-        return cls()
+            output_top_k = int(count)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("models.hybrid.output_top_k must be an integer") from None
+        return cls(**weights, output_top_k=output_top_k)
 
 
 @dataclass(frozen=True, slots=True)

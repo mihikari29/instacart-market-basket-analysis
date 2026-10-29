@@ -1,37 +1,62 @@
 # Documentation index
 
-The repository root [README](../README.md) is the front door: it explains what
-the project is, how the modules fit together and where every artifact lives.
-This page lists the documents that own a specific subject.
+Start with the [project overview](../README.md) for architecture and a first
+synthetic dashboard run. Use [project status](progress.md) to distinguish
+implemented features, historical observations, and acceptance still required.
 
-## Project and status
+## Project and requirements
 
-| Document | Owns |
+| Document | Purpose |
 |---|---|
-| [Proposal](Proposal.md) | The approved assignment requirements and architecture baseline. Immutable. |
-| [Project progress](progress.md) | The team record: what is implemented, what was measured, what is still open, and the dated evidence for each claim. |
-| [Implementation ledger](implementation-ledger.md) | Design decisions, safety measures and the limits of each implementation choice. |
-| [External acceptance](acceptance.md) | The operator path from preparation to an evidence-backed acceptance report, plus the delivered scope and the boundaries of what has not been verified. |
+| [Proposal](Proposal.md) | Repository requirements baseline. Its relationship to the latest revised proposal and course identifier needs confirmation; implementation status is separate. |
+| [Project status](progress.md) | Capabilities, configuration boundaries, unfinished work, and validation limits. |
 
-## Operating guides
+## Architecture and technical contracts
 
-| Document | Owns |
+| Document | Purpose |
 |---|---|
-| [Docker guide](docker.md) | Image targets, service prerequisites, every module's operating commands, synthetic event generation, the Spark executor layout experiment, validation commands and cleanup boundaries. |
-| [Kubernetes guide](kubernetes.md) | The Kubernetes demonstration: design facts (identity, credentials, storage, network policy, version lock) and the operator procedure (preflight, run, verify, collect, teardown). |
-| [Module 3 contracts](module3-contracts.md) | Kafka event provenance, event-time aggregation, publication, bundles, checkpoints and the Module 4C consumption boundary. |
-| [Module 4 plan](module4-plan.md) | The Module 4A-4D algorithms, data contracts, ranking, evaluation, API routes and dashboard contracts. |
-| [Coding conventions](coding-conventions.md) | The project's Python, PySpark, error-handling and testing rules. |
+| [Implementation and design ledger](implementation-ledger.md) | Cross-module data, publication, recovery and isolation decisions. It contains active contracts despite its historical title. |
+| [Module 3 contracts](module3-contracts.md) | Kafka schema, synthetic event time, windows, finalized bundles, checkpoints, and telemetry. |
+| [Module 4 specification](module4-plan.md) | ALS, graph, evaluation, Mongo publication, Hybrid, API/UI and acceptance contracts. |
 
-## Historical evidence
+The Module 4 specification retains its established filename for references in
+the requirements baseline and generated reports. Completed schedules and work
+breakdowns have been removed; the acceptance checklist remains prospective.
 
-| Document | Owns |
+## Development and operations
+
+| Document | Purpose |
 |---|---|
-| [Evidence index](evidence/README.md) | Dated validation reports, receipts and archived design documents, with the five files that live code registers. |
-| [Module 4 evidence index](evidence/module4/README.md) | The eleven Module 4 run directories, their status, and which artifacts are unique to each run. |
-| [Style regression validation](style-regression-validation.md) | The 15 October 2026 post-refactor comparison and its **NOT FULLY VERIFIED** assessment. |
+| [Coding conventions](coding-conventions.md) | Human-facing Python/PySpark, testing, and reproducibility guidance. |
+| [Docker guide](docker.md) | Image targets, persistent versus disposable environments, Module 1–4 commands, indexes, experiments, and scoped cleanup. |
+| [Kubernetes guide](kubernetes.md) | Run identity, prerequisites, lock preparation, rendering, execution, evidence collection, and separate teardown. Runtime acceptance remains pending. |
 
-Historical records keep their original dates, code and environment identities
-and experiment boundaries. Updating this index does not turn a historical
-result into validation of the current commit; see
-[project progress](progress.md) for the present status.
+## Testing and acceptance
+
+| Document | Purpose |
+|---|---|
+| [Docker validation commands](docker.md#validation-commands) | Repository fixtures, UI tests, API validation, and packaged runtime checks. |
+| [Acceptance guide](acceptance.md) | Offline selection, service prerequisites, fixture/full-data acceptance procedures, and evidence requirements. Its dated source-review appendix is historical. |
+
+A configured workflow, offline rendering pass, or historical acceptance result
+is not a successful hosted or live run of the current source.
+
+## Historical evidence available here
+
+The full `docs/evidence/` archive is absent from this checkout. The runbooks identify missing historical records explicitly; no archive has
+been recreated. The application retains five bounded artifacts with their original
+provenance in [`src/module4/dashboard/assets/`](../src/module4/dashboard/assets/):
+
+| Artifact | Recorded scope |
+|---|---|
+| [Batch analytics](../src/module4/dashboard/assets/analytics.json) | Historical product, department and order aggregates. |
+| [Batch benchmark receipt](../src/module4/dashboard/assets/current-hardening-2026-10-03.json) | Historical single-host data, generation and performance scope. |
+| [ALS evaluation](../src/module4/dashboard/assets/evaluation.json) | Official-train cohorts and baseline comparisons. |
+| [Hybrid responsiveness receipt](../src/module4/dashboard/assets/c8a-receipt.json) | Controlled synthetic ranking response; no accuracy result. |
+| [Streaming demonstration receipt](../src/module4/dashboard/assets/c8b-receipt.json) | Bounded event/bundle reconciliation, with recovery and cleanup limitations. |
+
+The [historical style regression comparison](style-regression-validation.md)
+preserves a **NOT FULLY VERIFIED** assessment, unexplained browser assertions,
+and uncertainty about earlier persistent-volume effects. Its raw local
+artifacts are not included here. Neither that narrative nor the five curated
+artifacts replaces fresh end-to-end acceptance evidence.

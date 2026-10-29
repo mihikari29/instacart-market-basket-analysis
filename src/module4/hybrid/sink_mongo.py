@@ -1,7 +1,7 @@
 """Immutable MongoDB publication for one user's final hybrid snapshot."""
 
 from __future__ import annotations
-from ...common.runtime import aware_utc_millisecond, positive_int
+from ...common.runtime import aware_utc_millisecond, positive_int, strict_canonical_json
 
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -185,13 +185,7 @@ def _float_token(value: float | None) -> str | None:
 
 def _canonical_json(payload: Any) -> str:
     try:
-        return json.dumps(
-            payload,
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        )
+        return strict_canonical_json(payload)
     except (TypeError, ValueError) as exc:
         raise HybridSnapshotContractError("fingerprint payload is not canonical JSON") from exc
 

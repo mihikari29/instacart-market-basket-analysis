@@ -6,16 +6,21 @@ on:
       - 'feat/**'
     paths:
       - 'src/module3/**'
-      - 'src/module1/producer.py'
-      - 'src/module1/event_reader.py'
-      - 'src/module1/generate.py'
-      - 'src/module1/config.py'
+      - 'src/common/**'
+      # Source preparation and replay share the Module 1 configuration and readers.
+      - 'src/module1/**'
       - 'scripts/module3*.py'
+      - 'scripts/compose_runner.py'
+      - 'scripts/fetch_instacart.py'
+      - 'scripts/dashboard/api_validation.py'
       - 'scripts/dashboard/demo_fixture.py'
       - 'scripts/dashboard/demo_validate.py'
       - 'deploy/dashboard/compose.demo.yaml'
-      - 'tests/test_module3.py'
-      - 'tests/test_module1_hardening.py'
+      # This standalone workflow runs the repository, API and UI selections.
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'config/pipeline.yaml'
+      - 'deploy/dashboard/requirements/**'
       - 'compose.yaml'
       - 'Dockerfile'
       - '.dockerignore'
@@ -54,7 +59,7 @@ jobs:
           fi
           python -m src.module1.generate --scenario default --scatter-weeks 13 \
             --limit-users 500 --batch-users 500 --out-dir data/synthesized/module3_dev
-      - name: Build pinned Spark runtime and run streaming tests
+      - name: Build pinned Spark runtime and run repository fixtures
         run: |
           docker compose build spark-master
           docker compose run --rm --no-deps --entrypoint python3 module3 -m pytest -q \

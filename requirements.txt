@@ -3,6 +3,7 @@ pandas>=2.2
 pyarrow>=18.1
 requests>=2.32
 hdfs==2.7.3
-kafka-python>=2.1
+kafka-python==3.0.11
 pymongo==4.11.3
 graphframes==0.6
+PyYAML==6.0.2

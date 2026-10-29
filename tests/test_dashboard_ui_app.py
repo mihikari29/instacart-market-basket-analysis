@@ -300,11 +300,6 @@ def test_overview_displays_real_batch_rates_latency_and_clock_skew(monkeypatch):
     assert len([call for call in api.calls if call[0] == "streaming_metrics"]) == 2
 
 
-def _go_to(app, page):
-    app.radio(key="ui_page").set_value(page)
-    return app.run()
-
-
 def _submit(app, submit_key, input_key, value):
     if input_key == "analytics_limit":
         app.number_input(key=input_key).set_value(int(value))

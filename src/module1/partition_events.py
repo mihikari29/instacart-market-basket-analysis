@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import pyarrow as pa
@@ -10,17 +9,10 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
+from ..common.runtime import file_sha256
 from .config import PARQUET_COMPRESSION
 
 PARTITION_COLUMNS = ["synthetic_year", "synthetic_month", "synthetic_day"]
-
-
-def file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def partition_events(source: Path, destination: Path) -> dict:

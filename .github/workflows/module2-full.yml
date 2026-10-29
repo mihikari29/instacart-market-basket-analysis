@@ -10,6 +10,9 @@ on:
       - 'Dockerfile'
       - '.dockerignore'
       - 'requirements*.txt'
+      - 'config/pipeline.yaml'
+      - 'pyproject.toml'
+      - 'deploy/dashboard/requirements/**'
       - '.github/workflows/module2-full.yml'
   workflow_dispatch:
   schedule:
