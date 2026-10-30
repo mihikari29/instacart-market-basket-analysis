@@ -101,6 +101,7 @@ class Module2ServingIndexTests(unittest.TestCase):
                 {
                     "batch_product_metrics": Rows([Row({"product_id": 3, "purchase_count": 4, "reorder_rate": 0.5})]),
                     "department_metrics": Rows([Row({"department_id": 2, "purchase_count": 4, "reorder_rate": 0.5})]),
+                    "product_features": Rows([Row({"product_id": 3, "purchase_count": 4, "reorder_rate": 0.5})]),
                 },
                 "mongodb://publisher.invalid/database",
                 "offline-run",

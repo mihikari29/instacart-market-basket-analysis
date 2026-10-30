@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
-from typing import Any
 
 
 
@@ -91,20 +90,3 @@ class FakeClient:
     def __getitem__(self, name):
         assert name == "instacart"
         return self.database
-
-
-class FindCommandRecorder:
-    """A PyMongo command listener that records the issued find commands."""
-
-    def __init__(self):
-        self.find_commands: list[dict[str, Any]] = []
-
-    def started(self, event):
-        if event.command_name == "find":
-            self.find_commands.append(dict(event.command))
-
-    def succeeded(self, event):
-        pass
-
-    def failed(self, event):
-        pass

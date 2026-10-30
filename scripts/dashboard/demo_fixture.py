@@ -30,6 +30,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from src.module2.analytics import compute_product_features, tag_features
 from src.module2.analytics import metrics as module2_metrics
 from src.module2.analytics import publish_mongo as publish_module2
 from src.module3.config import Config as Module3Config
@@ -98,16 +99,17 @@ def _spark_session() -> SparkSession:
 
 def _seed_batch(spark: SparkSession, admin_uri: str, database_name: str) -> dict[str, Any]:
     prior_rows = [
-        (1, 1001, 0), (1, 1002, 1),
-        (2, 1001, 1), (2, 1003, 0),
-        (3, 1001, 1), (3, 1002, 0),
-        (4, 1004, 1), (4, 1003, 1),
-        (5, 1002, 1), (5, 1004, 0),
+        (1, 1001, 0, 1), (1, 1002, 1, 2),
+        (2, 1001, 1, 1), (2, 1003, 0, 2),
+        (3, 1001, 1, 1), (3, 1002, 0, 2),
+        (4, 1004, 1, 1), (4, 1003, 1, 2),
+        (5, 1002, 1, 1), (5, 1004, 0, 2),
     ]
-    prior = spark.createDataFrame(prior_rows, ["order_id", "product_id", "reordered"])
+    prior = spark.createDataFrame(prior_rows, ["order_id", "product_id", "reordered", "add_to_cart_order"])
     orders = spark.createDataFrame(
-        [(1, 11, 0, 9), (2, 12, 1, 12), (3, 13, 3, 17), (4, 14, 5, 19), (5, 15, 6, 21)],
-        ["order_id", "user_id", "order_dow", "order_hour_of_day"],
+        [(order_id, user_id, dow, hour, "prior", 1, 0.0) for order_id, user_id, dow, hour in
+         [(1, 11, 0, 9), (2, 12, 1, 12), (3, 13, 3, 17), (4, 14, 5, 19), (5, 15, 6, 21)]],
+        ["order_id", "user_id", "order_dow", "order_hour_of_day", "eval_set", "order_number", "days_since_prior_order"],
     )
     products = spark.createDataFrame(
         [
@@ -118,7 +120,7 @@ def _seed_batch(spark: SparkSession, admin_uri: str, database_name: str) -> dict
         ],
         ["product_id", "department_id", "product_name"],
     )
-    _enriched, product_metrics, department_metrics, _user_metrics = module2_metrics(
+    enriched, product_metrics, department_metrics, _user_metrics = module2_metrics(
         {"prior": prior, "orders": orders, "products": products}
     )
     admin_uri_for_publish = admin_uri
@@ -126,7 +128,13 @@ def _seed_batch(spark: SparkSession, admin_uri: str, database_name: str) -> dict
         raise RuntimeError("Module 2 publisher URI must select the isolated demo database")
     run_id = "module4d-demo-batch-001"
     publish_module2(
-        {"batch_product_metrics": product_metrics, "department_metrics": department_metrics},
+        {
+            "batch_product_metrics": product_metrics,
+            "department_metrics": department_metrics,
+            "product_features": tag_features(
+                compute_product_features(enriched), run_id, datetime.now(timezone.utc).isoformat(),
+            ),
+        },
         admin_uri_for_publish,
         run_id,
     )

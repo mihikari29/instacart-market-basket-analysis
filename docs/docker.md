@@ -211,6 +211,48 @@ acceptance topic. `scripts/module1.py all` also exists, but its staging step
 starts HDFS with `--remove-orphans`; the direct commands above make each write
 boundary explicit.
 
+## Temporal split export and descriptive feature contracts
+
+`python3 -m src.module1.split` reads the three curated orders/prior/train Parquet
+files and writes a fresh `data/clean/split_80_20/` directory. Set
+`temporal_split.train_ratio` in `config/pipeline.yaml`; `--pipeline-config`,
+`--clean-dir`, and `--output-dir` select explicit input/output locations.
+Existing output directories are refused. The manifest is written after all
+Parquet outputs; an export without its manifest is incomplete.
+
+The split sorts labeled orders by user and order number. It rounds the requested
+fraction of each user's observed order count (ties to even), retaining at least
+one training and one evaluation order where possible. Official `eval_set=train`
+baskets always stay in evaluation, so the actual ratio can differ. Official
+unlabeled `eval_set=test` orders are excluded and counted. Singleton prior users
+have training only; users with only official train truth are cold-start test
+users. Duplicate identities, unknown purchase orders, incorrect source provenance,
+and a failing chronology audit stop publication. The manifest records input and
+output SHA-256 hashes, row counts, actual ratios, and overlap/chronology checks.
+
+This is a standalone export. Modules 2/4 continue reading their existing curated
+inputs; Module 4 keeps its last-prior-order internal validation and official-train
+final evaluation. The export has no common absolute-time cutoff across users and
+does not establish leakage-safe Hybrid trend evaluation.
+
+Module 2 additionally writes `user_behavior_features`, `product_features`, and
+`user_product_features` alongside `user_features` under `<root>/features/`.
+All four carry `module2_run_id`, `feature_scope=prior_only`, and an explicit UTC
+`generated_at_utc`, including the new run-local exports and MongoDB
+`product_features`. MongoDB batch metrics retain their existing index contract.
+These features are descriptive and are not ALS or Hybrid fitting/ranking inputs.
+Do not use full-prior aggregates for an earlier temporal or internal-validation
+cutoff; regenerate all aggregates from the selected training baskets first.
+
+Cadence uses distinct history basket identities and excludes the artificial
+first-order zero interval; a user without observed intervals receives zero mean
+and standard deviation. Recent basket size uses the last three history orders;
+`basket_growth_slope` is the recent mean minus the lifetime mean (a size delta,
+not a regression coefficient). Cart priority is the fraction of additions in
+positions 1–3. `purchase_streak_active` means the product appeared in the latest
+history basket; it does not count consecutive purchases. Cold users/products
+have no aggregate row. Recency is measured in order numbers, not absolute days.
+
 ## Module 2 batch processing and benchmarks
 
 Module 2 requires the curated HDFS tables and receipts under `/instacart/curated`

@@ -13,7 +13,7 @@ from ..common.runtime import new_run_id, save_redacted_json
 from ..common.runtime import code_digest, git_revision
 from .config import Config, session
 from .data import read_tables, validate, require
-from .analytics import analyze, publish_mongo, tag_user_features
+from .analytics import analyze, publish_mongo, tag_features
 from .benchmarks import benchmark_joins, benchmark_partitions, benchmark_cache
 from .eventlog import parse_event_logs, attach_metrics
 
@@ -90,14 +90,22 @@ def main(argv=None):
             summary, outputs = analyze(spark, tables, report["validation"]["counts"], args.min_support)
             save_redacted_json(output / "analytics.json", summary)
             feature_timestamp = report["environment"]["timestamp_utc"]
-            tag_user_features(outputs["user_features"], run_id, feature_timestamp).write.mode(
-                "overwrite"
-            ).parquet(config.features())
+            for feature_name in (
+                "user_features",
+                "user_behavior_features",
+                "product_features",
+                "user_product_features",
+            ):
+                outputs[feature_name] = tag_features(outputs[feature_name], run_id, feature_timestamp)
+                outputs[feature_name].write.mode("overwrite").parquet(config.features(feature_name))
             for name in (
                 "batch_product_metrics",
                 "department_metrics",
                 "department_daily_trends",
                 "department_hour_metrics",
+                "user_behavior_features",
+                "product_features",
+                "user_product_features",
             ):
                 outputs[name].write.mode("error").parquet((output / name).resolve().as_uri())
             if not args.skip_serving:
@@ -107,9 +115,14 @@ def main(argv=None):
             report["analytics"] = {
                 "summary": "analytics.json",
                 "mongo_published": not args.skip_serving,
-                "user_features": config.features(),
+                "user_features": config.features("user_features"),
+                "user_behavior_features": config.features("user_behavior_features"),
+                "product_features": config.features("product_features"),
+                "user_product_features": config.features("user_product_features"),
                 "user_features_scope": "prior_only",
                 "user_features_run_id": run_id,
+                "feature_scope": "prior_only",
+                "feature_run_id": run_id,
             }
         for command, key, function, argument in (
             ("benchmark-joins", "join_benchmark", benchmark_joins, tables),

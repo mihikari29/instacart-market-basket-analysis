@@ -1,5 +1,9 @@
 version: 1.0
 
+# Standalone Module 1 split export; does not change Modules 2/4 inputs.
+temporal_split:
+  train_ratio: 0.8
+
 # 1. Dataset Synthesis & Ingestion Knobs
 # Kubernetes forwards scenario/scatter_weeks/seed and fixture limits. Standalone
 # generation uses SyntheticConfig; time_mode/delta_sampler below are not forwarded.

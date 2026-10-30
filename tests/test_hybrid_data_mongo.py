@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.helpers import FindCommandRecorder
+from tests.mongo_helpers import FindCommandRecorder
 
 from datetime import datetime, timezone
 import os
@@ -226,11 +226,11 @@ def test_live_capture_verifies_user_versions_catalog_bounded_queries_and_ranker(
     assert captured.missing_prospective_trend_product_ids == (2002,)
 
     recommendation_find = next(
-        command for command in recorder.commands
+        command for command in recorder.find_commands
         if command.get("find") == "user_recommendations"
     )
     graph_find = next(
-        command for command in recorder.commands
+        command for command in recorder.find_commands
         if command.get("find") == "product_graph_metrics"
     )
     assert recommendation_find["filter"] == {

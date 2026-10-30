@@ -1,6 +1,7 @@
 """Prior-only batch metrics, report views, and MongoDB snapshot publication."""
 
 from datetime import datetime, timezone
+import re
 
 from pyspark.sql import Column, DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
@@ -15,9 +16,11 @@ def rows(df: DataFrame, *sort: str | Column) -> list[dict]:
 
 def history(tables: dict[str, DataFrame]) -> DataFrame:
     """Enrich prior purchases with order fields and broadcast product dimensions."""
+    order_cols = ["order_id", "user_id", "order_number", "order_dow", "order_hour_of_day",
+                  "days_since_prior_order"]
     return (
         tables["prior"]
-        .join(tables["orders"].select("order_id", "user_id", "order_dow", "order_hour_of_day"), "order_id")
+        .join(tables["orders"].where("eval_set = 'prior'").select(*order_cols), "order_id")
         .join(F.broadcast(tables["products"]), "product_id")
     )
 
@@ -49,12 +52,107 @@ def metrics(tables: dict[str, DataFrame]) -> tuple[DataFrame, DataFrame, DataFra
     return enriched, product, department, users
 
 
-def tag_user_features(frame: DataFrame, run_id: str, generated_at_utc: str) -> DataFrame:
+def compute_product_features(enriched: DataFrame) -> DataFrame:
+    """Compute product-level demand, cart addition priority, and reorder signatures."""
+    return (
+        enriched.groupBy("product_id").agg(
+            F.count("*").alias("purchase_count"),
+            F.countDistinct("user_id").alias("unique_users"),
+            F.sum(F.col("reordered").cast("long")).alias("reorder_count"),
+            F.avg(F.col("reordered").cast("double")).alias("reorder_rate"),
+            F.avg(F.col("add_to_cart_order").cast("double")).alias("avg_cart_position"),
+            (
+                F.sum(F.when(F.col("add_to_cart_order") <= 3, 1).otherwise(0))
+                / F.count("*")
+            ).cast("double").alias("cart_priority_ratio"),
+        )
+    )
+
+
+def compute_user_behavior_features(enriched: DataFrame, orders: DataFrame) -> DataFrame:
+    """Compute distributed user purchasing cadence, order intervals, and basket trajectories."""
+    # Restrict cadence to the exact baskets used by this feature generation.
+    # The cleaner sets the first gap to zero; it is not an observed interval.
+    prior_orders = orders.where("eval_set = 'prior'").join(
+        enriched.select("order_id").distinct(), "order_id", "left_semi",
+    )
+    intervals = F.when(F.col("order_number") > 1, F.col("days_since_prior_order").cast("double"))
+    interval_stats = prior_orders.groupBy("user_id").agg(
+        F.coalesce(F.avg(intervals), F.lit(0.0)).alias("order_interval_mean"),
+        F.coalesce(F.stddev_pop(intervals), F.lit(0.0)).alias("order_interval_std"),
+    )
+
+    baskets = enriched.groupBy("user_id", "order_id", "order_number").agg(
+        F.count("*").alias("basket_size")
+    )
+    user_order_window = Window.partitionBy("user_id").orderBy(F.col("order_number").desc(), F.col("order_id").desc())
+    baskets_ranked = baskets.withColumn("recency_rank", F.row_number().over(user_order_window))
+
+    recent_baskets = baskets_ranked.where("recency_rank <= 3").groupBy("user_id").agg(
+        F.avg("basket_size").alias("recent_basket_size_avg")
+    )
+    lifetime_baskets = baskets.groupBy("user_id").agg(
+        F.avg("basket_size").alias("lifetime_basket_size_avg"),
+        F.count("order_id").alias("total_prior_orders"),
+        F.max("order_number").alias("max_order_number"),
+    )
+
+    return (
+        lifetime_baskets
+        .join(recent_baskets, "user_id", "left")
+        .join(interval_stats, "user_id", "left")
+        .withColumn(
+            "basket_growth_slope",
+            F.coalesce(F.col("recent_basket_size_avg") - F.col("lifetime_basket_size_avg"), F.lit(0.0)),
+        )
+    )
+
+
+def compute_user_product_features(enriched: DataFrame, user_behavior: DataFrame) -> DataFrame:
+    """Compute user-product interactions, purchase streaks, and recency."""
+    up = enriched.groupBy("user_id", "product_id").agg(
+        F.count("*").alias("user_product_purchases"),
+        F.sum(F.col("reordered").cast("long")).alias("user_product_reorders"),
+        F.avg(F.col("add_to_cart_order").cast("double")).alias("user_product_avg_cart_position"),
+        F.max("order_number").alias("user_product_last_order_number"),
+    )
+    up = up.withColumn(
+        "user_product_reorder_rate",
+        F.col("user_product_reorders") / F.col("user_product_purchases"),
+    )
+    max_orders = user_behavior.select("user_id", "max_order_number")
+    up = up.join(max_orders, "user_id", "inner")
+    return (
+        up.withColumn(
+            "orders_since_last_purchase",
+            F.col("max_order_number") - F.col("user_product_last_order_number"),
+        )
+        .withColumn(
+            "purchase_streak_active",
+            F.when(F.col("user_product_last_order_number") == F.col("max_order_number"), 1).otherwise(0),
+        )
+        .drop("max_order_number")
+    )
+
+
+def tag_features(
+    frame: DataFrame,
+    run_id: str,
+    generated_at_utc: str,
+) -> DataFrame:
     """Attach explicit prior-only lineage without adding features to Module 4A inputs."""
     if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > 80:
-        raise ValueError("user feature run_id must be a non-empty string of at most 80 characters")
-    if not isinstance(generated_at_utc, str) or not generated_at_utc.endswith("+00:00"):
-        raise ValueError("user feature timestamp must be an explicit UTC ISO-8601 string")
+        raise ValueError("feature run_id must be a non-empty string of at most 80 characters")
+    if not isinstance(generated_at_utc, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00:00", generated_at_utc,
+    ):
+        raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string")
+    try:
+        timestamp = datetime.fromisoformat(generated_at_utc)
+    except (ValueError, TypeError):
+        raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string") from None
+    if timestamp.tzinfo is None or timestamp.utcoffset().total_seconds() != 0:
+        raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string")
     return (
         frame.withColumn("module2_run_id", F.lit(run_id))
         .withColumn("feature_scope", F.lit("prior_only"))
@@ -96,6 +194,10 @@ def analyze(
     The caller's validated table counts are included unchanged in the report.
     """
     enriched, product, department, users = metrics(tables)
+    product_features = compute_product_features(enriched)
+    user_behavior = compute_user_behavior_features(enriched, tables["orders"])
+    user_product_features = compute_user_product_features(enriched, user_behavior)
+
     department_hour_pivot, department_hour_unpivot = department_hour_pivot_unpivot(enriched)
     pivot_total = sum(
         int(row[column])
@@ -177,6 +279,9 @@ def analyze(
         "batch_product_metrics": product,
         "department_metrics": department,
         "user_features": users,
+        "user_behavior_features": user_behavior,
+        "product_features": product_features,
+        "user_product_features": user_product_features,
         "department_daily_trends": trends,
         "department_hour_metrics": department_hour_unpivot,
     }
@@ -193,7 +298,11 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
     timestamp = datetime.now(timezone.utc)
     with MongoClient(uri, serverSelectionTimeoutMS=10000) as client:
         db = client.get_default_database(default="instacart")
-        for name, key in (("batch_product_metrics", "product_id"), ("department_metrics", "department_id")):
+        for name, key in (
+            ("batch_product_metrics", "product_id"),
+            ("department_metrics", "department_id"),
+            ("product_features", "product_id"),
+        ):
             temporary = name + "__" + run_id
             collection = db[temporary]
             collection.drop()
@@ -208,12 +317,14 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
                     batch.clear()
             if batch:
                 collection.insert_many(batch)
-            collection.create_index(
-                [("purchase_count", -1), ("product_id", 1)],
-                name="idx_batch_product_purchase_count_desc_product_id_asc",
-            )
-            collection.create_index(
-                [("reorder_rate", -1), ("product_id", 1)],
-                name="idx_batch_product_reorder_rate_desc_product_id_asc",
-            )
+            if key == "product_id":
+                index_prefix = "batch_product" if name == "batch_product_metrics" else name
+                collection.create_index(
+                    [("purchase_count", -1), ("product_id", 1)],
+                    name=f"idx_{index_prefix}_purchase_count_desc_product_id_asc",
+                )
+                collection.create_index(
+                    [("reorder_rate", -1), ("product_id", 1)],
+                    name=f"idx_{index_prefix}_reorder_rate_desc_product_id_asc",
+                )
             collection.rename(name, dropTarget=True)
