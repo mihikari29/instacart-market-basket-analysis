@@ -222,3 +222,28 @@ def test_features_are_deterministic_under_repartition(spark):
 def test_feature_lineage_rejects_invalid_or_non_utc_timestamps(spark, timestamp):
     with pytest.raises(ValueError, match="explicit UTC"):
         tag_features(spark.range(1), "run", timestamp)
+
+
+def test_dashboard_demo_batch_fixture_uses_current_feature_contract(spark, monkeypatch):
+    from scripts.dashboard import demo_fixture
+
+    published = {}
+
+    def capture(outputs, uri, run_id):
+        published.update({name: frame.collect() for name, frame in outputs.items()})
+        assert uri == "mongodb://publisher.invalid/module4d_demo_abcdef123456"
+        assert run_id == "module4d-demo-batch-001"
+
+    monkeypatch.setattr(demo_fixture, "publish_module2", capture)
+    result = demo_fixture._seed_batch(
+        spark, "mongodb://publisher.invalid/module4d_demo_abcdef123456", "module4d_demo_abcdef123456",
+    )
+    assert result["products"] == 4
+    assert result["departments"] == 3
+    assert set(published) == {"batch_product_metrics", "department_metrics", "product_features"}
+    assert sum(row.purchase_count for row in published["batch_product_metrics"]) == 10
+    assert len(published["department_metrics"]) == 3
+    assert len(published["product_features"]) == 4
+    assert sum(row.purchase_count for row in published["product_features"]) == 10
+    assert all(row.feature_scope == "prior_only" and row.module2_run_id == result["run_id"]
+               for row in published["product_features"])
