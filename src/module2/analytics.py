@@ -1,6 +1,7 @@
 """Prior-only batch metrics, report views, and MongoDB snapshot publication."""
 
 from datetime import datetime, timezone
+import re
 
 from pyspark.sql import Column, DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
@@ -15,12 +16,11 @@ def rows(df: DataFrame, *sort: str | Column) -> list[dict]:
 
 def history(tables: dict[str, DataFrame]) -> DataFrame:
     """Enrich prior purchases with order fields and broadcast product dimensions."""
-    order_cols = ["order_id", "user_id", "order_number", "order_dow", "order_hour_of_day"]
-    if "days_since_prior_order" in tables["orders"].columns:
-        order_cols.append("days_since_prior_order")
+    order_cols = ["order_id", "user_id", "order_number", "order_dow", "order_hour_of_day",
+                  "days_since_prior_order"]
     return (
         tables["prior"]
-        .join(tables["orders"].select(*order_cols), "order_id")
+        .join(tables["orders"].where("eval_set = 'prior'").select(*order_cols), "order_id")
         .join(F.broadcast(tables["products"]), "product_id")
     )
 
@@ -71,21 +71,21 @@ def compute_product_features(enriched: DataFrame) -> DataFrame:
 
 def compute_user_behavior_features(enriched: DataFrame, orders: DataFrame) -> DataFrame:
     """Compute distributed user purchasing cadence, order intervals, and basket trajectories."""
-    prior_orders = orders.where("eval_set = 'prior'")
-    if "days_since_prior_order" in prior_orders.columns:
-        interval_stats = prior_orders.groupBy("user_id").agg(
-            F.avg(F.col("days_since_prior_order").cast("double")).alias("order_interval_mean"),
-            F.coalesce(F.stddev_pop(F.col("days_since_prior_order").cast("double")), F.lit(0.0)).alias("order_interval_std"),
-        )
-    else:
-        interval_stats = prior_orders.select("user_id").distinct().withColumn(
-            "order_interval_mean", F.lit(0.0)
-        ).withColumn("order_interval_std", F.lit(0.0))
+    # Restrict cadence to the exact baskets used by this feature generation.
+    # The cleaner sets the first gap to zero; it is not an observed interval.
+    prior_orders = orders.where("eval_set = 'prior'").join(
+        enriched.select("order_id").distinct(), "order_id", "left_semi",
+    )
+    intervals = F.when(F.col("order_number") > 1, F.col("days_since_prior_order").cast("double"))
+    interval_stats = prior_orders.groupBy("user_id").agg(
+        F.coalesce(F.avg(intervals), F.lit(0.0)).alias("order_interval_mean"),
+        F.coalesce(F.stddev_pop(intervals), F.lit(0.0)).alias("order_interval_std"),
+    )
 
     baskets = enriched.groupBy("user_id", "order_id", "order_number").agg(
         F.count("*").alias("basket_size")
     )
-    user_order_window = Window.partitionBy("user_id").orderBy(F.col("order_number").desc())
+    user_order_window = Window.partitionBy("user_id").orderBy(F.col("order_number").desc(), F.col("order_id").desc())
     baskets_ranked = baskets.withColumn("recency_rank", F.row_number().over(user_order_window))
 
     recent_baskets = baskets_ranked.where("recency_rank <= 3").groupBy("user_id").agg(
@@ -139,23 +139,25 @@ def tag_features(
     frame: DataFrame,
     run_id: str,
     generated_at_utc: str,
-    scope: str = "prior_only",
 ) -> DataFrame:
     """Attach explicit prior-only lineage without adding features to Module 4A inputs."""
     if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > 80:
         raise ValueError("feature run_id must be a non-empty string of at most 80 characters")
-    if not isinstance(generated_at_utc, str) or not generated_at_utc.endswith("+00:00"):
+    if not isinstance(generated_at_utc, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00:00", generated_at_utc,
+    ):
+        raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string")
+    try:
+        timestamp = datetime.fromisoformat(generated_at_utc)
+    except (ValueError, TypeError):
+        raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string") from None
+    if timestamp.tzinfo is None or timestamp.utcoffset().total_seconds() != 0:
         raise ValueError("feature timestamp must be an explicit UTC ISO-8601 string")
     return (
         frame.withColumn("module2_run_id", F.lit(run_id))
-        .withColumn("feature_scope", F.lit(scope))
+        .withColumn("feature_scope", F.lit("prior_only"))
         .withColumn("generated_at_utc", F.lit(generated_at_utc))
     )
-
-
-def tag_user_features(frame: DataFrame, run_id: str, generated_at_utc: str) -> DataFrame:
-    """Attach explicit prior-only lineage to user features."""
-    return tag_features(frame, run_id, generated_at_utc, scope="prior_only")
 
 
 def department_hour_pivot_unpivot(enriched: DataFrame) -> tuple[DataFrame, DataFrame]:
@@ -301,8 +303,6 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
             ("department_metrics", "department_id"),
             ("product_features", "product_id"),
         ):
-            if name not in outputs:
-                continue
             temporary = name + "__" + run_id
             collection = db[temporary]
             collection.drop()
@@ -318,12 +318,13 @@ def publish_mongo(outputs: dict[str, DataFrame], uri: str, run_id: str) -> None:
             if batch:
                 collection.insert_many(batch)
             if key == "product_id":
+                index_prefix = "batch_product" if name == "batch_product_metrics" else name
                 collection.create_index(
                     [("purchase_count", -1), ("product_id", 1)],
-                    name=f"idx_{name}_purchase_count_desc_product_id_asc",
+                    name=f"idx_{index_prefix}_purchase_count_desc_product_id_asc",
                 )
                 collection.create_index(
                     [("reorder_rate", -1), ("product_id", 1)],
-                    name=f"idx_{name}_reorder_rate_desc_product_id_asc",
+                    name=f"idx_{index_prefix}_reorder_rate_desc_product_id_asc",
                 )
             collection.rename(name, dropTarget=True)

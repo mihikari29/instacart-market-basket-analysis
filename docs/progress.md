@@ -46,8 +46,12 @@ fact/event multisets, then computes prior-history product, department, user,
 weekday/hour and pivot/unpivot analytics. MongoDB collections are validated
 before individual promotion; their set is not one transaction.
 
-The HDFS `user_features` handoff is descriptive and marked `prior_only`; it is
-not an ALS or Hybrid ranking input. Join, pruning, cache and local-thread
+The HDFS `user_features`, `user_behavior_features`, `product_features`, and
+`user_product_features` handoffs are descriptive and marked `prior_only`; they
+are not ALS or Hybrid ranking inputs. A standalone Module 1 temporal export
+keeps official train baskets in evaluation and records source/output hashes;
+it does not change the curated Modules 2/4 split or validate temporal Hybrid
+quality. See the [split and feature contracts](docker.md#temporal-split-export-and-descriptive-feature-contracts). Join, pruning, cache and local-thread
 benchmarks are implemented. A separate standalone-master experiment records
 actual executor allocation. Requested resource settings alone do not establish
 an executor-layout result. See the [batch and benchmark guide](docker.md#module-2-batch-processing-and-benchmarks).

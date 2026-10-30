@@ -7,7 +7,7 @@ except ImportError:
 from .config import TABLES
 
 REQUIRED = {
-    "orders": ["order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day"],
+    "orders": ["order_id", "user_id", "eval_set", "order_number", "order_dow", "order_hour_of_day", "days_since_prior_order"],
     "prior": ["order_id", "product_id", "add_to_cart_order", "reordered"],
     "train": ["order_id", "product_id", "add_to_cart_order", "reordered"],
     "products": ["product_id", "product_name", "aisle_id", "department_id"],

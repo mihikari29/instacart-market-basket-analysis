@@ -1,222 +1,220 @@
-"""Module 1 - Chronological 80/20 Train/Test Partitioning.
+"""Export an audited per-user temporal split of labeled curated purchases.
 
-Enforces strict temporal isolation for Next-Basket Grocery Recommendation:
-  - For each user u with N_u orders, threshold_u = max(1, round(split_ratio * N_u)).
-  - Orders 1..threshold_u -> Train partition (~80% volume, ~27.28M items).
-  - Orders (threshold_u + 1)..N_u -> Test partition (~20% volume, ~6.53M items).
-  - Zero leakage guarantee: max(train_order_number_u) < min(test_order_number_u) for all users.
-
-Usage:
-  python -m src.module1.split --clean-dir data/clean --output-dir data/clean/split_80_20 --split-ratio 0.8
+Official train baskets always remain evaluation truth. Unlabeled official test
+orders are excluded. This export does not replace the Modules 2/4 input contract
+or establish a common absolute-time cutoff across users.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+from numbers import Real
 from pathlib import Path
 import sys
 
 import numpy as np
 import pandas as pd
 
-from .config import PARQUET_COMPRESSION
+from ..common.runtime import config_section, file_sha256, read_yaml_mapping
+from .config import INT32_MAX, PARQUET_COMPRESSION
+
+
+def _validate_orders(orders: pd.DataFrame) -> None:
+    for column in ("order_id", "user_id", "order_number", "eval_set"):
+        if column not in orders.columns:
+            raise ValueError(f"orders must contain '{column}' column")
+    for column in ("order_id", "user_id", "order_number"):
+        values = orders[column]
+        if (
+            not pd.api.types.is_numeric_dtype(values)
+            or pd.api.types.is_bool_dtype(values)
+            or not (values.notna() & values.between(1, INT32_MAX) & values.mod(1).eq(0)).all()
+        ):
+            raise ValueError(f"orders.{column} must contain positive int32 integers")
+    if orders["order_id"].duplicated().any() or orders.duplicated(["user_id", "order_number"]).any():
+        raise ValueError("orders contain duplicate order identities or user/order numbers")
+    if not orders["eval_set"].isin(["prior", "train", "test"]).all():
+        raise ValueError("orders contain invalid eval_set provenance")
+    prior_max = orders.loc[orders["eval_set"].eq("prior")].groupby("user_id")["order_number"].max()
+    target_min = orders.loc[orders["eval_set"].ne("prior")].groupby("user_id")["order_number"].min()
+    common = prior_max.index.intersection(target_min.index)
+    if (prior_max.loc[common] >= target_min.loc[common]).any():
+        raise ValueError("official evaluation orders must follow prior history")
 
 
 def temporal_split_orders(
-    orders: pd.DataFrame,
-    split_ratio: float = 0.8,
+    orders: pd.DataFrame, split_ratio: float,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Partition orders table chronologically per user.
+    """Split labeled orders by chronological rank, keeping official targets out of training.
 
-    Parameters:
-        orders: DataFrame containing at least 'order_id', 'user_id', 'order_number'.
-        split_ratio: Target fraction of earlier orders allocated to train (default 0.8).
-
-    Returns:
-        tuple of (train_orders, test_orders) DataFrames with 'temporal_split' column.
+    Round the labeled order count with NumPy's round-to-even rule; clamp to
+    [1, N-1] for N > 1. A singleton prior order is training-only. Official train
+    orders remain test even when the requested ratio would place them in train.
     """
-    if not (0.0 < split_ratio < 1.0):
+    if isinstance(split_ratio, bool) or not isinstance(split_ratio, Real) or not 0 < split_ratio < 1:
         raise ValueError(f"split_ratio must be strictly between 0 and 1, got {split_ratio}")
-    for col in ("order_id", "user_id", "order_number"):
-        if col not in orders.columns:
-            raise ValueError(f"orders must contain '{col}' column")
-
-    orders_df = orders.copy()
-    max_orders = orders_df.groupby("user_id", sort=False)["order_number"].transform("max")
-    train_threshold = np.maximum(1, np.round(split_ratio * max_orders)).astype("int16")
-
-    is_train = orders_df["order_number"] <= train_threshold
-    orders_df["temporal_split"] = np.where(is_train, "train", "test")
-
-    train_orders = orders_df[is_train].copy().reset_index(drop=True)
-    test_orders = orders_df[~is_train].copy().reset_index(drop=True)
-
-    return train_orders, test_orders
+    _validate_orders(orders)
+    frame = orders.loc[orders["eval_set"].ne("test")].sort_values(
+        ["user_id", "order_number", "order_id"], kind="stable",
+    ).copy()
+    counts = frame.groupby("user_id", sort=False)["order_id"].transform("size")
+    thresholds = np.minimum(np.maximum(1, np.rint(split_ratio * counts)), np.maximum(1, counts - 1))
+    ranks = frame.groupby("user_id", sort=False).cumcount() + 1
+    is_train = ranks.le(thresholds) & frame["eval_set"].eq("prior")
+    frame["temporal_split"] = np.where(is_train, "train", "test")
+    return frame.loc[is_train].reset_index(drop=True), frame.loc[~is_train].reset_index(drop=True)
 
 
 def split_order_products(
-    orders_with_split: pd.DataFrame,
-    order_products: pd.DataFrame,
+    orders_with_split: pd.DataFrame, order_products: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Partition order_products into train and test sets using order split identities.
-
-    Parameters:
-        orders_with_split: DataFrame with 'order_id' and 'temporal_split'.
-        order_products: DataFrame with 'order_id' and product purchase facts.
-
-    Returns:
-        tuple of (train_products, test_products).
-    """
+    """Partition facts without dropping unknown orders or multiplying duplicate identities."""
+    if not {"order_id", "temporal_split"} <= set(orders_with_split.columns):
+        raise ValueError("orders must contain order_id and temporal_split")
+    if orders_with_split["order_id"].isna().any() or orders_with_split["order_id"].duplicated().any():
+        raise ValueError("split orders must have unique non-null order_id values")
+    if not orders_with_split["temporal_split"].isin(["train", "test"]).all():
+        raise ValueError("invalid temporal_split label")
+    required = {"order_id", "product_id", "add_to_cart_order", "reordered"}
+    if not required <= set(order_products.columns) or "temporal_split" in order_products.columns:
+        raise ValueError("purchase facts have missing columns or pre-existing split labels")
+    for column in ("order_id", "product_id", "add_to_cart_order"):
+        values = order_products[column]
+        if (
+            not pd.api.types.is_numeric_dtype(values)
+            or pd.api.types.is_bool_dtype(values)
+            or not (values.notna() & values.between(1, INT32_MAX) & values.mod(1).eq(0)).all()
+        ):
+            raise ValueError(f"purchase {column} must contain positive int32 integers")
+    if not order_products["reordered"].isin([0, 1]).all():
+        raise ValueError("invalid reordered purchase value")
+    if order_products.duplicated(["order_id", "product_id"]).any() or order_products.duplicated(
+        ["order_id", "add_to_cart_order"]
+    ).any():
+        raise ValueError("duplicate purchase or cart position")
     merged = order_products.merge(
-        orders_with_split[["order_id", "temporal_split"]],
-        on="order_id",
-        how="inner",
+        orders_with_split[["order_id", "temporal_split"]], on="order_id", how="left",
+        validate="many_to_one", indicator=True,
     )
-    is_train = merged["temporal_split"] == "train"
+    if merged["_merge"].ne("both").any():
+        raise ValueError("purchase facts reference unknown or unlabeled orders")
+    merged = merged.drop(columns="_merge").sort_values(["order_id", "add_to_cart_order"], kind="stable")
+    is_train = merged["temporal_split"].eq("train")
+    return (
+        merged.loc[is_train].drop(columns="temporal_split").reset_index(drop=True),
+        merged.loc[~is_train].drop(columns="temporal_split").reset_index(drop=True),
+    )
 
-    train_products = merged[is_train].drop(columns=["temporal_split"]).reset_index(drop=True)
-    test_products = merged[~is_train].drop(columns=["temporal_split"]).reset_index(drop=True)
 
-    return train_products, test_products
-
-
-def verify_temporal_isolation(
-    train_orders: pd.DataFrame,
-    test_orders: pd.DataFrame,
-) -> dict[str, int | float | bool]:
-    """Verify that no future order exists in the train set for any user."""
-    if test_orders.empty:
-        return {
-            "leakage_violations": 0,
-            "strictly_isolated": True,
-            "evaluated_users": int(train_orders["user_id"].nunique()),
-        }
-
-    max_train_order = train_orders.groupby("user_id")["order_number"].max()
-    min_test_order = test_orders.groupby("user_id")["order_number"].min()
-
-    comparison = pd.DataFrame({
-        "max_train": max_train_order,
-        "min_test": min_test_order,
-    }).dropna()
-
-    violations = int((comparison["max_train"] >= comparison["min_test"]).sum())
+def verify_temporal_isolation(train_orders: pd.DataFrame, test_orders: pd.DataFrame) -> dict:
+    """Audit both disjoint identities and chronology, including empty/cold-start cohorts."""
+    _validate_orders(train_orders)
+    _validate_orders(test_orders)
+    combined = pd.concat([train_orders, test_orders], ignore_index=True)
+    # Cross-partition duplicates are audit failures rather than silently dropped rows.
+    overlapping = int(train_orders["order_id"].isin(test_orders["order_id"]).sum())
+    _validate_orders(combined.drop_duplicates(["order_id", "user_id", "order_number"]))
+    comparison = pd.concat([
+        train_orders.groupby("user_id")["order_number"].max().rename("max_train"),
+        test_orders.groupby("user_id")["order_number"].min().rename("min_test"),
+    ], axis=1).dropna()
+    violations = int(comparison["max_train"].ge(comparison["min_test"]).sum())
+    official_targets = int(train_orders["eval_set"].ne("prior").sum())
     return {
         "leakage_violations": violations,
-        "strictly_isolated": violations == 0,
+        "overlapping_orders": overlapping,
+        "official_targets_in_training": official_targets,
+        "strictly_isolated": violations == overlapping == official_targets == 0,
         "evaluated_users": int(len(comparison)),
+        "test_only_users": int(test_orders.loc[~test_orders["user_id"].isin(train_orders["user_id"]), "user_id"].nunique()),
     }
 
 
-def execute_split(
-    clean_dir: Path,
-    output_dir: Path,
-    split_ratio: float = 0.8,
-) -> dict:
-    """Read curated clean data, compute temporal 80/20 split, write partitioned Parquets."""
-    orders_path = clean_dir / "orders.parquet"
-    prior_path = clean_dir / "order_products__prior.parquet"
-    train_path = clean_dir / "order_products__train.parquet"
-
-    if not orders_path.exists():
-        raise FileNotFoundError(f"Missing curated orders: {orders_path}")
-    if not prior_path.exists():
-        raise FileNotFoundError(f"Missing curated prior products: {prior_path}")
-
-    orders = pd.read_parquet(orders_path)
-    prior_products = pd.read_parquet(prior_path)
-    train_products = pd.read_parquet(train_path) if train_path.exists() else pd.DataFrame()
-
-    all_products = (
-        pd.concat([prior_products, train_products], ignore_index=True)
-        if not train_products.empty
-        else prior_products
-    )
-
-    train_orders, test_orders = temporal_split_orders(orders, split_ratio=split_ratio)
-    combined_orders_split = pd.concat([train_orders, test_orders], ignore_index=True)
-
-    train_prods, test_prods = split_order_products(combined_orders_split, all_products)
-    isolation_audit = verify_temporal_isolation(train_orders, test_orders)
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    train_orders.to_parquet(
-        output_dir / "orders_train.parquet",
-        compression=PARQUET_COMPRESSION,
-        index=False,
-    )
-    test_orders.to_parquet(
-        output_dir / "orders_test.parquet",
-        compression=PARQUET_COMPRESSION,
-        index=False,
-    )
-    train_prods.to_parquet(
-        output_dir / "order_products_train.parquet",
-        compression=PARQUET_COMPRESSION,
-        index=False,
-    )
-    test_prods.to_parquet(
-        output_dir / "order_products_test.parquet",
-        compression=PARQUET_COMPRESSION,
-        index=False,
-    )
-
+def execute_split(clean_dir: Path, output_dir: Path, split_ratio: float) -> dict:
+    """Export to a fresh directory, preserving source provenance and any existing outputs."""
+    clean_dir, output_dir = clean_dir.resolve(), output_dir.absolute()
+    if output_dir.exists() or output_dir.is_symlink():
+        raise FileExistsError(f"Split output already exists: {output_dir}")
+    paths = {name: clean_dir / f"{name}.parquet" for name in (
+        "orders", "order_products__prior", "order_products__train",
+    )}
+    sources = {name: {"sha256": file_sha256(path)} for name, path in paths.items()}
+    tables = {name: pd.read_parquet(path) for name, path in paths.items()}
+    orders = tables["orders"]
+    train_orders, test_orders = temporal_split_orders(orders, split_ratio)
+    for source, expected in (("order_products__prior", "prior"), ("order_products__train", "train")):
+        facts = tables[source]
+        if "order_id" not in facts.columns or not facts["order_id"].isin(
+            orders.loc[orders["eval_set"].eq(expected), "order_id"]
+        ).all():
+            raise ValueError(f"{source}: orphan order or wrong eval_set provenance")
+    all_products = pd.concat([tables["order_products__prior"], tables["order_products__train"]], ignore_index=True)
+    combined_orders = pd.concat([train_orders, test_orders], ignore_index=True)
+    train_prods, test_prods = split_order_products(combined_orders, all_products)
+    if not combined_orders["order_id"].isin(all_products["order_id"]).all():
+        raise ValueError("labeled orders are missing purchase facts")
+    audit = verify_temporal_isolation(train_orders, test_orders)
+    if not audit["strictly_isolated"]:
+        raise ValueError(f"Temporal isolation audit failed: {audit}")
+    for name, path in paths.items():
+        if file_sha256(path) != sources[name]["sha256"]:
+            raise ValueError(f"Source changed during split: {name}")
+        sources[name]["rows"] = len(tables[name])
+    labeled_total = len(combined_orders)
+    purchase_total = len(all_products)
     manifest = {
         "strategy": "per_user_temporal_split",
         "split_ratio_target": split_ratio,
+        "official_train_policy": "evaluation_only",
+        "unlabeled_test_orders_excluded": int(orders["eval_set"].eq("test").sum()),
+        "sources": sources,
         "orders": {
-            "total": len(orders),
-            "train": len(train_orders),
-            "test": len(test_orders),
-            "train_ratio": round(len(train_orders) / len(orders), 4),
-            "test_ratio": round(len(test_orders) / len(orders), 4),
+            "total": labeled_total, "train": len(train_orders), "test": len(test_orders),
+            "train_ratio": round(len(train_orders) / labeled_total, 4) if labeled_total else 0.0,
+            "test_ratio": round(len(test_orders) / labeled_total, 4) if labeled_total else 0.0,
         },
         "purchases": {
-            "total": len(all_products),
-            "train": len(train_prods),
-            "test": len(test_prods),
-            "train_ratio": round(len(train_prods) / len(all_products), 4),
-            "test_ratio": round(len(test_prods) / len(all_products), 4),
+            "total": purchase_total, "train": len(train_prods), "test": len(test_prods),
+            "train_ratio": round(len(train_prods) / purchase_total, 4) if purchase_total else 0.0,
+            "test_ratio": round(len(test_prods) / purchase_total, 4) if purchase_total else 0.0,
         },
         "users": {
-            "total_users": int(orders["user_id"].nunique()),
+            "total_users": int(combined_orders["user_id"].nunique()),
             "train_users": int(train_orders["user_id"].nunique()),
             "test_users": int(test_orders["user_id"].nunique()),
         },
-        "isolation_audit": isolation_audit,
+        "isolation_audit": audit,
     }
-
-    manifest_path = output_dir / "split_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    # Exclusive creation never replaces a previous publication. The manifest is
+    # written last; its absence identifies incomplete exports after write failure.
+    output_dir.mkdir(parents=True, exist_ok=False)
+    outputs = {
+        "orders_train": train_orders, "orders_test": test_orders,
+        "order_products_train": train_prods, "order_products_test": test_prods,
+    }
+    for name, frame in outputs.items():
+        path = output_dir / f"{name}.parquet"
+        frame.to_parquet(path, compression=PARQUET_COMPRESSION, index=False)
+    manifest["outputs"] = {name: {"rows": len(frame), "sha256": file_sha256(output_dir / f"{name}.parquet")}
+                           for name, frame in outputs.items()}
+    (output_dir / "split_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_clean_dir = Path(__file__).resolve().parents[2] / "data" / "clean"
-    parser.add_argument("--clean-dir", default=str(default_clean_dir))
-    parser.add_argument(
-        "--output-dir",
-        default=str(default_clean_dir / "split_80_20"),
-        help="Target directory for partitioned Parquet datasets",
-    )
-    parser.add_argument("--split-ratio", type=float, default=0.8)
+    root = Path(__file__).resolve().parents[2]
+    parser.add_argument("--clean-dir", type=Path, default=root / "data" / "clean")
+    parser.add_argument("--output-dir", type=Path, default=root / "data" / "clean" / "split_80_20")
+    parser.add_argument("--pipeline-config", type=Path, default=root / "config" / "pipeline.yaml")
     args = parser.parse_args(argv)
-
     try:
-        manifest = execute_split(
-            clean_dir=Path(args.clean_dir),
-            output_dir=Path(args.output_dir),
-            split_ratio=args.split_ratio,
-        )
-        print("\n[split] temporal 80/20 partitioning completed successfully:")
-        print(f"  Train orders   : {manifest['orders']['train']:,} ({manifest['orders']['train_ratio'] * 100:.2f}%)")
-        print(f"  Test orders    : {manifest['orders']['test']:,} ({manifest['orders']['test_ratio'] * 100:.2f}%)")
-        print(f"  Train purchases: {manifest['purchases']['train']:,} ({manifest['purchases']['train_ratio'] * 100:.2f}%)")
-        print(f"  Test purchases : {manifest['purchases']['test']:,} ({manifest['purchases']['test_ratio'] * 100:.2f}%)")
-        print(f"  Zero-leakage   : {manifest['isolation_audit']['strictly_isolated']}")
+        settings = config_section(read_yaml_mapping(args.pipeline_config), "temporal_split")
+        if set(settings) != {"train_ratio"}:
+            raise ValueError("temporal_split must define only train_ratio")
+        manifest = execute_split(args.clean_dir, args.output_dir, settings["train_ratio"])
+        print(json.dumps(manifest, indent=2))
         return 0
     except Exception as exc:
         print(f"[error] {type(exc).__name__}: {exc}", file=sys.stderr)

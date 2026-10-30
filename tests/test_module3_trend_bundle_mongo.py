@@ -249,7 +249,8 @@ def test_live_same_content_retry_preserves_first_document_and_publication_time(
     collection = database[BUNDLE_COLLECTION_NAME]
     start = datetime(2019, 2, 3, 4, 5)
     rows = _window_rows(start)
-    first_time = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
+    # Keep the processing-time TTL live while testing a historical event window.
+    first_time = datetime.now(timezone.utc).replace(microsecond=0)
 
     first = _publish(
         spark_session,

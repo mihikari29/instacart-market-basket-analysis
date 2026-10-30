@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.helpers import FindCommandRecorder
+from tests.mongo_helpers import FindCommandRecorder
 
 from datetime import datetime, timedelta, timezone
 import hashlib

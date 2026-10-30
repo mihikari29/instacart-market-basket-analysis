@@ -52,6 +52,8 @@ class Config:
 
     def features(self, kind: str = "user_features") -> str:
         """Return the feature handoff path consumed by downstream stages."""
+        if kind not in {"user_features", "user_behavior_features", "product_features", "user_product_features"}:
+            raise ValueError(f"Unknown feature kind: {kind}")
         return self.root.rstrip("/") + f"/features/{kind}"
 
     @classmethod

@@ -96,9 +96,8 @@ def main(argv=None):
                 "product_features",
                 "user_product_features",
             ):
-                tag_features(outputs[feature_name], run_id, feature_timestamp).write.mode(
-                    "overwrite"
-                ).parquet(config.features(feature_name))
+                outputs[feature_name] = tag_features(outputs[feature_name], run_id, feature_timestamp)
+                outputs[feature_name].write.mode("overwrite").parquet(config.features(feature_name))
             for name in (
                 "batch_product_metrics",
                 "department_metrics",
@@ -120,6 +119,8 @@ def main(argv=None):
                 "user_behavior_features": config.features("user_behavior_features"),
                 "product_features": config.features("product_features"),
                 "user_product_features": config.features("user_product_features"),
+                "user_features_scope": "prior_only",
+                "user_features_run_id": run_id,
                 "feature_scope": "prior_only",
                 "feature_run_id": run_id,
             }

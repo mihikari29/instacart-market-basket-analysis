@@ -125,14 +125,14 @@ def test_compute_user_behavior_features(spark):
     u101 = rows[101]
     assert u101.total_prior_orders == 3
     assert u101.max_order_number == 3
-    assert pytest.approx(u101.order_interval_mean, 0.01) == 7.0
+    assert pytest.approx(u101.order_interval_mean, 0.01) == 10.5
     assert pytest.approx(u101.lifetime_basket_size_avg, 0.01) == 2.0
     assert pytest.approx(u101.basket_growth_slope, 0.01) == 0.0
 
     u102 = rows[102]
     assert u102.total_prior_orders == 2
     assert u102.max_order_number == 2
-    assert pytest.approx(u102.order_interval_mean, 0.01) == 2.5
+    assert pytest.approx(u102.order_interval_mean, 0.01) == 5.0
 
 
 def test_compute_user_product_features_and_streaks(spark):
@@ -160,8 +160,8 @@ def test_compute_user_product_features_and_streaks(spark):
 def test_tag_features_lineage_metadata(spark):
     _, _, _, enriched = _build_test_data(spark)
     pf = compute_product_features(enriched)
-    now_utc = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z") + "+00:00"
-    tagged = tag_features(pf, "test-run-123", now_utc, scope="prior_only")
+    now_utc = datetime.now(timezone.utc).isoformat()
+    tagged = tag_features(pf, "test-run-123", now_utc)
 
     assert "module2_run_id" in tagged.columns
     assert "feature_scope" in tagged.columns
@@ -171,3 +171,54 @@ def test_tag_features_lineage_metadata(spark):
     assert first.module2_run_id == "test-run-123"
     assert first.feature_scope == "prior_only"
     assert first.generated_at_utc == now_utc
+
+
+def test_cadence_ignores_future_prior_baskets_outside_feature_history(spark):
+    orders, _, _, enriched = _build_test_data(spark)
+    # An internal temporal holdout can still have eval_set=prior. Cadence must
+    # use the same order identities as all the other feature aggregates.
+    early_history = enriched.where("order_number <= 2")
+    behaviors = compute_user_behavior_features(early_history, orders)
+    user = behaviors.where("user_id = 101").first()
+    assert user.max_order_number == 2
+    assert user.order_interval_mean == 7.0
+    assert user.order_interval_std == 0.0
+
+
+def test_feature_history_excludes_official_targets_even_if_facts_are_mixed(spark):
+    from src.module2.analytics import history
+
+    orders, prior, products, _ = _build_test_data(spark)
+    targets = spark.createDataFrame([(4, 3, 1, 0)], prior.schema)
+    enriched = history({"orders": orders, "prior": prior.unionByName(targets), "products": products})
+    assert {row.order_id for row in enriched.select("order_id").distinct().collect()} == {1, 2, 3, 5, 6}
+    assert compute_product_features(enriched).where("product_id = 3").first().purchase_count == 2
+
+
+def test_features_handle_empty_and_singleton_history(spark):
+    orders, _, _, enriched = _build_test_data(spark)
+    empty = enriched.limit(0)
+    behavior = compute_user_behavior_features(empty, orders)
+    assert compute_product_features(empty).count() == behavior.count() == 0
+    assert compute_user_product_features(empty, behavior).count() == 0
+    singleton = enriched.where("order_id = 1")
+    row = compute_user_behavior_features(singleton, orders).first()
+    assert row.order_interval_mean == row.order_interval_std == 0.0
+    assert row.basket_growth_slope == 0.0
+
+
+def test_features_are_deterministic_under_repartition(spark):
+    orders, _, _, enriched = _build_test_data(spark)
+    before = compute_user_behavior_features(enriched, orders)
+    after = compute_user_behavior_features(enriched.repartition(3), orders.repartition(2))
+    assert before.orderBy("user_id").collect() == after.orderBy("user_id").collect()
+    assert compute_user_product_features(enriched, before).orderBy("user_id", "product_id").collect() == (
+        compute_user_product_features(enriched.repartition(3), after).orderBy("user_id", "product_id").collect()
+    )
+
+
+@pytest.mark.parametrize("timestamp", ["garbage+00:00", "2026-10-30T00:00:00Z+00:00",
+                                        "2026-10-30T00:00:00", "2026-10-30T00:00:00+07:00"])
+def test_feature_lineage_rejects_invalid_or_non_utc_timestamps(spark, timestamp):
+    with pytest.raises(ValueError, match="explicit UTC"):
+        tag_features(spark.range(1), "run", timestamp)
