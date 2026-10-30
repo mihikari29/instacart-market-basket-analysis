@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import time
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 from urllib.request import urlopen
@@ -105,8 +106,19 @@ def _wait_for_evaluation_evidence(page: Page) -> None:
 def _wait_for_chart_minimum(page: Page, minimum: int, section: str, expected: str) -> int:
     """Wait for the last required chart before applying the unchanged count gate."""
     charts = page.locator('[data-testid="stVegaLiteChart"]')
+    deadline = time.monotonic() + 20
     try:
-        expect(charts.nth(minimum - 1)).to_be_visible(timeout=20_000)
+        while True:
+            remaining_ms = int((deadline - time.monotonic()) * 1000)
+            if remaining_ms <= 0:
+                raise TimeoutError("chart readiness deadline expired")
+            expect(charts.nth(minimum - 1)).to_be_visible(timeout=remaining_ms)
+            chart_count = charts.count()
+            if chart_count >= minimum:
+                return chart_count
+            # A widget change can replace charts between the visibility assertion
+            # and count read. Retry within the original deadline, retaining the
+            # same minimum for the completed page.
     except Exception as exc:
         visible_headings = page.locator("h1, h2, h3").all_text_contents()
         raise RuntimeError(
@@ -114,14 +126,6 @@ def _wait_for_chart_minimum(page: Page, minimum: int, section: str, expected: st
             f"observed={charts.count()}, expected={expected}, "
             f"visible_headings={visible_headings}"
         ) from exc
-    chart_count = charts.count()
-    if chart_count < minimum:
-        visible_headings = page.locator("h1, h2, h3").all_text_contents()
-        raise RuntimeError(
-            f"{section} rendered only {chart_count} charts; expected at least {minimum}: {expected}; "
-            f"visible_headings={visible_headings}"
-        )
-    return chart_count
 
 
 def run() -> dict[str, Any]:
